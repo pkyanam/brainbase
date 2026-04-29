@@ -8,6 +8,7 @@ import {
   listPages, traverseGraph, getStats,
 } from "@/lib/supabase/write";
 import { validateApiKey } from "@/lib/api-keys";
+import { canAccessBrain } from "@/lib/brain-context";
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";
@@ -145,6 +146,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ jsonrpc: "2.0", id: null, error: { code: -32001, message: "Invalid or revoked API key" } }, { status: 401 });
   }
 
+  // Multi-brain override: X-Brain-Id header lets one API key target any accessible brain
+  const requestedBrainId = request.headers.get("x-brain-id");
+  let brainId = keyData.brainId;
+  if (requestedBrainId && requestedBrainId !== keyData.brainId) {
+    const access = await canAccessBrain(keyData.userId, requestedBrainId);
+    if (!access) {
+      return NextResponse.json({ jsonrpc: "2.0", id: null, error: { code: -32001, message: "Forbidden — you don't have access to this brain" } }, { status: 403 });
+    }
+    brainId = requestedBrainId;
+  }
+
   let body: JsonRpcRequest;
   try {
     body = await request.json();
@@ -177,7 +189,7 @@ export async function POST(request: NextRequest) {
     if (method === "tools/call") {
       const toolParams = params as { name?: string; arguments?: Record<string, unknown> };
       if (!toolParams?.name) throw new Error("Missing tool name");
-      const result = await dispatch(keyData.brainId, toolParams.name, toolParams.arguments || {});
+      const result = await dispatch(brainId, toolParams.name, toolParams.arguments || {});
       const text = typeof result === "string" ? result : JSON.stringify(result, null, 2);
       return NextResponse.json({
         jsonrpc: "2.0", id: body.id,

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getPage, getPageLinks, getTimeline } from "@/lib/supabase/pages";
 import { putPage, deletePage } from "@/lib/supabase/write";
 import { validateApiKey } from "@/lib/api-keys";
-import { requireOwner, requireBrainAccess } from "@/lib/auth-guard";
+import { requireOwner } from "@/lib/auth-guard";
+import { canAccessBrain } from "@/lib/brain-context";
 import { snapshotPageVersion } from "@/lib/page-versions";
 import { logActivity } from "@/lib/activity";
 
@@ -18,7 +19,16 @@ async function resolveAuth(req: NextRequest) {
   const token = getBearerToken(req);
   if (token) {
     const keyData = await validateApiKey(token);
-    if (keyData) return { brainId: keyData.brainId, userId: keyData.userId || "api" };
+    if (keyData) {
+      // Multi-brain override
+      const requestedBrainId = req.headers.get("x-brain-id");
+      if (requestedBrainId && requestedBrainId !== keyData.brainId) {
+        const access = await canAccessBrain(keyData.userId, requestedBrainId);
+        if (!access) return null;
+        return { brainId: requestedBrainId, userId: keyData.userId };
+      }
+      return { brainId: keyData.brainId, userId: keyData.userId || "api" };
+    }
   }
   // Fall back to Clerk session
   const ctx = await requireOwner();
