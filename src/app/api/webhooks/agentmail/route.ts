@@ -71,7 +71,8 @@ export async function POST(request: NextRequest) {
   }
 
   // Convert to brain page payload
-  const brainPayload = messageToBrainPayload(message as any);
+  const fullMsg = { ...message, from_: (message.from_ as string[]) || (message.from as string[]) || ["unknown"] } as any;
+  const brainPayload = messageToBrainPayload(fullMsg);
 
   // Determine brain ID — use inbox_id as brain identifier or look up mapping
   const brainId = process.env.BRAINBASE_DEFAULT_BRAIN_ID || inboxId;

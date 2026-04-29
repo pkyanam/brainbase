@@ -19,10 +19,11 @@ interface AgentMailMessage {
   message_id: string;
   inbox_id: string;
   thread_id: string;
-  from_: string[];
+  from_?: string[];
+  from?: string | string[];
   to: string[];
   subject: string;
-  text: string;
+  text?: string;
   html?: string;
   preview: string;
   timestamp: string;
@@ -147,11 +148,18 @@ export interface EmailBrainPayload {
 export function messageToBrainPayload(msg: AgentMailMessage): EmailBrainPayload {
   const date = new Date(msg.timestamp).toISOString().split("T")[0];
   const slug = `email-${msg.inbox_id}-${msg.message_id.replace(/[<@>]/g, "").replace(/\./g, "-")}`;
+  const fromField: string[] = msg.from_
+    ? msg.from_
+    : Array.isArray(msg.from)
+      ? msg.from
+      : msg.from
+        ? [msg.from]
+        : ["unknown"];
 
   const content = [
     `## ${msg.subject}`,
     ``,
-    `**From:** ${msg.from_.join(", ")}`,
+    `**From:** ${fromField.join(", ")}`,
     `**To:** ${msg.to.join(", ")}`,
     `**Date:** ${msg.timestamp}`,
     `**Inbox:** ${msg.inbox_id}`,
@@ -170,7 +178,7 @@ export function messageToBrainPayload(msg: AgentMailMessage): EmailBrainPayload 
     type: "email",
     content,
     frontmatter: {
-      from: msg.from_,
+      from: fromField,
       to: msg.to,
       subject: msg.subject,
       date: msg.timestamp,
