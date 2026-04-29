@@ -1,0 +1,40 @@
+{
+  "name": "brainbase-sdk",
+  "version": "0.1.0",
+  "description": "SDK for Brainbase — the knowledge graph API for AI agents",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "brainbase",
+    "ai",
+    "memory",
+    "knowledge-graph",
+    "mcp",
+    "agent",
+    "rag",
+    "vector-search"
+  ],
+  "author": "Preetham Kyanam <preetham@brainbase.belweave.ai>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pkyanam/brainbase.git",
+    "directory": "sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/pkyanam/brainbase/issues"
+  },
+  "homepage": "https://brainbase.belweave.ai",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

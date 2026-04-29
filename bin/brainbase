@@ -1,0 +1,312 @@
+#!/usr/bin/env node
+/**
+ * Brainbase CLI — query your brain directly from the terminal.
+ * Usage: brainbase <command> [args]
+ */
+
+const BASE_URL = process.env.BRAINBASE_URL || "http://localhost:5174";
+const API_KEY = process.env.BRAINBASE_API_KEY || "";
+
+async function mcpCall(method, params = {}) {
+  const headers = { "Content-Type": "application/json" };
+  if (API_KEY) headers["Authorization"] = `Bearer ${API_KEY}`;
+
+  const res = await fetch(`${BASE_URL}/api/mcp`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: { name: method, arguments: params },
+      id: 1,
+    }),
+  });
+
+  if (!res.ok) {
+    console.error(`Error: ${res.status} ${res.statusText}`);
+    process.exit(1);
+  }
+
+  const data = await res.json();
+  if (data.error) {
+    console.error(`Error: ${data.error.message}`);
+    process.exit(1);
+  }
+
+  const text = data.result?.content?.[0]?.text;
+  if (!text) return null;
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+async function restCall(method, path, body) {
+  const headers = { "Content-Type": "application/json" };
+  if (API_KEY) headers["Authorization"] = `Bearer ${API_KEY}`;
+
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    console.error(`Error ${res.status}: ${err.error || res.statusText}`);
+    process.exit(1);
+  }
+
+  return res.json();
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+  const command = args[0];
+
+  if (!command || command === "help" || command === "--help" || command === "-h") {
+    console.log(`Brainbase CLI — query your knowledge brain from the terminal.
+
+Usage:
+  brainbase query "who do I know at Apple?"
+  brainbase search "garry tan"
+  brainbase health
+  brainbase stats
+  brainbase page "people/garry-tan"
+  brainbase links "people/preetham-kyanam"
+  brainbase timeline "people/garry-tan"
+  brainbase list [--type person] [--limit 20]
+  brainbase traverse "people/preetham-kyanam" [--depth 2] [--direction out]
+  brainbase graph
+  brainbase put-page "ideas/new-idea" "My New Idea" [--type idea] [--content "..."]
+  brainbase delete-page "ideas/old-idea"
+  brainbase add-link "people/preetham-kyanam" "companies/nous-research" [--type works_at]
+  brainbase remove-link "people/preetham-kyanam" "companies/nous-research"
+  brainbase add-timeline "people/garry-tan" "2024-01-15" "Met at YC" [--detail "..."] [--source "..."]
+  brainbase mcp-url
+
+Environment:
+  BRAINBASE_URL      API endpoint (default: http://localhost:5174)
+  BRAINBASE_API_KEY  Your API key (required for production & write ops)`);
+    return;
+  }
+
+  switch (command) {
+    case "query":
+    case "search": {
+      const query = args.slice(1).join(" ");
+      if (!query) { console.error("Usage: brainbase search <query>"); process.exit(1); }
+      const results = await mcpCall("search", { query });
+      if (Array.isArray(results)) {
+        for (const r of results.slice(0, 20)) {
+          console.log(`\x1b[35m[${r.type}]\x1b[0m \x1b[1m${r.title}\x1b[0m \x1b[90m(${Math.round(r.score * 100)}%)\x1b[0m`);
+          console.log(`  \x1b[90m${r.slug}\x1b[0m`);
+        }
+      }
+      break;
+    }
+
+    case "health": {
+      const h = await mcpCall("get_health", {});
+      console.log(`\x1b[1mBrain Health\x1b[0m`);
+      console.log(`  Pages:      ${h.page_count}`);
+      console.log(`  Links:      ${h.link_count}`);
+      console.log(`  Chunks:     ${h.chunk_count}`);
+      console.log(`  Embeddings: ${h.embed_coverage}%`);
+      console.log(`  Score:      ${h.brain_score}/100`);
+      console.log(`\n\x1b[1mBy Type:\x1b[0m`);
+      for (const [type, count] of Object.entries(h.pages_by_type)) {
+        console.log(`  ${type}: ${count}`);
+      }
+      console.log(`\n\x1b[1mMost Connected:\x1b[0m`);
+      for (const c of h.most_connected) {
+        console.log(`  ${c.slug} (${c.link_count} links)`);
+      }
+      break;
+    }
+
+    case "stats": {
+      const s = await mcpCall("get_stats", {});
+      console.log(`\x1b[1mBrain Stats\x1b[0m`);
+      console.log(`  Pages:      ${s.page_count}`);
+      console.log(`  Links:      ${s.link_count}`);
+      console.log(`  Chunks:     ${s.chunk_count}`);
+      console.log(`  Embeddings: ${s.embed_coverage}%`);
+      console.log(`  Score:      ${s.brain_score}/100`);
+      console.log(`\n\x1b[1mBy Type:\x1b[0m`);
+      for (const [type, count] of Object.entries(s.pages_by_type)) {
+        console.log(`  ${type}: ${count}`);
+      }
+      console.log(`\n\x1b[1mMost Connected:\x1b[0m`);
+      for (const c of s.most_connected) {
+        console.log(`  ${c.slug} (${c.link_count} links)`);
+      }
+      break;
+    }
+
+    case "page": {
+      const slug = args[1];
+      if (!slug) { console.error("Usage: brainbase page <slug>"); process.exit(1); }
+      const page = await mcpCall("get_page", { slug });
+      if (page.error) { console.error(page.error); process.exit(1); }
+      console.log(`\x1b[35m[${page.type}]\x1b[0m \x1b[1m${page.title}\x1b[0m`);
+      console.log(`\x1b[90m${page.slug}\x1b[0m`);
+      if (page.links?.outgoing?.length > 0) {
+        console.log(`\n\x1b[1mLinks:\x1b[0m`);
+        for (const l of page.links.outgoing.slice(0, 10)) {
+          console.log(`  → ${l.title} \x1b[90m(${l.link_type})\x1b[0m`);
+        }
+      }
+      if (page.content) console.log(`\n${page.content.slice(0, 500)}`);
+      break;
+    }
+
+    case "links": {
+      const slug = args[1];
+      if (!slug) { console.error("Usage: brainbase links <slug>"); process.exit(1); }
+      const links = await mcpCall("get_links", { slug });
+      console.log(`\x1b[1mOutgoing (${links.outgoing.length}):\x1b[0m`);
+      for (const l of links.outgoing.slice(0, 20)) console.log(`  → ${l.title} \x1b[90m(${l.link_type})\x1b[0m`);
+      console.log(`\n\x1b[1mIncoming (${links.incoming.length}):\x1b[0m`);
+      for (const l of links.incoming.slice(0, 10)) console.log(`  ← ${l.title} \x1b[90m(${l.link_type})\x1b[0m`);
+      break;
+    }
+
+    case "timeline": {
+      const slug = args[1];
+      if (!slug) { console.error("Usage: brainbase timeline <slug>"); process.exit(1); }
+      const timeline = await mcpCall("get_timeline", { slug });
+      if (!timeline || timeline.length === 0) {
+        console.log("No timeline entries.");
+        break;
+      }
+      console.log(`\x1b[1mTimeline (${timeline.length} entries):\x1b[0m`);
+      for (const e of timeline) {
+        console.log(`\n\x1b[1m${e.date}\x1b[0m \u2014 ${e.summary}`);
+        if (e.detail) console.log(`  ${e.detail}`);
+        if (e.source) console.log(`  \x1b[90mSource: ${e.source}\x1b[0m`);
+      }
+      break;
+    }
+
+    case "list": {
+      const typeFlag = args.indexOf("--type");
+      const type = typeFlag >= 0 ? args[typeFlag + 1] : undefined;
+      const limitFlag = args.indexOf("--limit");
+      const limit = limitFlag >= 0 ? parseInt(args[limitFlag + 1], 10) : 50;
+      const pages = await mcpCall("list_pages", { type, limit });
+      if (Array.isArray(pages)) {
+        for (const p of pages) {
+          console.log(`\x1b[35m[${p.type}]\x1b[0m \x1b[1m${p.title}\x1b[0m \x1b[90m(${p.slug})\x1b[0m`);
+        }
+      }
+      break;
+    }
+
+    case "traverse": {
+      const slug = args[1];
+      if (!slug) { console.error("Usage: brainbase traverse <slug> [--depth 2] [--direction out|in|both]"); process.exit(1); }
+      const depthFlag = args.indexOf("--depth");
+      const depth = depthFlag >= 0 ? parseInt(args[depthFlag + 1], 10) : 2;
+      const dirFlag = args.indexOf("--direction");
+      const direction = dirFlag >= 0 ? args[dirFlag + 1] : "out";
+      const results = await mcpCall("traverse_graph", { slug, depth, direction });
+      if (Array.isArray(results)) {
+        console.log(`\x1b[1mTraversal from ${slug} (${direction}, depth ${depth}):\x1b[0m`);
+        for (const r of results) {
+          const indent = "  ".repeat(r.depth);
+          console.log(`${indent}\x1b[35m[${r.type}]\x1b[0m ${r.title} \x1b[90m(${r.slug})\x1b[0m`);
+        }
+      }
+      break;
+    }
+
+    case "mcp-url":
+      console.log(`${BASE_URL}/api/mcp`);
+      break;
+
+    case "graph": {
+      const graph = await mcpCall("get_graph", {});
+      console.log(JSON.stringify(graph));
+      break;
+    }
+
+    // ── Write operations ─────────────────────────────────────────
+
+    case "put-page": {
+      const slug = args[1];
+      const title = args[2];
+      if (!slug || !title) { console.error("Usage: brainbase put-page <slug> <title> [--type <type>] [--content <content>]"); process.exit(1); }
+      const typeFlag = args.indexOf("--type");
+      const contentFlag = args.indexOf("--content");
+      const type = typeFlag >= 0 ? args[typeFlag + 1] : undefined;
+      const content = contentFlag >= 0 ? args[contentFlag + 1] : undefined;
+      const result = await restCall("PUT", `/api/brain/page/${slug}`, { title, type, content });
+      console.log(`\x1b[32m✓ Page ${result.page.slug} ${result.page.created_at === result.page.updated_at ? "created" : "updated"}\x1b[0m`);
+      console.log(`  Title: ${result.page.title}`);
+      console.log(`  Type:  ${result.page.type}`);
+      break;
+    }
+
+    case "delete-page": {
+      const slug = args[1];
+      if (!slug) { console.error("Usage: brainbase delete-page <slug>"); process.exit(1); }
+      const result = await restCall("DELETE", `/api/brain/page/${slug}`);
+      console.log(result.success
+        ? `\x1b[32m✓ Deleted ${slug}\x1b[0m`
+        : `\x1b[33m⚠ Page not found: ${slug}\x1b[0m`
+      );
+      break;
+    }
+
+    case "add-link": {
+      const from = args[1];
+      const to = args[2];
+      if (!from || !to) { console.error("Usage: brainbase add-link <from-slug> <to-slug> [--type <link-type>]"); process.exit(1); }
+      const typeFlag = args.indexOf("--type");
+      const linkType = typeFlag >= 0 ? args[typeFlag + 1] : undefined;
+      const result = await restCall("POST", "/api/brain/link", { from, to, link_type: linkType });
+      console.log(result.success
+        ? `\x1b[32m✓ Linked ${from} → ${to} (${result.link_type})\x1b[0m`
+        : `\x1b[33m⚠ Link already exists or pages not found\x1b[0m`
+      );
+      break;
+    }
+
+    case "remove-link": {
+      const from = args[1];
+      const to = args[2];
+      if (!from || !to) { console.error("Usage: brainbase remove-link <from-slug> <to-slug>"); process.exit(1); }
+      const result = await restCall("DELETE", "/api/brain/link", { from, to });
+      console.log(result.success
+        ? `\x1b[32m✓ Removed link ${from} → ${to}\x1b[0m`
+        : `\x1b[33m⚠ Link not found\x1b[0m`
+      );
+      break;
+    }
+
+    case "add-timeline": {
+      const slug = args[1];
+      const date = args[2];
+      const summary = args.slice(3).join(" ");
+      if (!slug || !date || !summary) { console.error("Usage: brainbase add-timeline <slug> <YYYY-MM-DD> <summary> [--detail ...] [--source ...]"); process.exit(1); }
+      const detailFlag = args.indexOf("--detail");
+      const sourceFlag = args.indexOf("--source");
+      const detail = detailFlag >= 0 ? args[detailFlag + 1] : undefined;
+      const source = sourceFlag >= 0 ? args[sourceFlag + 1] : undefined;
+      const result = await restCall("POST", "/api/brain/timeline", { slug, date, summary, detail, source });
+      console.log(`\x1b[32m✓ Added timeline entry to ${slug}\x1b[0m`);
+      console.log(`  Date:    ${result.date}`);
+      console.log(`  Summary: ${result.summary}`);
+      break;
+    }
+
+    default:
+      console.error(`Unknown command: ${command}\nRun 'brainbase help' for usage.`);
+      process.exit(1);
+  }
+}
+
+main().catch(err => { console.error("Error:", err.message); process.exit(1); });

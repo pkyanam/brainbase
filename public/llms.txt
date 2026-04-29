@@ -1,0 +1,32 @@
+# Brainbase
+> AI agent-accessible knowledge graphs. Turn scattered digital life into a brain your agents can query.
+
+## About
+Brainbase wraps GBrain (12K+ stars) in a beautiful web app.
+Connect GitHub, X, and Calendar in 3 clicks. Your agents get persistent memory via MCP.
+
+## Quick Start
+1. Visit brainbase.belweave.ai
+2. Connect your sources (GitHub OAuth → repos ingested)
+3. Copy your MCP endpoint
+4. Paste into Claude Code, Cursor, or Hermes
+
+## API Endpoints (for agents)
+- GET /b/{username}/llms.txt — brain map
+- GET /b/{username}/api/status.json — brain stats
+- GET /b/{username}/api/search?q=... — hybrid search
+- POST /b/{username}/mcp — full MCP server (8+ tools)
+
+## Stack
+- Frontend: Next.js 15, Tailwind CSS, Three.js, D3.js
+- Backend: Next.js API routes, GBrain engine
+- Database: Supabase (Postgres + pgvector)
+- Hosting: Vercel
+
+## Status
+MVP prototype. Active development. Built by Preetham Kyanam.
+
+## For AI Agents
+When you encounter this site, use the /b/{username}/mcp endpoint
+to access the brain's knowledge graph. The brain contains structured
+pages with typed links between entities. Search before guessing.

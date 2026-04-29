@@ -1,0 +1,350 @@
+import { queryOne, queryMany } from "./client";
+
+export interface PutPageInput {
+  slug: string;
+  title: string;
+  type?: string;
+  content?: string;
+  frontmatter?: Record<string, unknown>;
+}
+
+export interface PutPageResult {
+  slug: string;
+  title: string;
+  type: string;
+  content: string;
+  frontmatter: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function putPage(brainId: string, input: PutPageInput): Promise<PutPageResult> {
+  const row = await queryOne<{
+    slug: string;
+    title: string;
+    type: string;
+    compiled_truth: string;
+    frontmatter: Record<string, unknown>;
+    created_at: string;
+    updated_at: string;
+  }>(
+    `INSERT INTO pages (brain_id, slug, title, type, compiled_truth, frontmatter, search_vector)
+     VALUES ($1, $2, $3, COALESCE($4, 'unknown'), COALESCE($5, ''), COALESCE($6, '{}'::jsonb), to_tsvector('english', COALESCE($5, '')))
+     ON CONFLICT (slug) DO UPDATE SET
+       title = EXCLUDED.title,
+       type = EXCLUDED.type,
+       compiled_truth = EXCLUDED.compiled_truth,
+       frontmatter = EXCLUDED.frontmatter,
+       search_vector = to_tsvector('english', COALESCE(EXCLUDED.compiled_truth, '')),
+       updated_at = NOW()
+     RETURNING slug, title, type, compiled_truth, frontmatter, created_at::text, updated_at::text`,
+    [brainId, input.slug, input.title, input.type || null, input.content || null, JSON.stringify(input.frontmatter || {})]
+  );
+
+  if (!row) throw new Error("Failed to put page");
+
+  return {
+    slug: row.slug,
+    title: row.title,
+    type: row.type || "unknown",
+    content: row.compiled_truth || "",
+    frontmatter: row.frontmatter || {},
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+export async function deletePage(brainId: string, slug: string): Promise<boolean> {
+  const result = await queryOne<{ slug: string }>(
+    `DELETE FROM pages WHERE brain_id = $1 AND slug = $2 RETURNING slug`,
+    [brainId, slug]
+  );
+  return !!result;
+}
+
+export async function addLink(
+  brainId: string,
+  fromSlug: string,
+  toSlug: string,
+  linkType?: string
+): Promise<boolean> {
+  const result = await queryOne<{ id: string }>(
+    `INSERT INTO links (brain_id, from_page_id, to_page_id, link_type)
+     VALUES (
+       $1,
+       (SELECT id FROM pages WHERE brain_id = $1 AND slug = $2),
+       (SELECT id FROM pages WHERE brain_id = $1 AND slug = $3),
+       COALESCE($4, 'related')
+     )
+     ON CONFLICT DO NOTHING
+     RETURNING id`,
+    [brainId, fromSlug, toSlug, linkType || null]
+  );
+  return !!result;
+}
+
+export async function removeLink(
+  brainId: string,
+  fromSlug: string,
+  toSlug: string
+): Promise<boolean> {
+  const result = await queryOne<{ id: string }>(
+    `DELETE FROM links
+     WHERE brain_id = $1
+       AND from_page_id = (SELECT id FROM pages WHERE brain_id = $1 AND slug = $2)
+       AND to_page_id = (SELECT id FROM pages WHERE brain_id = $1 AND slug = $3)
+     RETURNING id`,
+    [brainId, fromSlug, toSlug]
+  );
+  return !!result;
+}
+
+export interface TimelineEntryInput {
+  slug: string;
+  date: string;
+  summary: string;
+  detail?: string;
+  source?: string;
+}
+
+export async function addTimelineEntry(
+  brainId: string,
+  input: TimelineEntryInput
+): Promise<{ id: string }> {
+  const row = await queryOne<{ id: string }>(
+    `INSERT INTO timeline_entries (brain_id, page_id, date, summary, detail, source)
+     VALUES (
+       $1,
+       (SELECT id FROM pages WHERE brain_id = $1 AND slug = $2),
+       $3, $4, $5, $6
+     )
+     RETURNING id`,
+    [brainId, input.slug, input.date, input.summary, input.detail || null, input.source || null]
+  );
+
+  if (!row) throw new Error("Failed to add timeline entry");
+  return { id: row.id };
+}
+
+export interface PageListItem {
+  slug: string;
+  title: string;
+  type: string;
+  updated_at: string;
+}
+
+export async function listPages(brainId: string, options?: {
+  type?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<PageListItem[]> {
+  const limit = options?.limit ?? 50;
+  const offset = options?.offset ?? 0;
+
+  const rows = await queryMany<{
+    slug: string;
+    title: string;
+    type: string;
+    updated_at: string;
+  }>(
+    `SELECT slug, title, type, updated_at::text
+     FROM pages
+     WHERE brain_id = $1 AND ($2::text IS NULL OR type = $2)
+     ORDER BY updated_at DESC
+     LIMIT $3 OFFSET $4`,
+    [brainId, options?.type || null, limit, offset]
+  );
+
+  return rows;
+}
+
+export interface TraversalResult {
+  slug: string;
+  title: string;
+  type: string;
+  depth: number;
+  link_type?: string;
+}
+
+export async function traverseGraph(
+  brainId: string,
+  startSlug: string,
+  depth = 2,
+  direction: "out" | "in" | "both" = "out"
+): Promise<TraversalResult[]> {
+  if (direction === "out") {
+    const rows = await queryMany<{
+      slug: string;
+      title: string;
+      type: string;
+      depth: number;
+      link_type: string;
+    }>(
+      `WITH RECURSIVE traversal AS (
+        SELECT p.id, p.slug, p.title, p.type, 0 AS depth, ARRAY[p.id] AS path
+        FROM pages p WHERE p.brain_id = $1 AND p.slug = $2
+
+        UNION ALL
+
+        SELECT p.id, p.slug, p.title, p.type, t.depth + 1, t.path || p.id
+        FROM traversal t
+        JOIN links l ON l.brain_id = $1 AND l.from_page_id = t.id
+        JOIN pages p ON p.brain_id = $1 AND p.id = l.to_page_id
+        WHERE t.depth < $3 AND NOT p.id = ANY(t.path)
+      )
+      SELECT slug, title, type, depth, NULL::text as link_type
+      FROM traversal
+      ORDER BY depth, title`,
+      [brainId, startSlug, depth]
+    );
+    return rows.map(r => ({
+      slug: r.slug,
+      title: r.title,
+      type: r.type,
+      depth: r.depth,
+      link_type: r.link_type || undefined,
+    }));
+  }
+
+  if (direction === "in") {
+    const rows = await queryMany<{
+      slug: string;
+      title: string;
+      type: string;
+      depth: number;
+      link_type: string;
+    }>(
+      `WITH RECURSIVE traversal AS (
+        SELECT p.id, p.slug, p.title, p.type, 0 AS depth, ARRAY[p.id] AS path
+        FROM pages p WHERE p.brain_id = $1 AND p.slug = $2
+
+        UNION ALL
+
+        SELECT p.id, p.slug, p.title, p.type, t.depth + 1, t.path || p.id
+        FROM traversal t
+        JOIN links l ON l.brain_id = $1 AND l.to_page_id = t.id
+        JOIN pages p ON p.brain_id = $1 AND p.id = l.from_page_id
+        WHERE t.depth < $3 AND NOT p.id = ANY(t.path)
+      )
+      SELECT slug, title, type, depth, NULL::text as link_type
+      FROM traversal
+      ORDER BY depth, title`,
+      [brainId, startSlug, depth]
+    );
+    return rows.map(r => ({
+      slug: r.slug,
+      title: r.title,
+      type: r.type,
+      depth: r.depth,
+      link_type: r.link_type || undefined,
+    }));
+  }
+
+  const rows = await queryMany<{
+    slug: string;
+    title: string;
+    type: string;
+    depth: number;
+    link_type: string;
+  }>(
+    `WITH RECURSIVE traversal AS (
+      SELECT p.id, p.slug, p.title, p.type, 0 AS depth, ARRAY[p.id] AS path
+      FROM pages p WHERE p.brain_id = $1 AND p.slug = $2
+
+      UNION ALL
+
+      SELECT p.id, p.slug, p.title, p.type, t.depth + 1, t.path || p.id
+      FROM traversal t
+      JOIN links l ON l.brain_id = $1 AND (l.from_page_id = t.id OR l.to_page_id = t.id)
+      JOIN pages p ON p.brain_id = $1 AND p.id = CASE WHEN l.from_page_id = t.id THEN l.to_page_id ELSE l.from_page_id END
+      WHERE t.depth < $3 AND NOT p.id = ANY(t.path)
+    )
+    SELECT slug, title, type, depth, NULL::text as link_type
+    FROM traversal
+    ORDER BY depth, title`,
+    [brainId, startSlug, depth]
+  );
+  return rows.map(r => ({
+    slug: r.slug,
+    title: r.title,
+    type: r.type,
+    depth: r.depth,
+    link_type: r.link_type || undefined,
+  }));
+}
+
+export interface BrainStats {
+  page_count: number;
+  chunk_count: number;
+  link_count: number;
+  embed_coverage: number;
+  brain_score: number;
+  pages_by_type: Record<string, number>;
+  most_connected: { slug: string; title: string; link_count: number }[];
+}
+
+export async function getStats(brainId: string): Promise<BrainStats> {
+  const typeRows = await queryMany<{ type: string; count: string }>(
+    `SELECT type, COUNT(*) as count FROM pages WHERE brain_id = $1 GROUP BY type ORDER BY count DESC`,
+    [brainId]
+  );
+  const pages_by_type: Record<string, number> = {};
+  let pageCount = 0;
+  for (const r of typeRows) {
+    pages_by_type[r.type] = parseInt(r.count);
+    pageCount += parseInt(r.count);
+  }
+
+  const chunkRow = await queryOne<{ count: string }>(
+    `SELECT COUNT(*) as count FROM content_chunks WHERE brain_id = $1`,
+    [brainId]
+  );
+  const chunkCount = parseInt(chunkRow?.count || "0");
+
+  const linkRow = await queryOne<{ count: string }>(
+    `SELECT COUNT(*) as count FROM links WHERE brain_id = $1`,
+    [brainId]
+  );
+  const linkCount = parseInt(linkRow?.count || "0");
+
+  const embedRow = await queryOne<{ count: string }>(
+    `SELECT COUNT(*) as count FROM content_chunks WHERE brain_id = $1 AND embedding IS NOT NULL`,
+    [brainId]
+  );
+  const embedCoverage = chunkCount > 0
+    ? Math.round((parseInt(embedRow?.count || "0") / chunkCount) * 100)
+    : 0;
+
+  const topRows = await queryMany<{ slug: string; title: string; link_count: string }>(
+    `SELECT p.slug, p.title, COUNT(l.id) as link_count
+     FROM pages p
+     LEFT JOIN links l ON l.brain_id = $1 AND (l.from_page_id = p.id OR l.to_page_id = p.id)
+     WHERE p.brain_id = $1
+     GROUP BY p.id, p.slug, p.title
+     ORDER BY link_count DESC
+     LIMIT 5`,
+    [brainId]
+  );
+  const mostConnected = topRows.map(r => ({
+    slug: r.slug,
+    title: r.title,
+    link_count: parseInt(r.link_count),
+  }));
+
+  const linkDensity = pageCount > 0 ? linkCount / pageCount : 0;
+  const brainScore = Math.min(100, Math.round(
+    embedCoverage * 0.35 +
+    Math.min(linkDensity * 100, 40) * 0.4 +
+    (pageCount > 100 ? 25 : (pageCount / 100) * 25)
+  ));
+
+  return {
+    page_count: pageCount,
+    chunk_count: chunkCount,
+    link_count: linkCount,
+    embed_coverage: embedCoverage,
+    brain_score: brainScore,
+    pages_by_type,
+    most_connected: mostConnected,
+  };
+}

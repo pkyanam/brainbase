@@ -1,0 +1,104 @@
+#!/usr/bin/env node
+/**
+ * Brainbase MCP Server — stdio transport for AI coding agents.
+ * Usage: node bin/brainbase-mcp
+ *
+ * Protocol: JSON-RPC 2.0 over stdin/stdout
+ * Each JSON-RPC message is one line of JSON on stdin.
+ * Responses go to stdout, one JSON line per response.
+ */
+
+const BASE_URL = process.env.BRAINBASE_URL || "http://localhost:5174";
+const API_KEY = process.env.BRAINBASE_API_KEY || "";
+
+async function dispatch(method, params = {}) {
+  const headers = { "Content-Type": "application/json" };
+  if (API_KEY) headers["Authorization"] = `Bearer ${API_KEY}`;
+
+  const res = await fetch(`${BASE_URL}/api/mcp`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: { name: method, arguments: params },
+      id: 1,
+    }),
+  });
+
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+  const text = data.result?.content?.[0]?.text;
+  if (!text) return null;
+  try { return JSON.parse(text); } catch { return text; }
+}
+
+const TOOLS = [
+  { name: "search", description: "Search brain pages by keyword. Returns scored results with excerpts.", inputSchema: { type: "object", properties: { query: { type: "string", description: "Search query" } }, required: ["query"] } },
+  { name: "query", description: "Ask a natural language question — returns relevant brain pages.", inputSchema: { type: "object", properties: { question: { type: "string", description: "Natural language question" } }, required: ["question"] } },
+  { name: "get_page", description: "Get a brain page by its slug including content, links, and timeline.", inputSchema: { type: "object", properties: { slug: { type: "string", description: "Page slug (e.g., people/garry-tan)" } }, required: ["slug"] } },
+  { name: "get_links", description: "Get all incoming and outgoing typed links for a page.", inputSchema: { type: "object", properties: { slug: { type: "string" } }, required: ["slug"] } },
+  { name: "get_backlinks", description: "Get pages that link to a given page.", inputSchema: { type: "object", properties: { slug: { type: "string" } }, required: ["slug"] } },
+  { name: "get_timeline", description: "Get timeline entries for a page.", inputSchema: { type: "object", properties: { slug: { type: "string" } }, required: ["slug"] } },
+  { name: "get_health", description: "Get brain health dashboard: page count, links, embed coverage, score.", inputSchema: { type: "object", properties: {} } },
+  { name: "get_stats", description: "Get detailed brain statistics.", inputSchema: { type: "object", properties: {} } },
+  { name: "get_graph", description: "Get full knowledge graph: all nodes and typed edges.", inputSchema: { type: "object", properties: {} } },
+  { name: "list_pages", description: "List all brain pages with metadata. Optionally filter by type.", inputSchema: { type: "object", properties: { type: { type: "string" }, limit: { type: "number" }, offset: { type: "number" } } } },
+  { name: "traverse_graph", description: "Traverse the knowledge graph from a page (out/in/both, depth up to 5).", inputSchema: { type: "object", properties: { slug: { type: "string" }, depth: { type: "number" }, direction: { type: "string", enum: ["out", "in", "both"] } }, required: ["slug"] } },
+  { name: "put_page", description: "Create or update a brain page.", inputSchema: { type: "object", properties: { slug: { type: "string" }, title: { type: "string" }, type: { type: "string" }, content: { type: "string" }, frontmatter: { type: "object" } }, required: ["slug", "title"] } },
+  { name: "delete_page", description: "Delete a brain page by slug.", inputSchema: { type: "object", properties: { slug: { type: "string" } }, required: ["slug"] } },
+  { name: "add_link", description: "Create a typed link between two pages.", inputSchema: { type: "object", properties: { from: { type: "string" }, to: { type: "string" }, link_type: { type: "string" } }, required: ["from", "to"] } },
+  { name: "remove_link", description: "Remove a link between two pages.", inputSchema: { type: "object", properties: { from: { type: "string" }, to: { type: "string" } }, required: ["from", "to"] } },
+  { name: "add_timeline_entry", description: "Add a timeline event to a page.", inputSchema: { type: "object", properties: { slug: { type: "string" }, date: { type: "string" }, summary: { type: "string" }, detail: { type: "string" }, source: { type: "string" } }, required: ["slug", "date", "summary"] } },
+];
+
+function respond(id, result) {
+  process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id, result }) + "\n");
+}
+
+function error(id, code, message) {
+  process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id, error: { code, message } }) + "\n");
+}
+
+// Read JSON-RPC from stdin, one line at a time
+const rl = require("readline").createInterface({ input: process.stdin });
+
+rl.on("line", async (line) => {
+  let req;
+  try { req = JSON.parse(line); } catch { return; }
+  if (!req || req.jsonrpc !== "2.0") return;
+
+  const { id, method, params } = req;
+
+  try {
+    if (method === "initialize") {
+      respond(id, {
+        protocolVersion: "2024-11-05",
+        capabilities: { tools: {} },
+        serverInfo: { name: "brainbase", version: "1.0.0" },
+      });
+    } else if (method === "notifications/initialized") {
+      // No response needed
+    } else if (method === "tools/list") {
+      respond(id, { tools: TOOLS });
+    } else if (method === "tools/call") {
+      const toolName = params?.name;
+      const toolArgs = params?.arguments || {};
+      if (!toolName) { error(id, -32602, "Missing tool name"); return; }
+      const result = await dispatch(toolName, toolArgs);
+      const text = typeof result === "string" ? result : JSON.stringify(result, null, 2);
+      respond(id, { content: [{ type: "text", text }] });
+    } else {
+      error(id, -32601, `Unknown method: ${method}`);
+    }
+  } catch (e) {
+    error(id, -32000, e.message);
+  }
+});
+
+// Log to stderr only
+console.error("[brainbase-mcp] Ready — waiting for JSON-RPC on stdin");
+if (!API_KEY) {
+  console.error("[brainbase-mcp] Warning: BRAINBASE_API_KEY not set. Auth will fail in production.");
+}

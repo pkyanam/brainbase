@@ -1,36 +1,79 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Brainbase
 
-## Getting Started
+**Give your AI agents a memory.**
 
-First, run the development server:
+One API call. Your agents remember everything. Brainbase is the persistent knowledge layer that turns every AI agent into an expert on your world.
+
+## What is it?
+
+Brainbase is a knowledge graph API for AI agents. Every user gets their own isolated Postgres database (via Supabase) with:
+
+- **Hybrid search** — full-text + semantic via pgvector
+- **Typed wikilinks** — relational queries that vector search alone can't reach
+- **Self-enriching** — links extracted, timelines built, orphans reconnected automatically
+- **MCP-native** — drop one URL into any MCP-compatible agent (Claude Code, Cursor, OpenCode)
+
+## Quickstart
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install brainbase-sdk
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+```ts
+import { Brainbase } from "brainbase-sdk";
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+const brain = new Brainbase({ apiKey: "bb_live_..." });
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+const results = await brain.query("who do I know at YC?");
+// → [{ slug: "people/garry-tan", title: "Garry Tan", score: 0.97 }]
+```
 
-## Learn More
+## Architecture
 
-To learn more about Next.js, take a look at the following resources:
+- **Frontend:** Next.js 16 + React 19 + Tailwind CSS + Three.js 3D graph
+- **API:** REST + MCP (JSON-RPC + SSE)
+- **Database:** Postgres + pgvector on Supabase
+- **Auth:** Clerk
+- **SDK:** TypeScript, MCP-native
+- **CLI:** Node.js, zero dependencies
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Development
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm install
+npm run dev
+```
 
-## Deploy on Vercel
+Set your environment variables in `.env.local`:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```
+SUPABASE_DATABASE_URL=postgresql://...
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_...
+CLERK_SECRET_KEY=sk_...
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/brain/health` | GET | Brain statistics |
+| `/api/brain/search?q=` | GET | Full-text search |
+| `/api/brain/page/<slug>` | GET | Page detail |
+| `/api/brain/graph` | GET | Knowledge graph |
+| `/api/mcp` | POST | MCP JSON-RPC |
+| `/api/keys` | POST/GET/DELETE | API key management |
+| `/b/<user>/api/status` | GET | Public brain status |
+| `/b/<user>/llms.txt` | GET | Agent-readable summary |
+
+## CLI
+
+```bash
+brainbase search "garry tan"
+brainbase health
+brainbase page "people/garry-tan"
+brainbase links "people/preetham-kyanam"
+```
+
+## License
+
+MIT
