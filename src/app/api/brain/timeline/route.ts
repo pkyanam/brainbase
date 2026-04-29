@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { addTimelineEntry } from "@/lib/supabase/write";
 import { validateApiKey } from "@/lib/api-keys";
+import { requireOwner } from "@/lib/auth-guard";
+import { logActivity } from "@/lib/activity";
 
 function getBearerToken(req: NextRequest): string | null {
   const auth = req.headers.get("authorization");
@@ -9,14 +11,21 @@ function getBearerToken(req: NextRequest): string | null {
   return match?.[1] || null;
 }
 
-export async function POST(request: NextRequest) {
-  const token = getBearerToken(request);
-  if (!token) {
-    return NextResponse.json({ error: "Missing Authorization header. Use: Bearer bb_live_..." }, { status: 401 });
+async function resolveAuth(req: NextRequest) {
+  const token = getBearerToken(req);
+  if (token) {
+    const keyData = await validateApiKey(token);
+    if (keyData) return { brainId: keyData.brainId, userId: keyData.userId || "api" };
   }
-  const keyData = await validateApiKey(token);
-  if (!keyData) {
-    return NextResponse.json({ error: "Invalid or revoked API key" }, { status: 401 });
+  const ctx = await requireOwner();
+  if (ctx instanceof Response) return null;
+  return { brainId: ctx.brainId, userId: ctx.userId };
+}
+
+export async function POST(request: NextRequest) {
+  const auth = await resolveAuth(request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   let body: { slug?: string; date?: string; summary?: string; detail?: string; source?: string };
@@ -32,7 +41,17 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await addTimelineEntry(keyData.brainId, { slug, date, summary, detail, source });
+    const result = await addTimelineEntry(auth.brainId, { slug, date, summary, detail, source });
+
+    await logActivity({
+      brainId: auth.brainId,
+      actorUserId: auth.userId,
+      action: "timeline_added",
+      entityType: "timeline",
+      entitySlug: slug,
+      metadata: { date, summary },
+    });
+
     return NextResponse.json({ success: true, id: result.id, slug, date, summary });
   } catch (err) {
     console.error("[brainbase] Add timeline error:", err);

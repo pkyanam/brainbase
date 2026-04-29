@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { queryOne } from "./supabase/client";
-import { getOrCreateBrainForUser } from "./brain-context";
+import { getOrCreateBrainForUser, canAccessBrain, getBrainsForUser } from "./brain-context";
 import { NextResponse } from "next/server";
 
 const DEV_USER_ID = "dev-user-001";
@@ -68,6 +68,46 @@ export async function requireOwner(): Promise<AuthContext | NextResponse> {
 }
 
 /**
+ * v0.3 — Require access to a specific brain (owner or member).
+ * Reads ?brain_id from query or uses the user's default brain.
+ */
+export async function requireBrainAccess(
+  req: Request
+): Promise<{ userId: string; brainId: string; role: string; isOwner: boolean } | NextResponse> {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const url = new URL(req.url);
+  const requestedBrainId = url.searchParams.get("brain_id");
+
+  // If no brain_id specified, use default
+  if (!requestedBrainId) {
+    try {
+      const brainId = await getOrCreateBrainForUser(userId);
+      return { userId, brainId, role: "owner", isOwner: true };
+    } catch (err) {
+      console.error("[brainbase] Brain creation error:", err);
+      return NextResponse.json({ error: "Failed to initialize brain" }, { status: 500 });
+    }
+  }
+
+  // Verify access
+  const access = await canAccessBrain(userId, requestedBrainId);
+  if (!access) {
+    return NextResponse.json({ error: "Forbidden — you don't have access to this brain" }, { status: 403 });
+  }
+
+  return {
+    userId,
+    brainId: requestedBrainId,
+    role: access.role,
+    isOwner: access.is_owner,
+  };
+}
+
+/**
  * Lightweight auth check — just verifies the user is logged in.
  */
 export async function requireAuth(): Promise<string | NextResponse> {
@@ -76,4 +116,11 @@ export async function requireAuth(): Promise<string | NextResponse> {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   return userId;
+}
+
+/**
+ * v0.3 — List all brains the user can access.
+ */
+export async function listUserBrains(userId: string) {
+  return getBrainsForUser(userId);
 }

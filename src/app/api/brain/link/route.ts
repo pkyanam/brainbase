@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { addLink, removeLink } from "@/lib/supabase/write";
 import { validateApiKey } from "@/lib/api-keys";
+import { requireOwner } from "@/lib/auth-guard";
+import { logActivity } from "@/lib/activity";
 
 function getBearerToken(req: NextRequest): string | null {
   const auth = req.headers.get("authorization");
@@ -9,14 +11,21 @@ function getBearerToken(req: NextRequest): string | null {
   return match?.[1] || null;
 }
 
-export async function POST(request: NextRequest) {
-  const token = getBearerToken(request);
-  if (!token) {
-    return NextResponse.json({ error: "Missing Authorization header. Use: Bearer bb_live_..." }, { status: 401 });
+async function resolveAuth(req: NextRequest) {
+  const token = getBearerToken(req);
+  if (token) {
+    const keyData = await validateApiKey(token);
+    if (keyData) return { brainId: keyData.brainId, userId: keyData.userId || "api" };
   }
-  const keyData = await validateApiKey(token);
-  if (!keyData) {
-    return NextResponse.json({ error: "Invalid or revoked API key" }, { status: 401 });
+  const ctx = await requireOwner();
+  if (ctx instanceof Response) return null;
+  return { brainId: ctx.brainId, userId: ctx.userId };
+}
+
+export async function POST(request: NextRequest) {
+  const auth = await resolveAuth(request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   let body: { from?: string; to?: string; link_type?: string };
@@ -32,7 +41,17 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const created = await addLink(keyData.brainId, from, to, link_type);
+    const created = await addLink(auth.brainId, from, to, link_type);
+
+    await logActivity({
+      brainId: auth.brainId,
+      actorUserId: auth.userId,
+      action: "link_created",
+      entityType: "link",
+      entitySlug: `${from} → ${to}`,
+      metadata: { from, to, link_type: link_type || "related" },
+    });
+
     return NextResponse.json({ success: created, from, to, link_type: link_type || "related" });
   } catch (err) {
     console.error("[brainbase] Add link error:", err);
@@ -41,13 +60,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const token = getBearerToken(request);
-  if (!token) {
-    return NextResponse.json({ error: "Missing Authorization header. Use: Bearer bb_live_..." }, { status: 401 });
-  }
-  const keyData = await validateApiKey(token);
-  if (!keyData) {
-    return NextResponse.json({ error: "Invalid or revoked API key" }, { status: 401 });
+  const auth = await resolveAuth(request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   let body: { from?: string; to?: string };
@@ -63,7 +78,17 @@ export async function DELETE(request: NextRequest) {
   }
 
   try {
-    const removed = await removeLink(keyData.brainId, from, to);
+    const removed = await removeLink(auth.brainId, from, to);
+
+    await logActivity({
+      brainId: auth.brainId,
+      actorUserId: auth.userId,
+      action: "link_deleted",
+      entityType: "link",
+      entitySlug: `${from} → ${to}`,
+      metadata: { from, to },
+    });
+
     return NextResponse.json({ success: removed, from, to });
   } catch (err) {
     console.error("[brainbase] Remove link error:", err);

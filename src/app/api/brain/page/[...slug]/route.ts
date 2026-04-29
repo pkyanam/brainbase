@@ -2,13 +2,28 @@ import { NextRequest, NextResponse } from "next/server";
 import { getPage, getPageLinks, getTimeline } from "@/lib/supabase/pages";
 import { putPage, deletePage } from "@/lib/supabase/write";
 import { validateApiKey } from "@/lib/api-keys";
-import { requireOwner } from "@/lib/auth-guard";
+import { requireOwner, requireBrainAccess } from "@/lib/auth-guard";
+import { snapshotPageVersion } from "@/lib/page-versions";
+import { logActivity } from "@/lib/activity";
 
 function getBearerToken(req: NextRequest): string | null {
   const auth = req.headers.get("authorization");
   if (!auth) return null;
   const match = auth.match(/^Bearer\s+(.+)$/i);
   return match?.[1] || null;
+}
+
+async function resolveAuth(req: NextRequest) {
+  // Try API key first
+  const token = getBearerToken(req);
+  if (token) {
+    const keyData = await validateApiKey(token);
+    if (keyData) return { brainId: keyData.brainId, userId: keyData.userId || "api" };
+  }
+  // Fall back to Clerk session
+  const ctx = await requireOwner();
+  if (ctx instanceof Response) return null;
+  return { brainId: ctx.brainId, userId: ctx.userId };
 }
 
 export async function GET(
@@ -47,13 +62,9 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string[] }> }
 ) {
-  const token = getBearerToken(request);
-  if (!token) {
-    return NextResponse.json({ error: "Missing Authorization header. Use: Bearer bb_live_..." }, { status: 401 });
-  }
-  const keyData = await validateApiKey(token);
-  if (!keyData) {
-    return NextResponse.json({ error: "Invalid or revoked API key" }, { status: 401 });
+  const auth = await resolveAuth(request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const resolved = await params;
@@ -74,13 +85,26 @@ export async function PUT(
   }
 
   try {
-    const page = await putPage(keyData.brainId, {
+    // Snapshot current version before overwriting
+    await snapshotPageVersion(auth.brainId, slug, auth.userId);
+
+    const page = await putPage(auth.brainId, {
       slug,
       title: body.title,
       type: body.type,
       content: body.content,
       frontmatter: body.frontmatter,
     });
+
+    await logActivity({
+      brainId: auth.brainId,
+      actorUserId: auth.userId,
+      action: "page_updated",
+      entityType: "page",
+      entitySlug: slug,
+      metadata: { title: body.title, type: body.type },
+    });
+
     return NextResponse.json({ success: true, page });
   } catch (err) {
     console.error("[brainbase] Put page error:", err);
@@ -92,13 +116,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string[] }> }
 ) {
-  const token = getBearerToken(request);
-  if (!token) {
-    return NextResponse.json({ error: "Missing Authorization header. Use: Bearer bb_live_..." }, { status: 401 });
-  }
-  const keyData = await validateApiKey(token);
-  if (!keyData) {
-    return NextResponse.json({ error: "Invalid or revoked API key" }, { status: 401 });
+  const auth = await resolveAuth(request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const resolved = await params;
@@ -108,7 +128,16 @@ export async function DELETE(
   }
 
   try {
-    const deleted = await deletePage(keyData.brainId, slug);
+    const deleted = await deletePage(auth.brainId, slug);
+
+    await logActivity({
+      brainId: auth.brainId,
+      actorUserId: auth.userId,
+      action: "page_deleted",
+      entityType: "page",
+      entitySlug: slug,
+    });
+
     return NextResponse.json({ success: deleted, slug });
   } catch (err) {
     console.error("[brainbase] Delete page error:", err);

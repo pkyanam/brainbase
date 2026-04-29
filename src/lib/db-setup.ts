@@ -105,6 +105,79 @@ export async function ensureSchema(): Promise<void> {
 }
 
 /**
+ * v0.3 — Collaboration schema: brain members, invites, page versions, activities
+ */
+export async function ensureCollaborationSchema(): Promise<void> {
+  try {
+    // Brain members — many-to-many users ↔ brains
+    await query(`
+      CREATE TABLE IF NOT EXISTS brain_members (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        brain_id UUID NOT NULL REFERENCES brains(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'editor',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(brain_id, user_id)
+      )
+    `);
+
+    // Brain invites — pending email invitations
+    await query(`
+      CREATE TABLE IF NOT EXISTS brain_invites (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        brain_id UUID NOT NULL REFERENCES brains(id) ON DELETE CASCADE,
+        inviter_user_id TEXT NOT NULL,
+        email TEXT NOT NULL,
+        token TEXT NOT NULL UNIQUE,
+        role TEXT NOT NULL DEFAULT 'editor',
+        accepted_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        expires_at TIMESTAMPTZ DEFAULT NOW() + INTERVAL '7 days'
+      )
+    `);
+
+    // Page versions — snapshot history
+    await query(`
+      CREATE TABLE IF NOT EXISTS page_versions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        brain_id UUID NOT NULL,
+        page_slug TEXT NOT NULL,
+        title TEXT NOT NULL,
+        type TEXT,
+        content TEXT,
+        frontmatter JSONB,
+        created_by TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_page_versions ON page_versions(brain_id, page_slug, created_at DESC)
+    `);
+
+    // Activity log
+    await query(`
+      CREATE TABLE IF NOT EXISTS activities (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        brain_id UUID NOT NULL,
+        actor_user_id TEXT,
+        action TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_slug TEXT,
+        metadata JSONB,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_activities ON activities(brain_id, created_at DESC)
+    `);
+
+    console.log("[brainbase] Collaboration schema ensured");
+  } catch (err) {
+    console.error("[brainbase] Collaboration schema error:", err);
+  }
+}
+
+/**
  * Install database triggers that auto-populate brain_id on INSERT
  * when it's NULL. This is a safety net for external tools (like gbrain
  * CLI) that haven't been updated to include brain_id in their queries.

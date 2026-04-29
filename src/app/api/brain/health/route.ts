@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getHealth } from "@/lib/supabase/health";
-import { requireOwner } from "@/lib/auth-guard";
+import { requireBrainAccess } from "@/lib/auth-guard";
 
-export async function GET() {
-  const auth = await requireOwner();
+export async function GET(req: NextRequest) {
+  const auth = await requireBrainAccess(req);
   if (auth instanceof Response) return auth;
 
   try {
