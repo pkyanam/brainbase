@@ -30,7 +30,7 @@ export async function putPage(brainId: string, input: PutPageInput): Promise<Put
   }>(
     `INSERT INTO pages (brain_id, slug, title, type, compiled_truth, frontmatter, search_vector)
      VALUES ($1, $2, $3, COALESCE($4, 'unknown'), COALESCE($5, ''), COALESCE($6, '{}'::jsonb), to_tsvector('english', COALESCE($5, '')))
-     ON CONFLICT (slug) DO UPDATE SET
+     ON CONFLICT (brain_id, slug) DO UPDATE SET
        title = EXCLUDED.title,
        type = EXCLUDED.type,
        compiled_truth = EXCLUDED.compiled_truth,
