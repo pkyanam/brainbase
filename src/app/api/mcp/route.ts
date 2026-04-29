@@ -12,7 +12,6 @@ import { canAccessBrain } from "@/lib/brain-context";
 import { requireQuota } from "@/lib/usage";
 import { upsertTriggerRule, getActiveRules, runTriggers } from "@/lib/triggers";
 import { runActions } from "@/lib/actions";
-import { listInboxes, listMessages, createWebhook, listWebhooks } from "@/lib/agentmail";
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";
@@ -41,9 +40,6 @@ const tools = [
   { name: "upsert_trigger", description: "Create or update a trigger rule", inputSchema: { type: "object", properties: { id: { type: "string" }, name: { type: "string" }, description: { type: "string" }, conditions: { type: "object" }, actions: { type: "array" }, enabled: { type: "boolean" }, cooldown_minutes: { type: "number" } }, required: ["name", "conditions", "actions"] } },
   { name: "list_triggers", description: "List active trigger rules", inputSchema: { type: "object", properties: {} } },
   { name: "run_triggers", description: "Manually run triggers against a page", inputSchema: { type: "object", properties: { slug: { type: "string" }, title: { type: "string" }, type: { type: "string" }, content: { type: "string" } }, required: ["slug", "title"] } },
-  { name: "list_agentmail_inboxes", description: "List AgentMail inboxes", inputSchema: { type: "object", properties: {} } },
-  { name: "list_agentmail_messages", description: "List messages in an AgentMail inbox", inputSchema: { type: "object", properties: { inbox_id: { type: "string" } }, required: ["inbox_id"] } },
-  { name: "register_agentmail_webhook", description: "Register a webhook to receive AgentMail events", inputSchema: { type: "object", properties: { url: { type: "string" }, event_types: { type: "array" } }, required: ["url"] } },
 ];
 
 async function dispatch(brainId: string, method: string, params: Record<string, unknown> = {}): Promise<unknown> {
@@ -179,20 +175,6 @@ async function dispatch(brainId: string, method: string, params: Record<string, 
         });
       }
       return { fired: fired.length, rules: fired.map(f => f.ruleName) };
-    }
-    case "register_agentmail_webhook": {
-      const url = params.url as string;
-      const eventTypes = params.event_types as string[] | undefined;
-      if (!url) throw new Error("Missing 'url' parameter");
-      return await createWebhook({ url, eventTypes, clientId: `brainbase-${brainId}` });
-    }
-    case "list_agentmail_inboxes": {
-      return await listInboxes();
-    }
-    case "list_agentmail_messages": {
-      const inboxId = params.inbox_id as string;
-      if (!inboxId) throw new Error("Missing 'inbox_id' parameter");
-      return await listMessages(inboxId);
     }
     default:
       throw new Error(`Unknown tool: ${method}`);
