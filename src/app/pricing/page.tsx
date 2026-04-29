@@ -16,7 +16,6 @@ const plans = [
     ],
     cta: "Get started",
     href: "/sign-up",
-    highlight: false,
   },
   {
     name: "Pro",
@@ -34,7 +33,6 @@ const plans = [
     ],
     cta: "Start free trial",
     href: "/sign-up",
-    highlight: true,
   },
   {
     name: "Enterprise",
@@ -51,7 +49,6 @@ const plans = [
     ],
     cta: "Contact us",
     href: "mailto:hello@brainbase.belweave.ai",
-    highlight: false,
   },
 ];
 
@@ -72,19 +69,8 @@ export default function Pricing() {
           {plans.map((plan) => (
             <div
               key={plan.name}
-              className={`relative rounded-2xl border p-6 flex flex-col ${
-                plan.highlight
-                  ? "border-bb-accent/40 bg-bb-accent-glow"
-                  : "border-bb-border bg-bb-bg-secondary"
-              }`}
+              className="rounded-2xl border border-bb-border bg-bb-bg-secondary p-6 flex flex-col"
             >
-              {plan.highlight && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <span className="px-3 py-1 bg-bb-accent text-bb-bg-primary text-xs font-medium rounded-full">
-                    Most popular
-                  </span>
-                </div>
-              )}
               <h3 className="text-lg font-semibold mb-1">{plan.name}</h3>
               <div className="flex items-baseline gap-1 mb-3">
                 <span className="text-3xl font-bold">{plan.price}</span>
@@ -103,11 +89,7 @@ export default function Pricing() {
 
               <a
                 href={plan.href}
-                className={`block text-center py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                  plan.highlight
-                    ? "bg-bb-accent hover:bg-bb-accent-dim text-bb-bg-primary"
-                    : "bg-bb-surface hover:bg-bb-surface-hover text-bb-text-secondary border border-bb-border"
-                }`}
+                className="block text-center py-2.5 rounded-xl text-sm font-medium transition-colors bg-bb-surface hover:bg-bb-surface-hover text-bb-text-secondary border border-bb-border"
               >
                 {plan.cta}
               </a>

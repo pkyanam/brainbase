@@ -10,7 +10,7 @@ export default function Home() {
       <section className="max-w-4xl mx-auto px-6 pt-24 pb-16 text-center">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-bb-bg-secondary border border-bb-border text-xs text-bb-text-muted mb-8">
           <span className="w-1.5 h-1.5 rounded-full bg-bb-accent animate-pulse" />
-          Powered by GStack · Postgres-backed · MCP-native
+          Powered by GBrain · Postgres-backed · MCP-native
         </div>
         <h1 className="text-5xl sm:text-6xl font-bold tracking-tight mb-6">
           Give your AI agents{" "}

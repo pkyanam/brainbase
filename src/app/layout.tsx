@@ -4,7 +4,7 @@ import AuthProvider from "@/components/AuthProvider";
 
 export const metadata: Metadata = {
   title: "Brainbase — AI Agent Memory",
-  description: "One API call. Your agents remember everything. Powered by GStack.",
+  description: "One API call. Your agents remember everything. Powered by GBrain.",
   icons: {
     icon: "/brainbaseLogo.png",
     apple: "/brainbaseLogo.png",

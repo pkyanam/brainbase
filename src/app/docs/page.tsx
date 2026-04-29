@@ -153,11 +153,9 @@ brainbase graph`}</code>
       <section id="architecture" className="mb-12 scroll-mt-24">
         <h2 className="text-lg font-semibold mb-3">Architecture</h2>
         <p className="text-sm text-bb-text-secondary leading-relaxed">
-          Brainbase is powered by{" "}
-          <a href="https://github.com/garrytan/gstack" className="text-bb-accent hover:underline">GStack</a>{" "}
-          (86K GitHub stars) and{" "}
+          Brainbase is built on{" "}
           <a href="https://github.com/garrytan/gbrain" className="text-bb-accent hover:underline">GBrain</a>{" "}
-          (12K stars) by Garry Tan. Each user gets their own isolated Postgres database on Supabase
+          by Garry Tan. Each user gets their own isolated Postgres database on Supabase
           with pgvector for hybrid search. The knowledge graph uses typed wikilinks for relational
           queries that vector search alone can&apos;t reach.
         </p>
