@@ -6,12 +6,22 @@ import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import type { GraphNode } from "@/lib/supabase/graph";
 
+/*
+  Graph colors — harmonized earth-tone palette
+  that complements the charcoal + mint-green brand.
+*/
 const TYPE_COLORS: Record<string, string> = {
-  person: "#c084fc", company: "#22d3ee", project: "#34d399",
-  concept: "#fbbf24", idea: "#f472b6", place: "#60a5fa",
-  software: "#a78bfa", meeting: "#fb923c",
+  person: "#e8927c",   // warm coral
+  company: "#7dd3a8",  // mint (brand accent)
+  project: "#e8c97c",  // soft amber
+  concept: "#d4a5a5",  // soft rose
+  idea: "#b8a9d9",     // lavender
+  place: "#8ec5e8",    // sky
+  software: "#6ec5b8", // teal
+  meeting: "#e8b89c",  // peach
 };
-const FALLBACK_COLOR = "#6b7280";
+const FALLBACK_COLOR = "#7dd3a8";
+const EDGE_COLOR = "#1a2e24";
 
 function computeLayout(
   nodes: GraphNode[],
@@ -48,7 +58,6 @@ function computeLayout(
   return positions;
 }
 
-// ── Minimal Scene: Points + Lines only, no per-mesh components ──
 function Scene({
   nodes, edges, onSelectNode,
 }: {
@@ -58,7 +67,6 @@ function Scene({
   const { gl, raycaster, camera, pointer } = useThree();
   const slugMap = useRef<Map<number, string>>(new Map());
 
-  // Cap
   const capped = useMemo(() => nodes.sort((a, b) => b.linkCount - a.linkCount).slice(0, 150), [nodes]);
   const cappedEdges = useMemo(() => {
     const ids = new Set(capped.map(n => n.id));
@@ -67,7 +75,6 @@ function Scene({
 
   const positions = useMemo(() => computeLayout(capped, cappedEdges), [capped, cappedEdges]);
 
-  // Build flat arrays for Points geometry
   const { pointPositions, pointColors } = useMemo(() => {
     const verts: number[] = [], colors: number[] = [];
     slugMap.current = new Map();
@@ -85,7 +92,6 @@ function Scene({
     return { pointPositions: new Float32Array(verts), pointColors: new Float32Array(colors) };
   }, [capped, positions]);
 
-  // Build flat array for LineSegments geometry
   const edgeVerts = useMemo(() => {
     const verts: number[] = [];
     for (const e of cappedEdges) {
@@ -95,7 +101,6 @@ function Scene({
     return new Float32Array(verts);
   }, [cappedEdges, positions]);
 
-  // Geometries
   const pointGeo = useMemo(() => new THREE.BufferGeometry(), []);
   const edgeGeo = useMemo(() => new THREE.BufferGeometry(), []);
 
@@ -119,14 +124,12 @@ function Scene({
     }
   }, [gl, raycaster, camera, pointer, onSelectNode]);
 
-  // Attach click handler directly to canvas (no React event system)
   useEffect(() => {
     const canvas = gl.domElement;
     canvas.addEventListener("pointerup", handlePointerUp);
     return () => canvas.removeEventListener("pointerup", handlePointerUp);
   }, [gl, handlePointerUp]);
 
-  // Context loss
   useEffect(() => {
     const canvas = gl.domElement;
     const onLost = (e: Event) => { e.preventDefault(); };
@@ -138,7 +141,7 @@ function Scene({
     <>
       <ambientLight intensity={0.4} />
       <lineSegments geometry={edgeGeo}>
-        <lineBasicMaterial color="#1a1a2e" transparent opacity={0.4} />
+        <lineBasicMaterial color={EDGE_COLOR} transparent opacity={0.35} />
       </lineSegments>
       <points ref={pointRef} geometry={pointGeo}>
         <pointsMaterial size={0.18} vertexColors sizeAttenuation transparent opacity={0.95} />
@@ -157,7 +160,7 @@ export default function BrainGalaxy({
   return (
     <Canvas
       camera={{ position: [0, 3, 12], fov: 45 }}
-      style={{ background: "#000000" }}
+      style={{ background: "#0a0a0a" }}
       dpr={[1, 1]}
       gl={{ antialias: false, powerPreference: "low-power", failIfMajorPerformanceCaveat: false, preserveDrawingBuffer: false }}
       performance={{ min: 0.3 }}

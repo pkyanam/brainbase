@@ -3,7 +3,7 @@
 import { useRef, useEffect, useCallback, useState } from "react";
 import * as d3 from "d3";
 
-// ─── Types ────────────────────────────────────────────
+// ─── Types ──────────────────────────────────────────────────────
 export interface GraphNode {
   id: string;
   type: string;
@@ -26,20 +26,26 @@ export interface GraphData {
   edges: GraphEdge[];
 }
 
-// ─── Colors ───────────────────────────────────────────
+// ─── Colors ──────────────────────────────────────────────────────
+/*
+  Harmonized earth-tone palette matching the brand:
+  charcoal + silver-white base, mint-green accent.
+*/
 const NODE_COLORS: Record<string, string> = {
-  person: "#d8b4fe",
-  company: "#67e8f9",
-  project: "#86efac",
-  concept: "#fde68a",
-  idea: "#fb7185",
-  source: "#c084fc",
-  meeting: "#f472b6",
+  person: "#e8927c",   // warm coral
+  company: "#7dd3a8",  // mint (brand accent)
+  project: "#e8c97c",  // soft amber
+  concept: "#d4a5a5",  // soft rose
+  idea: "#b8a9d9",     // lavender
+  source: "#7dd3a8",   // mint
+  meeting: "#e8b89c",  // peach
 };
-const FALLBACK_COLOR = "#a855f7";
-const BG_COLOR = "rgba(7, 7, 16, 0)";
+const FALLBACK_COLOR = "#7dd3a8";
+const BG_COLOR = "rgba(10, 10, 10, 0)";
+const EDGE_STROKE = "rgba(125, 211, 168, 0.10)";
+const LABEL_COLOR = "#b8b8b8";
 
-// ─── Component ────────────────────────────────────────
+// ─── Component ──────────────────────────────────────────────────────
 interface D3CanvasGraphProps {
   data: GraphData;
   selectedId: string | null;
@@ -63,7 +69,7 @@ export default function D3CanvasGraph({
   } | null>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height });
 
-  // ── Resize observer ─────────────────────────────────
+  // ── Resize observer ───────────────────────────────────────────────────
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -77,7 +83,7 @@ export default function D3CanvasGraph({
     return () => obs.disconnect();
   }, []);
 
-  // ── D3 force simulation + Canvas render ─────────────
+  // ── D3 force simulation + Canvas render ────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || data.nodes.length === 0) return;
@@ -86,7 +92,6 @@ export default function D3CanvasGraph({
     if (!ctx) return;
 
     const { width, height: h } = dimensions;
-    // Cap HiDPI — full devicePixelRatio on mobile wastes GPU on canvas
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
     canvas.width = width * dpr;
@@ -95,7 +100,6 @@ export default function D3CanvasGraph({
     canvas.style.height = `${h}px`;
     ctx.scale(dpr, dpr);
 
-    // Deep clone data for D3 mutation, filter orphan edges
     const nodeIds = new Set(data.nodes.map((n) => n.id));
     const nodes: GraphNode[] = data.nodes.map((n) => ({ ...n }));
     const edges: GraphEdge[] = data.edges
@@ -106,7 +110,6 @@ export default function D3CanvasGraph({
       })
       .map((e) => ({ ...e }));
 
-    // ── Zoom behavior ─────────────────────────────────
     const zoom = d3
       .zoom<HTMLCanvasElement, unknown>()
       .scaleExtent([0.1, 4])
@@ -115,7 +118,7 @@ export default function D3CanvasGraph({
         ctx.clearRect(0, 0, width, h);
         ctx.translate(event.transform.x, event.transform.y);
         ctx.scale(event.transform.k, event.transform.k);
-        draw(ctx, nodes, [], null, null);  // Nodes only during zoom
+        draw(ctx, nodes, [], null, null);
         ctx.restore();
       });
 
@@ -123,7 +126,6 @@ export default function D3CanvasGraph({
 
     let tickCount = 0;
 
-    // ── Force simulation (mobile-optimized) ───────────
     const sim = d3
       .forceSimulation<GraphNode>(nodes)
       .force(
@@ -136,10 +138,9 @@ export default function D3CanvasGraph({
       .force("charge", d3.forceManyBody().strength(-120))
       .force("center", d3.forceCenter(width / 2, h / 2))
       .force("collision", d3.forceCollide<GraphNode>().radius((d) => nodeRadius(d) + 3))
-      .alphaDecay(0.04)        // Faster settle (~115 ticks → alpha < 0.01)
-      .velocityDecay(0.3)      // Extra damping for mobile
+      .alphaDecay(0.04)
+      .velocityDecay(0.3)
       .on("tick", () => {
-        // Throttle: only redraw every 3 ticks (mobile-friendly)
         if (sim.alpha() > 0.05 && tickCount % 3 !== 0) {
           tickCount++;
           return;
@@ -150,11 +151,10 @@ export default function D3CanvasGraph({
         const transform = d3.zoomTransform(canvas);
         ctx.translate(transform.x, transform.y);
         ctx.scale(transform.k, transform.k);
-        draw(ctx, nodes, [], null, null);  // Skip edges during sim ticks (too expensive)
+        draw(ctx, nodes, [], null, null);
         ctx.restore();
       })
       .on("end", () => {
-        // Simulation settled — draw final frame, zoom to fit, then stop
         ctx.save();
         ctx.clearRect(0, 0, width, h);
         const transform = d3.zoomTransform(canvas);
@@ -163,7 +163,6 @@ export default function D3CanvasGraph({
         draw(ctx, nodes, edges, null, null);
         ctx.restore();
 
-        // Zoom to fit the settled layout
         const bounds = getBounds(nodes);
         if (bounds) {
           const dx = bounds.x1 - bounds.x0;
@@ -188,16 +187,14 @@ export default function D3CanvasGraph({
 
     simulationRef.current = sim;
 
-    // ── Click handler for node selection ──────────────
     const handleClick = (event: MouseEvent) => {
       const rect = canvas.getBoundingClientRect();
       const transform = d3.zoomTransform(canvas);
       const mx = (event.clientX - rect.left - transform.x) / transform.k;
       const my = (event.clientY - rect.top - transform.y) / transform.k;
 
-      // Find closest node
       let closest: GraphNode | null = null;
-      let minDist = 30; // hit radius
+      let minDist = 30;
       for (const n of nodes) {
         const dx = (n.x || 0) - mx;
         const dy = (n.y || 0) - my;
@@ -212,7 +209,6 @@ export default function D3CanvasGraph({
       }
     };
 
-    // ── Hover for tooltips ────────────────────────────
     const handleMove = (event: MouseEvent) => {
       const rect = canvas.getBoundingClientRect();
       const transform = d3.zoomTransform(canvas);
@@ -252,7 +248,7 @@ export default function D3CanvasGraph({
     };
   }, [data, dimensions, onSelectNode]);
 
-  // ── Re-highlight selected node without re-running sim ─
+  // ── Re-highlight selected node without re-running sim ──────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -294,7 +290,7 @@ export default function D3CanvasGraph({
       />
       {tooltip && (
         <div
-          className="absolute pointer-events-none px-2 py-1 rounded-lg bg-[#171729]/90 border border-[rgba(216,180,254,0.15)] text-xs text-[#f5f2ff] backdrop-blur-sm z-10 transition-opacity"
+          className="absolute pointer-events-none px-2 py-1 rounded-lg bg-bb-bg-secondary/90 border border-bb-border text-xs text-bb-text-primary backdrop-blur-sm z-10 transition-opacity"
           style={{
             left: tooltip.x + 12,
             top: tooltip.y - 28,
@@ -307,7 +303,7 @@ export default function D3CanvasGraph({
   );
 }
 
-// ─── Drawing helpers ─────────────────────────────────
+// ─── Drawing helpers ────────────────────────────────────────────────────────────────────────────────
 function nodeRadius(d: GraphNode): number {
   return Math.max(5, Math.min(18, 5 + Math.sqrt(d.linkCount) * 3));
 }
@@ -338,7 +334,7 @@ function draw(
   _hoveredId: string | null,
   _selectedId: string | null
 ) {
-  // ── Edges ────────────────────────────────────────
+  // ── Edges ─────────────────────────────────────────────────────────────────────────────────
   for (const e of edges) {
     const source = e.source as GraphNode;
     const target = e.target as GraphNode;
@@ -347,14 +343,14 @@ function draw(
     ctx.beginPath();
     ctx.moveTo(source.x, source.y);
     ctx.lineTo(target.x, target.y);
-    ctx.strokeStyle = "rgba(168, 85, 247, 0.12)";
+    ctx.strokeStyle = EDGE_STROKE;
     ctx.lineWidth = Math.max(0.5, Math.min(2, Math.sqrt(
       ((source.linkCount || 0) + (target.linkCount || 0)) / 2
     ) * 0.5));
     ctx.stroke();
   }
 
-  // ── Nodes ────────────────────────────────────────
+  // ── Nodes ─────────────────────────────────────────────────────────────────────────────────
   for (const n of nodes) {
     if (n.x === undefined || n.y === undefined) continue;
 
@@ -364,23 +360,23 @@ function draw(
     // Glow
     ctx.beginPath();
     ctx.arc(n.x, n.y, r + 4, 0, Math.PI * 2);
-    ctx.fillStyle = color + "15";
+    ctx.fillStyle = color + "12";
     ctx.fill();
 
     // Node circle
     ctx.beginPath();
     ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
-    ctx.fillStyle = color + "30";
+    ctx.fillStyle = color + "25";
     ctx.fill();
     ctx.strokeStyle = color;
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    // Label (only for larger nodes or if zoomed in)
+    // Label
     if (r > 7 || n.linkCount > 2) {
       const label = n.label.length > 18 ? n.label.slice(0, 16) + "…" : n.label;
       ctx.font = `${Math.max(8, r * 0.9)}px system-ui, -apple-system, sans-serif`;
-      ctx.fillStyle = "#d9d1ed";
+      ctx.fillStyle = LABEL_COLOR;
       ctx.textAlign = "center";
       ctx.fillText(label, n.x, n.y + r + 14);
     }

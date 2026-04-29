@@ -3,30 +3,36 @@ import Footer from "@/components/Footer";
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-black text-neutral-100">
+    <div className="min-h-screen bg-bb-bg-primary text-bb-text-primary">
       <Nav />
 
       {/* Hero */}
       <section className="max-w-4xl mx-auto px-6 pt-24 pb-16 text-center">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-neutral-900 border border-neutral-800 text-xs text-neutral-400 mb-8">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-bb-bg-secondary border border-bb-border text-xs text-bb-text-muted mb-8">
+          <span className="w-1.5 h-1.5 rounded-full bg-bb-accent animate-pulse" />
           Powered by GStack · Postgres-backed · MCP-native
         </div>
         <h1 className="text-5xl sm:text-6xl font-bold tracking-tight mb-6">
           Give your AI agents{" "}
-          <span className="bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">
+          <span className="bg-gradient-to-r from-bb-accent to-bb-accent-dim bg-clip-text text-transparent">
             a memory
           </span>
         </h1>
-        <p className="text-lg text-neutral-400 max-w-2xl mx-auto mb-10 leading-relaxed">
+        <p className="text-lg text-bb-text-secondary max-w-2xl mx-auto mb-10 leading-relaxed">
           One API call. Your agents remember everything. Brainbase is the persistent knowledge layer
           that turns every AI agent into an expert on your world.
         </p>
         <div className="flex items-center justify-center gap-4">
-          <a href="/sign-up" className="px-6 py-3 bg-violet-600 hover:bg-violet-500 text-white font-medium rounded-xl transition-colors">
+          <a
+            href="/sign-up"
+            className="px-6 py-3 bg-bb-accent hover:bg-bb-accent-dim text-bb-bg-primary font-medium rounded-xl transition-colors"
+          >
             Get started free
           </a>
-          <a href="/docs" className="px-6 py-3 border border-neutral-800 hover:border-neutral-700 text-neutral-300 font-medium rounded-xl transition-colors">
+          <a
+            href="/docs"
+            className="px-6 py-3 border border-bb-border hover:border-bb-border-hover text-bb-text-secondary font-medium rounded-xl transition-colors"
+          >
             Read docs
           </a>
         </div>
@@ -34,14 +40,14 @@ export default function Home() {
 
       {/* Code preview */}
       <section className="max-w-3xl mx-auto px-6 pb-24">
-        <div className="bg-neutral-950 border border-neutral-900 rounded-2xl overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-neutral-900">
+        <div className="bg-bb-bg-secondary border border-bb-border rounded-2xl overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-bb-border">
             <div className="w-3 h-3 rounded-full bg-red-500/20" />
             <div className="w-3 h-3 rounded-full bg-amber-500/20" />
-            <div className="w-3 h-3 rounded-full bg-emerald-500/20" />
-            <span className="text-xs text-neutral-600 ml-2">example.ts</span>
+            <div className="w-3 h-3 rounded-full bg-bb-accent/20" />
+            <span className="text-xs text-bb-text-muted ml-2">example.ts</span>
           </div>
-          <pre className="p-6 text-sm text-neutral-300 overflow-x-auto leading-relaxed">
+          <pre className="p-6 text-sm text-bb-text-secondary overflow-x-auto leading-relaxed">
             <code>{`import { Brainbase } from "brainbase-sdk";
 
 const brain = new Brainbase({ apiKey: "bb_live_..." });
@@ -62,33 +68,33 @@ const health = await brain.health();
       </section>
 
       {/* Features */}
-      <section className="border-t border-neutral-900 py-24">
+      <section className="border-t border-bb-border py-24">
         <div className="max-w-5xl mx-auto px-6">
           <div className="grid sm:grid-cols-3 gap-8">
-            <div className="p-6 rounded-2xl bg-neutral-950 border border-neutral-900">
-              <div className="w-10 h-10 rounded-lg bg-violet-950/50 border border-violet-900/50 flex items-center justify-center mb-4">
-                <span className="text-violet-400 text-lg">🧠</span>
+            <div className="p-6 rounded-2xl bg-bb-bg-secondary border border-bb-border">
+              <div className="w-10 h-10 rounded-lg bg-bb-accent-glow border border-bb-accent/20 flex items-center justify-center mb-4">
+                <span className="text-bb-accent text-lg">🧠</span>
               </div>
               <h3 className="font-semibold mb-2">Self-enriching</h3>
-              <p className="text-sm text-neutral-500 leading-relaxed">
+              <p className="text-sm text-bb-text-muted leading-relaxed">
                 Your brain grows automatically. Links are extracted, timelines built, orphans reconnected — all while you sleep.
               </p>
             </div>
-            <div className="p-6 rounded-2xl bg-neutral-950 border border-neutral-900">
-              <div className="w-10 h-10 rounded-lg bg-cyan-950/50 border border-cyan-900/50 flex items-center justify-center mb-4">
-                <span className="text-cyan-400 text-lg">🔗</span>
+            <div className="p-6 rounded-2xl bg-bb-bg-secondary border border-bb-border">
+              <div className="w-10 h-10 rounded-lg bg-bb-accent-glow border border-bb-accent/20 flex items-center justify-center mb-4">
+                <span className="text-bb-accent text-lg">🔗</span>
               </div>
               <h3 className="font-semibold mb-2">MCP-native</h3>
-              <p className="text-sm text-neutral-500 leading-relaxed">
+              <p className="text-sm text-bb-text-muted leading-relaxed">
                 Drop one URL into any MCP-compatible agent. Claude Code, Cursor, OpenCode — they all get instant memory.
               </p>
             </div>
-            <div className="p-6 rounded-2xl bg-neutral-950 border border-neutral-900">
-              <div className="w-10 h-10 rounded-lg bg-emerald-950/50 border border-emerald-900/50 flex items-center justify-center mb-4">
-                <span className="text-emerald-400 text-lg">⚡</span>
+            <div className="p-6 rounded-2xl bg-bb-bg-secondary border border-bb-border">
+              <div className="w-10 h-10 rounded-lg bg-bb-accent-glow border border-bb-accent/20 flex items-center justify-center mb-4">
+                <span className="text-bb-accent text-lg">⚡</span>
               </div>
               <h3 className="font-semibold mb-2">Postgres-backed</h3>
-              <p className="text-sm text-neutral-500 leading-relaxed">
+              <p className="text-sm text-bb-text-muted leading-relaxed">
                 Every user gets their own isolated database. pgvector for semantic search. Typed wikilinks for relational queries.
               </p>
             </div>

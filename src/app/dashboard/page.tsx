@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import Image from "next/image";
 import dynamic from "next/dynamic";
 import { useUser, SignOutButton } from "@clerk/nextjs";
 import type { GraphNode } from "@/lib/supabase/graph";
@@ -9,7 +10,7 @@ const BrainGalaxy = dynamic(() => import("@/components/BrainGalaxy"), {
   ssr: false,
   loading: () => (
     <div className="h-full flex items-center justify-center">
-      <span className="text-sm text-neutral-600">Loading 3D graph...</span>
+      <span className="text-sm text-bb-text-muted">Loading 3D graph...</span>
     </div>
   ),
 });
@@ -56,7 +57,6 @@ export default function Dashboard() {
   const [showKey, setShowKey] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  // Load stats
   useEffect(() => {
     if (!isLoaded || !user) return;
     fetch("/api/brain/health")
@@ -68,7 +68,6 @@ export default function Dashboard() {
       .catch(() => setStatsError(true));
   }, [isLoaded, user]);
 
-  // Load graph
   useEffect(() => {
     if (!isLoaded || !user) return;
     const controller = new AbortController();
@@ -85,21 +84,18 @@ export default function Dashboard() {
     return () => { clearTimeout(timeout); controller.abort(); };
   }, [isLoaded, user]);
 
-  // Load API key
   useEffect(() => {
     if (!isLoaded || !user) return;
     fetch("/api/keys")
       .then((r) => r.json())
       .then((d) => {
         if (d.keys?.length > 0) {
-          // We don't store full keys, but we can show the prefix
           setApiKey(d.keys[0].key_prefix + "...···");
         }
       })
       .catch(() => {});
   }, [isLoaded, user]);
 
-  // Debounced search
   const handleSearch = useCallback((q: string) => {
     setQuery(q);
     if (searchTimer.current) clearTimeout(searchTimer.current);
@@ -112,7 +108,6 @@ export default function Dashboard() {
     }, 200);
   }, []);
 
-  // Select node
   const handleSelectNode = useCallback(async (slug: string) => {
     try {
       const r = await fetch(`/api/brain/page/${encodeURIComponent(slug)}`);
@@ -126,36 +121,34 @@ export default function Dashboard() {
   const pageTypes = stats?.pages_by_type || {};
 
   return (
-    <div className="h-screen flex flex-col bg-black overflow-hidden">
+    <div className="h-screen flex flex-col bg-bb-bg-primary overflow-hidden">
       {/* Nav */}
-      <header className="shrink-0 h-12 flex items-center justify-between px-6 border-b border-neutral-900">
+      <header className="shrink-0 h-12 flex items-center justify-between px-6 border-b border-bb-border">
         <div className="flex items-center gap-3">
-          <div className="w-6 h-6 rounded bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center">
-            <span className="text-white text-[10px] font-bold">B</span>
-          </div>
-          <span className="text-sm font-medium text-white tracking-tight">brainbase</span>
+          <Image src="/brainbaseLogo.png" alt="Brainbase" width={24} height={24} className="rounded" priority />
+          <span className="text-sm font-medium text-bb-text-primary tracking-tight">brainbase</span>
         </div>
-        <div className="flex items-center gap-4 text-xs text-neutral-500">
-          <a href="/" className="hover:text-neutral-300 transition-colors">Home</a>
-          <a href="/docs" className="hover:text-neutral-300 transition-colors">Docs</a>
+        <div className="flex items-center gap-4 text-xs text-bb-text-muted">
+          <a href="/" className="hover:text-bb-text-secondary transition-colors">Home</a>
+          <a href="/docs" className="hover:text-bb-text-secondary transition-colors">Docs</a>
           {isLoaded && user ? (
             <>
-              <a href="/settings" className="hover:text-neutral-300 transition-colors">Settings</a>
-              <span className="font-mono text-neutral-700">|</span>
-              <span className="text-neutral-400">{user.primaryEmailAddress?.emailAddress?.split("@")[0] || user.id.slice(0, 6)}</span>
+              <a href="/settings" className="hover:text-bb-text-secondary transition-colors">Settings</a>
+              <span className="font-mono text-bb-border">|</span>
+              <span className="text-bb-text-secondary">{user.primaryEmailAddress?.emailAddress?.split("@")[0] || user.id.slice(0, 6)}</span>
               <SignOutButton>
-                <button className="text-neutral-500 hover:text-neutral-300 transition-colors">Sign out</button>
+                <button className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Sign out</button>
               </SignOutButton>
             </>
           ) : (
-            <a href="/sign-in" className="text-violet-400 hover:text-violet-300 transition-colors">Sign in</a>
+            <a href="/sign-in" className="text-bb-accent hover:text-bb-accent-dim transition-colors">Sign in</a>
           )}
-          <span className="font-mono text-neutral-700">|</span>
-          <span className="font-mono text-cyan-500 text-[11px]">MCP: /api/mcp</span>
+          <span className="font-mono text-bb-border">|</span>
+          <span className="font-mono text-bb-accent text-[11px]">MCP: /api/mcp</span>
           {statsError ? (
             <span className="text-red-400">API offline</span>
           ) : (
-            <span className="text-neutral-600">{stats?.page_count ?? "—"} pages</span>
+            <span className="text-bb-text-muted">{stats?.page_count ?? "—"} pages</span>
           )}
         </div>
       </header>
@@ -164,18 +157,18 @@ export default function Dashboard() {
         {/* Main */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Stats bar */}
-          <div className="shrink-0 px-6 py-4 flex items-center gap-4 border-b border-neutral-900 overflow-x-auto">
+          <div className="shrink-0 px-6 py-4 flex items-center gap-4 border-b border-bb-border overflow-x-auto">
             {[
-              { label: "Pages", value: stats?.page_count, color: "violet" },
-              { label: "Links", value: stats?.link_count, color: "cyan" },
-              { label: "People", value: pageTypes.person, color: "rose" },
-              { label: "Companies", value: pageTypes.company, color: "cyan" },
-              { label: "Projects", value: pageTypes.project, color: "emerald" },
-              { label: "Score", value: stats?.brain_score, suffix: "/100", color: "amber" },
+              { label: "Pages", value: stats?.page_count, color: "text-bb-accent" },
+              { label: "Links", value: stats?.link_count, color: "text-bb-accent-dim" },
+              { label: "People", value: pageTypes.person, color: "text-rose-400" },
+              { label: "Companies", value: pageTypes.company, color: "text-sky-400" },
+              { label: "Projects", value: pageTypes.project, color: "text-amber-400" },
+              { label: "Score", value: stats?.brain_score, suffix: "/100", color: "text-bb-text-secondary" },
             ].map((s) => (
               <div key={s.label} className="flex items-baseline gap-2 shrink-0">
-                <span className="text-neutral-600 text-xs uppercase tracking-wide font-medium">{s.label}</span>
-                <span className={`text-lg font-bold tabular-nums ${s.color === "violet" ? "text-violet-400" : s.color === "cyan" ? "text-cyan-400" : s.color === "rose" ? "text-rose-400" : s.color === "emerald" ? "text-emerald-400" : "text-amber-400"}`}>
+                <span className="text-bb-text-muted text-xs uppercase tracking-wide font-medium">{s.label}</span>
+                <span className={`text-lg font-bold tabular-nums ${s.color}`}>
                   {s.value ?? "—"}{s.suffix || ""}
                 </span>
               </div>
@@ -185,7 +178,7 @@ export default function Dashboard() {
 
           {/* Search */}
           <div className="shrink-0 px-6 py-3">
-            <div className={`relative max-w-lg ${searchFocused ? "ring-1 ring-neutral-700 rounded-lg" : ""}`}>
+            <div className={`relative max-w-lg ${searchFocused ? "ring-1 ring-bb-border-hover rounded-lg" : ""}`}>
               <input
                 type="text"
                 value={query}
@@ -193,22 +186,22 @@ export default function Dashboard() {
                 onFocus={() => setSearchFocused(true)}
                 onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
                 placeholder="Search your brain..."
-                className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 outline-none"
+                className="w-full bg-bb-bg-secondary border border-bb-border rounded-lg px-3 py-2 text-sm text-bb-text-secondary placeholder:text-bb-text-muted outline-none focus:border-bb-border-hover"
               />
               {results.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-1 z-50 max-h-72 overflow-y-auto bg-neutral-950 border border-neutral-800 rounded-lg shadow-2xl">
+                <div className="absolute top-full left-0 right-0 mt-1 z-50 max-h-72 overflow-y-auto bg-bb-bg-secondary border border-bb-border rounded-lg shadow-2xl">
                   {results.map((r) => (
                     <button
                       key={r.slug}
                       onClick={() => { handleSelectNode(r.slug); setQuery(""); setResults([]); }}
-                      className="w-full text-left px-4 py-3 hover:bg-neutral-900 transition-colors border-b border-neutral-900 last:border-0"
+                      className="w-full text-left px-4 py-3 hover:bg-bb-bg-tertiary transition-colors border-b border-bb-border last:border-0"
                     >
                       <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-[10px] font-mono uppercase text-neutral-500">{r.type}</span>
-                        <span className="text-[10px] text-neutral-600">{Math.round(r.score * 100)}%</span>
+                        <span className="text-[10px] font-mono uppercase text-bb-text-muted">{r.type}</span>
+                        <span className="text-[10px] text-bb-text-muted">{Math.round(r.score * 100)}%</span>
                       </div>
-                      <span className="text-sm font-medium text-neutral-200">{r.title}</span>
-                      {r.excerpt && <p className="text-xs text-neutral-600 mt-0.5 line-clamp-1">{r.excerpt}</p>}
+                      <span className="text-sm font-medium text-bb-text-primary">{r.title}</span>
+                      {r.excerpt && <p className="text-xs text-bb-text-muted mt-0.5 line-clamp-1">{r.excerpt}</p>}
                     </button>
                   ))}
                 </div>
@@ -220,17 +213,17 @@ export default function Dashboard() {
           {isLoaded && user && (
             <div className="shrink-0 px-6 pb-2">
               <div className="flex items-center gap-3 text-xs">
-                <span className="text-neutral-600">API key:</span>
+                <span className="text-bb-text-muted">API key:</span>
                 {apiKey ? (
                   <>
-                    <code className="text-neutral-400 font-mono bg-neutral-950 px-2 py-1 rounded border border-neutral-900">{showKey ? apiKey : apiKey.slice(0, 16) + "...···"}</code>
-                    <button onClick={() => setShowKey(!showKey)} className="text-neutral-500 hover:text-neutral-300 transition-colors">
+                    <code className="text-bb-text-secondary font-mono bg-bb-bg-secondary px-2 py-1 rounded border border-bb-border">{showKey ? apiKey : apiKey.slice(0, 16) + "...···"}</code>
+                    <button onClick={() => setShowKey(!showKey)} className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">
                       {showKey ? "Hide" : "Show"}
                     </button>
-                    <a href="/settings" className="text-violet-400 hover:text-violet-300 transition-colors">Manage keys →</a>
+                    <a href="/settings" className="text-bb-accent hover:text-bb-accent-dim transition-colors">Manage keys →</a>
                   </>
                 ) : (
-                  <a href="/settings" className="text-violet-400 hover:text-violet-300 transition-colors">Create API key →</a>
+                  <a href="/settings" className="text-bb-accent hover:text-bb-accent-dim transition-colors">Create API key →</a>
                 )}
               </div>
             </div>
@@ -238,27 +231,27 @@ export default function Dashboard() {
 
           {/* 3D Graph or Fallback */}
           <div className="flex-1 min-h-0 px-6 pb-6">
-            <div className="h-full rounded-xl overflow-hidden border border-neutral-900 bg-neutral-950">
+            <div className="h-full rounded-xl overflow-hidden border border-bb-border bg-bb-bg-secondary">
               {graphError ? (
                 <div className="h-full flex items-center justify-center">
                   <div className="text-center">
-                    <p className="text-neutral-400 text-sm mb-2">3D graph unavailable</p>
-                    <p className="text-neutral-600 text-xs">Use the CLI or MCP endpoint to query the brain directly.</p>
-                    <code className="text-xs text-cyan-500 mt-2 block font-mono">brainbase query &quot;anything&quot;</code>
+                    <p className="text-bb-text-secondary text-sm mb-2">3D graph unavailable</p>
+                    <p className="text-bb-text-muted text-xs">Use the CLI or MCP endpoint to query the brain directly.</p>
+                    <code className="text-xs text-bb-accent mt-2 block font-mono">brainbase query &quot;anything&quot;</code>
                   </div>
                 </div>
               ) : !graphData ? (
                 <div className="h-full flex items-center justify-center">
                   <div className="text-center space-y-2">
-                    <div className="w-6 h-6 border-2 border-neutral-800 border-t-neutral-400 rounded-full animate-spin mx-auto" />
-                    <p className="text-sm text-neutral-600">Loading graph...</p>
+                    <div className="w-6 h-6 border-2 border-bb-border border-t-bb-text-muted rounded-full animate-spin mx-auto" />
+                    <p className="text-sm text-bb-text-muted">Loading graph...</p>
                   </div>
                 </div>
               ) : graphData.nodes.length === 0 ? (
                 <div className="h-full flex items-center justify-center">
                   <div className="text-center">
-                    <p className="text-neutral-400 text-sm mb-2">No graph data</p>
-                    <p className="text-neutral-600 text-xs">Import contacts or add pages to build your graph.</p>
+                    <p className="text-bb-text-secondary text-sm mb-2">No graph data</p>
+                    <p className="text-bb-text-muted text-xs">Import contacts or add pages to build your graph.</p>
                   </div>
                 </div>
               ) : (
@@ -273,53 +266,53 @@ export default function Dashboard() {
         </div>
 
         {/* Sidebar */}
-        <div className={`shrink-0 border-l border-neutral-900 bg-neutral-950/90 backdrop-blur transition-all duration-300 overflow-hidden ${sidebarOpen && selectedPage ? "w-96" : "w-0"}`}>
+        <div className={`shrink-0 border-l border-bb-border bg-bb-bg-secondary/90 backdrop-blur transition-all duration-300 overflow-hidden ${sidebarOpen && selectedPage ? "w-96" : "w-0"}`}>
           {sidebarOpen && selectedPage && (
             <div className="w-96 h-full flex flex-col">
-              <div className="shrink-0 px-5 py-4 flex items-start justify-between border-b border-neutral-900">
+              <div className="shrink-0 px-5 py-4 flex items-start justify-between border-b border-bb-border">
                 <div className="min-w-0">
-                  <span className="text-[10px] font-mono uppercase tracking-wider text-violet-400">{selectedPage.type}</span>
-                  <h2 className="text-base font-semibold text-neutral-100 mt-1">{selectedPage.title}</h2>
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-bb-accent">{selectedPage.type}</span>
+                  <h2 className="text-base font-semibold text-bb-text-primary mt-1">{selectedPage.title}</h2>
                 </div>
-                <button onClick={() => setSidebarOpen(false)} className="text-neutral-500 hover:text-neutral-300 text-lg leading-none shrink-0 ml-3">×</button>
+                <button onClick={() => setSidebarOpen(false)} className="text-bb-text-muted hover:text-bb-text-secondary text-lg leading-none shrink-0 ml-3">×</button>
               </div>
               <div className="flex-1 overflow-y-auto px-5 py-4">
                 {selectedPage.links && (selectedPage.links.outgoing.length > 0 || selectedPage.links.incoming.length > 0) && (
                   <div className="mb-4">
-                    <h3 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2">Links</h3>
+                    <h3 className="text-xs font-medium text-bb-text-muted uppercase tracking-wider mb-2">Links</h3>
                     {selectedPage.links.outgoing.slice(0, 8).map((l) => (
                       <button key={l.slug + l.link_type} onClick={() => handleSelectNode(l.slug)}
-                        className="block w-full text-left text-xs py-1.5 px-2 rounded hover:bg-neutral-900 transition-colors group">
-                        <span className="text-neutral-300 group-hover:text-white">{l.title}</span>
-                        <span className="text-neutral-600 ml-2 font-mono">{l.link_type}</span>
+                        className="block w-full text-left text-xs py-1.5 px-2 rounded hover:bg-bb-bg-tertiary transition-colors group">
+                        <span className="text-bb-text-secondary group-hover:text-bb-text-primary">{l.title}</span>
+                        <span className="text-bb-text-muted ml-2 font-mono">{l.link_type}</span>
                       </button>
                     ))}
                     {selectedPage.links.incoming.slice(0, 4).map((l) => (
                       <button key={l.slug + l.link_type} onClick={() => handleSelectNode(l.slug)}
-                        className="block w-full text-left text-xs py-1.5 px-2 rounded hover:bg-neutral-900 transition-colors group">
-                        <span className="text-neutral-400 group-hover:text-neutral-200">← {l.title}</span>
-                        <span className="text-neutral-600 ml-2 font-mono">{l.link_type}</span>
+                        className="block w-full text-left text-xs py-1.5 px-2 rounded hover:bg-bb-bg-tertiary transition-colors group">
+                        <span className="text-bb-text-muted group-hover:text-bb-text-secondary">← {l.title}</span>
+                        <span className="text-bb-text-muted ml-2 font-mono">{l.link_type}</span>
                       </button>
                     ))}
                   </div>
                 )}
-                <div className="text-sm text-neutral-400 leading-relaxed whitespace-pre-wrap">
-                  {selectedPage.content || <span className="text-neutral-700">No content</span>}
+                <div className="text-sm text-bb-text-secondary leading-relaxed whitespace-pre-wrap">
+                  {selectedPage.content || <span className="text-bb-text-muted">No content</span>}
                 </div>
                 {selectedPage.timeline && selectedPage.timeline.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-neutral-900">
-                    <h3 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2">Timeline</h3>
+                  <div className="mt-4 pt-4 border-t border-bb-border">
+                    <h3 className="text-xs font-medium text-bb-text-muted uppercase tracking-wider mb-2">Timeline</h3>
                     {selectedPage.timeline.map((t, i) => (
-                      <div key={i} className="text-xs mb-2 pl-2 border-l border-neutral-800">
-                        <span className="text-neutral-500 font-mono">{t.date}</span>
-                        <p className="text-neutral-400 mt-0.5">{t.summary}</p>
+                      <div key={i} className="text-xs mb-2 pl-2 border-l border-bb-border">
+                        <span className="text-bb-text-muted font-mono">{t.date}</span>
+                        <p className="text-bb-text-secondary mt-0.5">{t.summary}</p>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
-              <div className="shrink-0 px-5 py-3 border-t border-neutral-900">
-                <code className="text-[10px] text-neutral-600 font-mono">{selectedPage.slug}</code>
+              <div className="shrink-0 px-5 py-3 border-t border-bb-border">
+                <code className="text-[10px] text-bb-text-muted font-mono">{selectedPage.slug}</code>
               </div>
             </div>
           )}

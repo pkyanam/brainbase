@@ -12,7 +12,7 @@ const sections = [
 
 export default function DocsLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-bb-bg-primary text-bb-text-primary">
       <Nav />
       <div className="max-w-6xl mx-auto px-6 py-12 flex gap-12">
         {/* Sidebar */}
@@ -23,7 +23,7 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
                 <li key={s.id}>
                   <a
                     href={`#${s.id}`}
-                    className="block px-3 py-2 text-sm text-neutral-400 hover:text-white hover:bg-neutral-900 rounded-lg transition-colors"
+                    className="block px-3 py-2 text-sm text-bb-text-muted hover:text-bb-text-primary hover:bg-bb-bg-tertiary rounded-lg transition-colors"
                   >
                     {s.label}
                   </a>
