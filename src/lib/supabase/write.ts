@@ -1,6 +1,8 @@
 import { queryOne, queryMany } from "./client";
 import { indexPageEmbeddings } from "../embeddings";
 import { runAutoExtract } from "../auto-extract";
+import { runTriggers } from "../triggers";
+import { runActions } from "../actions";
 
 export interface PutPageInput {
   slug: string;
@@ -45,16 +47,37 @@ export async function putPage(brainId: string, input: PutPageInput): Promise<Put
 
   if (!row) throw new Error("Failed to put page");
 
-  // ── Post-write: embeddings + auto-extraction ──
+  // ── Post-write pipeline: embeddings → auto-extract (wikilinks + dates + semantic links) → triggers → actions ──
   const fullContent = input.content || "";
+  const pageType = input.type || "unknown";
   if (fullContent.length > 0) {
-    // Fire-and-forget: don't block the response on embedding generation
-    indexPageEmbeddings(brainId, input.slug, fullContent).catch(err => {
-      console.error("[brainbase] Embedding indexing failed:", err);
-    });
-    runAutoExtract(brainId, input.slug, fullContent).catch(err => {
-      console.error("[brainbase] Auto-extract failed:", err);
-    });
+    // Fire-and-forget: don't block the API response
+    (async () => {
+      try {
+        // 1. Generate embeddings
+        await indexPageEmbeddings(brainId, input.slug, fullContent);
+
+        // 2. Auto-extract: wikilinks, dates, semantic links
+        await runAutoExtract(brainId, input.slug, fullContent);
+
+        // 3. Evaluate trigger rules
+        const fired = await runTriggers(brainId, input.slug, input.title, pageType, fullContent);
+
+        // 4. Execute actions for fired triggers
+        if (fired.length > 0) {
+          await runActions(fired, {
+            brainId,
+            pageSlug: input.slug,
+            pageTitle: input.title,
+            pageType,
+            content: fullContent,
+            matches: {}, // Filled per-rule in runActions
+          });
+        }
+      } catch (err) {
+        console.error("[brainbase] Post-write pipeline failed:", err);
+      }
+    })();
   }
 
   return {

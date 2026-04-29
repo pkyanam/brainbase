@@ -10,6 +10,8 @@ import {
 import { validateApiKey } from "@/lib/api-keys";
 import { canAccessBrain } from "@/lib/brain-context";
 import { requireQuota } from "@/lib/usage";
+import { upsertTriggerRule, getActiveRules, runTriggers } from "@/lib/triggers";
+import { runActions } from "@/lib/actions";
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";
@@ -35,6 +37,9 @@ const tools = [
   { name: "add_link", description: "Create a typed link between two pages", inputSchema: { type: "object", properties: { from: { type: "string" }, to: { type: "string" }, link_type: { type: "string" } }, required: ["from", "to"] } },
   { name: "remove_link", description: "Remove a link between two pages", inputSchema: { type: "object", properties: { from: { type: "string" }, to: { type: "string" } }, required: ["from", "to"] } },
   { name: "add_timeline_entry", description: "Add a timeline event to a page", inputSchema: { type: "object", properties: { slug: { type: "string" }, date: { type: "string" }, summary: { type: "string" }, detail: { type: "string" }, source: { type: "string" } }, required: ["slug", "date", "summary"] } },
+  { name: "upsert_trigger", description: "Create or update a trigger rule", inputSchema: { type: "object", properties: { id: { type: "string" }, name: { type: "string" }, description: { type: "string" }, conditions: { type: "object" }, actions: { type: "array" }, enabled: { type: "boolean" }, cooldown_minutes: { type: "number" } }, required: ["name", "conditions", "actions"] } },
+  { name: "list_triggers", description: "List active trigger rules", inputSchema: { type: "object", properties: {} } },
+  { name: "run_triggers", description: "Manually run triggers against a page", inputSchema: { type: "object", properties: { slug: { type: "string" }, title: { type: "string" }, type: { type: "string" }, content: { type: "string" } }, required: ["slug", "title"] } },
 ];
 
 async function dispatch(brainId: string, method: string, params: Record<string, unknown> = {}): Promise<unknown> {
@@ -133,6 +138,43 @@ async function dispatch(brainId: string, method: string, params: Record<string, 
       const quota = await requireQuota(brainId, "api_call");
       if (quota) return quota;
       return await addTimelineEntry(brainId, { slug, date, summary, detail: params.detail as string | undefined, source: params.source as string | undefined });
+    }
+    case "upsert_trigger": {
+      const name = params.name as string;
+      const conditions = params.conditions as Record<string, unknown>;
+      const actions = params.actions as unknown[];
+      if (!name || !conditions || !actions) throw new Error("Missing 'name', 'conditions', or 'actions' parameter");
+      const id = await upsertTriggerRule({
+        id: params.id as string | undefined,
+        brainId,
+        name,
+        description: params.description as string | undefined,
+        conditions: conditions as any,
+        actions: actions as any,
+        enabled: params.enabled !== false,
+        cooldownMinutes: params.cooldown_minutes as number | undefined,
+      });
+      return { id, name, status: "saved" };
+    }
+    case "list_triggers": {
+      return await getActiveRules(brainId);
+    }
+    case "run_triggers": {
+      const slug = params.slug as string;
+      const title = params.title as string;
+      if (!slug || !title) throw new Error("Missing 'slug' or 'title' parameter");
+      const fired = await runTriggers(brainId, slug, title, params.type as string | null, params.content as string || "");
+      if (fired.length > 0) {
+        await runActions(fired, {
+          brainId,
+          pageSlug: slug,
+          pageTitle: title,
+          pageType: params.type as string | null,
+          content: params.content as string || "",
+          matches: {},
+        });
+      }
+      return { fired: fired.length, rules: fired.map(f => f.ruleName) };
     }
     default:
       throw new Error(`Unknown tool: ${method}`);

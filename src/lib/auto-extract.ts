@@ -7,8 +7,9 @@
  */
 
 import { queryOne, queryMany } from "./supabase/client";
+import { createSemanticLinks } from "./semantic-links";
 
-// ─── Wikilink extraction ─────────────────────────────────────
+// ... (rest of the file)
 
 const WIKILINK_RE = /\[\[([^|\]]+)(?:\|([^|\]]+))?\]\]/g;
 
@@ -184,5 +185,13 @@ export async function runAutoExtract(
   }
 
   console.log(`[brainbase] Auto-extract for ${pageSlug}: ${linksCreated} links, ${timelineCreated} timeline entries`);
+
+  // 3. Semantic auto-linking: find related pages via embeddings
+  try {
+    await createSemanticLinks(brainId, pageSlug, "Auto-linked by semantic similarity");
+  } catch (err) {
+    console.error(`[brainbase] Semantic link error for ${pageSlug}:`, err);
+  }
+
   return { linksCreated, timelineCreated };
 }
