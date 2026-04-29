@@ -61,6 +61,8 @@ export async function ensureSchema(): Promise<void> {
         IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'pages') THEN
           ALTER TABLE pages ADD COLUMN IF NOT EXISTS brain_id UUID;
           UPDATE pages SET brain_id = '00000000-0000-0000-0000-000000000001' WHERE brain_id IS NULL;
+          ALTER TABLE pages DROP CONSTRAINT IF EXISTS pages_brain_slug_unique;
+          ALTER TABLE pages ADD CONSTRAINT pages_brain_slug_unique UNIQUE (brain_id, slug);
         END IF;
       END $$;
     `);
