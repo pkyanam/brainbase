@@ -4,6 +4,7 @@ import { validateApiKey } from "@/lib/api-keys";
 import { requireOwner } from "@/lib/auth-guard";
 import { canAccessBrain } from "@/lib/brain-context";
 import { logActivity } from "@/lib/activity";
+import { requireQuota } from "@/lib/usage";
 
 function getBearerToken(req: NextRequest): string | null {
   const auth = req.headers.get("authorization");
@@ -48,6 +49,10 @@ export async function POST(request: NextRequest) {
   if (!slug || !date || !summary) {
     return NextResponse.json({ error: "Missing 'slug', 'date', or 'summary'" }, { status: 400 });
   }
+
+  // Rate limit check
+  const quotaCheck = await requireQuota(auth.brainId, "api_call");
+  if (quotaCheck) return quotaCheck;
 
   try {
     const result = await addTimelineEntry(auth.brainId, { slug, date, summary, detail, source });

@@ -6,6 +6,7 @@ import { requireOwner } from "@/lib/auth-guard";
 import { canAccessBrain } from "@/lib/brain-context";
 import { snapshotPageVersion } from "@/lib/page-versions";
 import { logActivity } from "@/lib/activity";
+import { requireQuota } from "@/lib/usage";
 
 function getBearerToken(req: NextRequest): string | null {
   const auth = req.headers.get("authorization");
@@ -94,6 +95,10 @@ export async function PUT(
     return NextResponse.json({ error: "Missing 'title'" }, { status: 400 });
   }
 
+  // Rate limit check
+  const quotaCheck = await requireQuota(auth.brainId, "page_write");
+  if (quotaCheck) return quotaCheck;
+
   try {
     // Snapshot current version before overwriting
     await snapshotPageVersion(auth.brainId, slug, auth.userId);
@@ -136,6 +141,10 @@ export async function DELETE(
   if (!slug) {
     return NextResponse.json({ error: "Missing page slug" }, { status: 400 });
   }
+
+  // Rate limit check
+  const quotaCheck = await requireQuota(auth.brainId, "page_write");
+  if (quotaCheck) return quotaCheck;
 
   try {
     const deleted = await deletePage(auth.brainId, slug);

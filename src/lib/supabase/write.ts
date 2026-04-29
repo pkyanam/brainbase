@@ -1,4 +1,6 @@
 import { queryOne, queryMany } from "./client";
+import { indexPageEmbeddings } from "../embeddings";
+import { runAutoExtract } from "../auto-extract";
 
 export interface PutPageInput {
   slug: string;
@@ -42,6 +44,18 @@ export async function putPage(brainId: string, input: PutPageInput): Promise<Put
   );
 
   if (!row) throw new Error("Failed to put page");
+
+  // ── Post-write: embeddings + auto-extraction ──
+  const fullContent = input.content || "";
+  if (fullContent.length > 0) {
+    // Fire-and-forget: don't block the response on embedding generation
+    indexPageEmbeddings(brainId, input.slug, fullContent).catch(err => {
+      console.error("[brainbase] Embedding indexing failed:", err);
+    });
+    runAutoExtract(brainId, input.slug, fullContent).catch(err => {
+      console.error("[brainbase] Auto-extract failed:", err);
+    });
+  }
 
   return {
     slug: row.slug,

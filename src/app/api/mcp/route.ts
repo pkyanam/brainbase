@@ -9,6 +9,7 @@ import {
 } from "@/lib/supabase/write";
 import { validateApiKey } from "@/lib/api-keys";
 import { canAccessBrain } from "@/lib/brain-context";
+import { requireQuota } from "@/lib/usage";
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";
@@ -94,11 +95,15 @@ async function dispatch(brainId: string, method: string, params: Record<string, 
       const slug = params.slug as string;
       const title = params.title as string;
       if (!slug || !title) throw new Error("Missing 'slug' or 'title' parameter");
+      const quota = await requireQuota(brainId, "page_write");
+      if (quota) return quota;
       return await putPage(brainId, { slug, title, type: params.type as string | undefined, content: params.content as string | undefined, frontmatter: params.frontmatter as Record<string, unknown> | undefined });
     }
     case "delete_page": {
       const slug = params.slug as string;
       if (!slug) throw new Error("Missing 'slug' parameter");
+      const quota = await requireQuota(brainId, "page_write");
+      if (quota) return quota;
       const deleted = await deletePage(brainId, slug);
       return { success: deleted, slug };
     }
@@ -106,6 +111,8 @@ async function dispatch(brainId: string, method: string, params: Record<string, 
       const from = params.from as string;
       const to = params.to as string;
       if (!from || !to) throw new Error("Missing 'from' or 'to' parameter");
+      const quota = await requireQuota(brainId, "api_call");
+      if (quota) return quota;
       const created = await addLink(brainId, from, to, params.link_type as string | undefined);
       return { success: created, from, to, link_type: params.link_type || "related" };
     }
@@ -113,6 +120,8 @@ async function dispatch(brainId: string, method: string, params: Record<string, 
       const from = params.from as string;
       const to = params.to as string;
       if (!from || !to) throw new Error("Missing 'from' or 'to' parameter");
+      const quota = await requireQuota(brainId, "api_call");
+      if (quota) return quota;
       const removed = await removeLink(brainId, from, to);
       return { success: removed, from, to };
     }
@@ -121,6 +130,8 @@ async function dispatch(brainId: string, method: string, params: Record<string, 
       const date = params.date as string;
       const summary = params.summary as string;
       if (!slug || !date || !summary) throw new Error("Missing 'slug', 'date', or 'summary' parameter");
+      const quota = await requireQuota(brainId, "api_call");
+      if (quota) return quota;
       return await addTimelineEntry(brainId, { slug, date, summary, detail: params.detail as string | undefined, source: params.source as string | undefined });
     }
     default:
