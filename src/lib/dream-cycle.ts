@@ -114,18 +114,29 @@ async function runEmbedPhase(brainId: string): Promise<DreamPhaseResult> {
         phase: "embed",
         status: "skipped",
         summary: "No stale chunks to embed",
-        details: { staleCount: 0 },
+        details: { staleCount: 0, embedded: 0 },
       };
     }
 
-    // For now, report what needs embedding. Actual embedding is expensive
-    // and should be done via a separate job to avoid timeouts.
-    // We return a warning that suggests running embed separately.
+    // Actually embed a small batch (serverless-safe)
+    let embedded = 0;
+    try {
+      embedded = await embedStaleChunks(brainId, 20);
+    } catch (embedErr) {
+      return {
+        phase: "embed",
+        status: "fail",
+        summary: `Failed to embed stale chunks: ${String(embedErr)}`,
+        details: { staleCount, embedded: 0, error: String(embedErr) },
+      };
+    }
+
+    const remaining = staleCount - embedded;
     return {
       phase: "embed",
-      status: "warn",
-      summary: `${staleCount} stale chunks need embedding`,
-      details: { staleCount },
+      status: embedded > 0 ? "ok" : "warn",
+      summary: `Embedded ${embedded} chunks (${remaining} remaining)`,
+      details: { staleCount, embedded, remaining },
     };
   } catch (err) {
     return {
@@ -318,6 +329,149 @@ function computeTier(mentionCount: number): number {
   return 0;
 }
 
+// ── Phase 6: Frontmatter edge extraction ───────────────────────────────
+
+interface FrontmatterEdge {
+  fromSlug: string;
+  toSlug: string;
+  linkType: string;
+}
+
+async function runFrontmatterPhase(brainId: string): Promise<DreamPhaseResult> {
+  try {
+    // Find pages with frontmatter containing relationship arrays
+    const rows = await queryMany<{
+      slug: string;
+      title: string;
+      type: string;
+      frontmatter: Record<string, unknown>;
+    }>(
+      `SELECT slug, title, type, frontmatter
+       FROM pages
+       WHERE brain_id = $1
+         AND frontmatter IS NOT NULL
+         AND (
+           frontmatter ? 'key_people'
+           OR frontmatter ? 'founders'
+           OR frontmatter ? 'investors'
+           OR frontmatter ? 'advisors'
+           OR frontmatter ? 'companies'
+         )
+       LIMIT 100`,
+      [brainId]
+    );
+
+    let linksCreated = 0;
+    const edges: FrontmatterEdge[] = [];
+
+    for (const row of rows) {
+      const fm = row.frontmatter || {};
+
+      // Company/concept pages listing people
+      const personArrays: { key: string; linkType: string }[] = [
+        { key: "key_people", linkType: "works_at" },
+        { key: "founders", linkType: "founded" },
+        { key: "investors", linkType: "invested_in" },
+        { key: "advisors", linkType: "advises" },
+      ];
+
+      for (const { key, linkType } of personArrays) {
+        const arr = fm[key];
+        if (!Array.isArray(arr)) continue;
+        for (const personSlug of arr) {
+          if (typeof personSlug !== "string") continue;
+          edges.push({ fromSlug: personSlug, toSlug: row.slug, linkType });
+        }
+      }
+
+      // Person pages listing companies
+      const companies = fm["companies"];
+      if (Array.isArray(companies)) {
+        for (const companySlug of companies) {
+          if (typeof companySlug !== "string") continue;
+          // Default to works_at unless overridden by other fields
+          edges.push({ fromSlug: row.slug, toSlug: companySlug, linkType: "works_at" });
+        }
+      }
+    }
+
+    // Deduplicate edges
+    const seen = new Set<string>();
+    const uniqueEdges = edges.filter((e) => {
+      const key = `${e.fromSlug}\u0000${e.toSlug}\u0000${e.linkType}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    for (const edge of uniqueEdges) {
+      try {
+        // Ensure target page exists (stub if not)
+        const toExists = await queryOne<{ id: number }>(
+          `SELECT id FROM pages WHERE brain_id = $1 AND slug = $2`,
+          [brainId, edge.toSlug]
+        );
+        if (!toExists) {
+          const title = edge.toSlug.split("/").pop()?.replace(/-/g, " ") || edge.toSlug;
+          await queryOne(
+            `INSERT INTO pages (brain_id, slug, title, type, compiled_truth, frontmatter, search_vector, written_by)
+             VALUES ($1, $2, $3, 'unknown', '', '{}'::jsonb, to_tsvector('english', ''), 'system')
+             ON CONFLICT (brain_id, slug) DO NOTHING`,
+            [brainId, edge.toSlug, title]
+          );
+        }
+
+        // Ensure source page exists (stub if not)
+        const fromExists = await queryOne<{ id: number }>(
+          `SELECT id FROM pages WHERE brain_id = $1 AND slug = $2`,
+          [brainId, edge.fromSlug]
+        );
+        if (!fromExists) {
+          const title = edge.fromSlug.split("/").pop()?.replace(/-/g, " ") || edge.fromSlug;
+          await queryOne(
+            `INSERT INTO pages (brain_id, slug, title, type, compiled_truth, frontmatter, search_vector, written_by)
+             VALUES ($1, $2, $3, 'unknown', '', '{}'::jsonb, to_tsvector('english', ''), 'system')
+             ON CONFLICT (brain_id, slug) DO NOTHING`,
+            [brainId, edge.fromSlug, title]
+          );
+        }
+
+        // Create the link
+        const linkResult = await queryOne<{ id: string }>(
+          `INSERT INTO links (brain_id, from_page_id, to_page_id, link_type, written_by)
+           VALUES (
+             $1,
+             (SELECT id FROM pages WHERE brain_id = $1 AND slug = $2),
+             (SELECT id FROM pages WHERE brain_id = $1 AND slug = $3),
+             $4,
+             'system'
+           )
+           ON CONFLICT DO NOTHING
+           RETURNING id`,
+          [brainId, edge.fromSlug, edge.toSlug, edge.linkType]
+        );
+        if (linkResult) linksCreated++;
+      } catch (err) {
+        console.error(`[brainbase] Frontmatter link error ${edge.fromSlug} → ${edge.toSlug}:`, err);
+      }
+    }
+
+    return {
+      phase: "frontmatter_edges",
+      status: linksCreated > 0 ? "ok" : "skipped",
+      summary: `${linksCreated} frontmatter edges created`,
+      details: { linksCreated, scanned: rows.length },
+    };
+  } catch (err) {
+    return {
+      phase: "frontmatter_edges",
+      status: "fail",
+      summary: "Frontmatter edge extraction failed",
+      details: { error: String(err) },
+    };
+  }
+}
+
 // ── Main dream cycle ────────────────────────────────────────────────
 
 export async function runDreamCycle(brainId: string, batchSize = 200): Promise<DreamReport> {
@@ -325,6 +479,7 @@ export async function runDreamCycle(brainId: string, batchSize = 200): Promise<D
   const phases: DreamPhaseResult[] = [];
 
   phases.push(await runExtractPhase(brainId, batchSize));
+  phases.push(await runFrontmatterPhase(brainId));
   phases.push(await runEmbedPhase(brainId));
   phases.push(await runOrphansPhase(brainId));
   phases.push(await runPatternsPhase(brainId));
@@ -332,12 +487,12 @@ export async function runDreamCycle(brainId: string, batchSize = 200): Promise<D
 
   const totals = {
     pages_extracted: (phases[0].details.pagesExtracted as number) || 0,
-    links_created: (phases[0].details.linksCreated as number) || 0,
+    links_created: ((phases[0].details.linksCreated as number) || 0) + ((phases[1].details.linksCreated as number) || 0),
     timeline_entries_created: (phases[0].details.timelineCreated as number) || 0,
-    chunks_embedded: (phases[1].details.staleCount as number) || 0,
-    orphans_found: (phases[2].details.orphanCount as number) || 0,
-    patterns_detected: (phases[3].details.patternsDetected as number) || 0,
-    entities_escalated: (phases[4].details.escalated as number) || 0,
+    chunks_embedded: (phases[2].details.embedded as number) || 0,
+    orphans_found: (phases[3].details.orphanCount as number) || 0,
+    patterns_detected: (phases[4].details.patternsDetected as number) || 0,
+    entities_escalated: (phases[5].details.escalated as number) || 0,
   };
 
   const hasFail = phases.some(p => p.status === "fail");
