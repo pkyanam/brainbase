@@ -15,6 +15,9 @@ export async function ensureSchema(): Promise<void> {
         slug TEXT UNIQUE,
         supabase_url TEXT,
         supabase_key TEXT,
+        encrypted_supabase_key TEXT,
+        encrypted_supabase_key_iv TEXT,
+        encrypted_supabase_key_tag TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
       )
@@ -161,6 +164,7 @@ export async function ensureCollaborationSchema(): Promise<void> {
         inviter_user_id TEXT NOT NULL,
         email TEXT NOT NULL,
         token TEXT NOT NULL UNIQUE,
+        token_hash TEXT,
         role TEXT NOT NULL DEFAULT 'editor',
         accepted_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ DEFAULT NOW(),

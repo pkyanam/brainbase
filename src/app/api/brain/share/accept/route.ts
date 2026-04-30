@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth-guard";
 import { queryOne } from "@/lib/supabase/client";
 import { logActivity } from "@/lib/activity";
+import { hashToken } from "@/lib/crypto";
 
 export async function POST(req: NextRequest) {
   const userId = await requireAuth();
@@ -12,13 +13,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invite token required" }, { status: 400 });
   }
 
+  const tokenHash = hashToken(token);
+
   const invite = await queryOne<{
     id: string; brain_id: string; role: string; email: string;
   }>(
     `SELECT id, brain_id, role, email FROM brain_invites
-     WHERE token = $1 AND accepted_at IS NULL AND expires_at > NOW()
+     WHERE token_hash = $1 AND accepted_at IS NULL AND expires_at > NOW()
      LIMIT 1`,
-    [token]
+    [tokenHash]
   );
 
   if (!invite) {

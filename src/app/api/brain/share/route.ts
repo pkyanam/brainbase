@@ -3,6 +3,7 @@ import { requireBrainAccess } from "@/lib/auth-guard";
 import { queryOne, queryMany } from "@/lib/supabase/client";
 import { logActivity } from "@/lib/activity";
 import { randomUUID } from "crypto";
+import { hashToken } from "@/lib/crypto";
 
 export async function GET(req: NextRequest) {
   const auth = await requireBrainAccess(req);
@@ -52,15 +53,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Valid email required" }, { status: 400 });
   }
 
-  const token = randomUUID();
+  const rawToken = randomUUID();
+  const tokenHash = hashToken(rawToken);
 
   const invite = await queryOne<{
-    id: string; email: string; token: string; role: string; expires_at: string;
+    id: string; email: string; role: string; expires_at: string;
   }>(
-    `INSERT INTO brain_invites (brain_id, inviter_user_id, email, token, role)
-     VALUES ($1, $2, $3, $4, $5)
-     RETURNING id, email, token, role, expires_at::text`,
-    [auth.brainId, auth.userId, email.toLowerCase(), token, role]
+    `INSERT INTO brain_invites (brain_id, inviter_user_id, email, token, token_hash, role)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id, email, role, expires_at::text`,
+    [auth.brainId, auth.userId, email.toLowerCase(), rawToken, tokenHash, role]
   );
 
   await logActivity({
@@ -72,7 +74,8 @@ export async function POST(req: NextRequest) {
     metadata: { role },
   });
 
-  return NextResponse.json({ invite });
+  // Return the raw token ONLY on creation so the inviter can share it
+  return NextResponse.json({ invite: { ...invite, token: rawToken } });
 }
 
 export async function DELETE(req: NextRequest) {
