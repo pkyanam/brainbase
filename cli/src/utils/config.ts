@@ -1,11 +1,16 @@
 /**
  * Configuration loader for the Brainbase CLI.
  *
- * Reads from environment variables and validates required fields.
+ * Priority (highest to lowest):
+ *   1. CLI --api-key / --brain-id flags
+ *   2. Environment variables (BRAINBASE_API_KEY, etc.)
+ *   3. Config file (~/.brainbase/config.json)
+ *
  * Security: never logs the API key.
  */
 
 import { CliConfig } from "../types.js";
+import { readConfigFile } from "./config-file.js";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_BASE_URL = "http://localhost:5174";
@@ -18,12 +23,32 @@ export const ENV = {
   TIMEOUT: "BRAINBASE_TIMEOUT_MS",
 } as const;
 
-/** Load configuration from environment variables with optional CLI overrides */
+/** Load configuration with cascading priority: flags > env > config file */
 export function loadConfig(overrides: { apiKey?: string; brainId?: string } = {}): CliConfig {
-  const baseUrl = process.env[ENV.BASE_URL]?.trim() || DEFAULT_BASE_URL;
-  const apiKey = overrides.apiKey?.trim() || process.env[ENV.API_KEY]?.trim() || "";
-  const brainId = overrides.brainId?.trim() || process.env[ENV.BRAIN_ID]?.trim() || undefined;
-  const timeoutMs = parseInt(process.env[ENV.TIMEOUT]?.trim() || String(DEFAULT_TIMEOUT_MS), 10);
+  const file = readConfigFile();
+
+  const baseUrl =
+    process.env[ENV.BASE_URL]?.trim() ||
+    file.baseUrl?.trim() ||
+    DEFAULT_BASE_URL;
+
+  const apiKey =
+    overrides.apiKey?.trim() ||
+    process.env[ENV.API_KEY]?.trim() ||
+    file.apiKey?.trim() ||
+    "";
+
+  const brainId =
+    overrides.brainId?.trim() ||
+    process.env[ENV.BRAIN_ID]?.trim() ||
+    file.brainId?.trim() ||
+    undefined;
+
+  const timeoutMs = parseInt(
+    process.env[ENV.TIMEOUT]?.trim() ||
+      String(file.timeoutMs ?? DEFAULT_TIMEOUT_MS),
+    10
+  );
 
   if (Number.isNaN(timeoutMs) || timeoutMs < 1) {
     throw new ConfigError(

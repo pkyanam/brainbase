@@ -22,6 +22,7 @@ import { deletePageCommand } from "./commands/delete-page.js";
 import { addLinkCommand } from "./commands/add-link.js";
 import { removeLinkCommand } from "./commands/remove-link.js";
 import { addTimelineCommand } from "./commands/add-timeline.js";
+import { configSetCommand, configGetCommand, configListCommand, configUnsetCommand } from "./commands/config.js";
 
 const program = new Command();
 
@@ -215,6 +216,40 @@ program
       detail: options.detail,
       source: options.source,
     });
+  });
+
+// ── Config commands ────────────────────────────────────────────
+
+const configCmd = program
+  .command("config")
+  .description("manage persistent CLI settings in ~/.brainbase/config.json");
+
+configCmd
+  .command("set <key> <value>")
+  .description("set a config value (apiKey, baseUrl, brainId, timeoutMs)")
+  .action(async (key, value) => {
+    await configSetCommand(key, value, program.opts());
+  });
+
+configCmd
+  .command("get <key>")
+  .description("get a config value")
+  .action(async (key) => {
+    await configGetCommand(key, program.opts());
+  });
+
+configCmd
+  .command("list")
+  .description("list all config values")
+  .action(async () => {
+    await configListCommand(program.opts());
+  });
+
+configCmd
+  .command("unset <key>")
+  .description("remove a config value")
+  .action(async (key) => {
+    await configUnsetCommand(key, program.opts());
   });
 
 // ── Entry point ─────────────────────────────────────────────────

@@ -121,6 +121,34 @@ brainbase graph --json | jq '.nodes | length'
 brainbase search "AI" --json | jq '.[0].title'
 ```
 
+## First-Time Setup
+
+Instead of passing `--api-key` every time or exporting env vars in every shell:
+
+```bash
+# Store your API key securely in ~/.brainbase/config.json
+brainbase config set apiKey bb_live_xxxxxxxx
+
+# Store your default brain ID
+brainbase config set brainId <your-brain-uuid>
+
+# Store your endpoint (if not using localhost)
+brainbase config set baseUrl https://brainbase.belweave.ai
+
+# See what's configured
+brainbase config list
+
+# Remove a value
+brainbase config unset apiKey
+```
+
+Config file location: `~/.brainbase/config.json` (permissions: `600`)
+
+Priority (highest to lowest):
+1. CLI flags (`--api-key`, `--brain-id`)
+2. Environment variables (`BRAINBASE_API_KEY`, etc.)
+3. Config file (`~/.brainbase/config.json`)
+
 ## Security
 
 - **API keys are never logged or displayed.** If an error leaks a key, it is redacted before output.
