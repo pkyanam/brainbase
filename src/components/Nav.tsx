@@ -24,8 +24,19 @@ export default function Nav() {
     { href: "/dashboard", label: "Dashboard" },
   ];
 
+  const handleClose = () => setOpen(false);
+
   return (
     <>
+      {/* Hidden checkbox — CSS toggle so mobile menu works even without JS */}
+      <input
+        type="checkbox"
+        id="nav-toggle"
+        className="peer sr-only"
+        checked={open}
+        onChange={(e) => setOpen(e.target.checked)}
+      />
+
       <nav className="sticky top-0 z-40 bg-bb-bg-primary/85 backdrop-blur-sm border-b border-bb-border">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
           {/* Logo + wordmark */}
@@ -89,12 +100,11 @@ export default function Nav() {
               )}
             </SignedOut>
 
-            {/* Hamburger (mobile only) */}
-            <button
-              onClick={() => setOpen(!open)}
-              className="md:hidden inline-flex items-center justify-center w-11 h-11 rounded-md text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface transition-colors"
+            {/* Hamburger — <label> targets hidden checkbox, works WITHOUT JavaScript */}
+            <label
+              htmlFor="nav-toggle"
+              className="md:hidden inline-flex items-center justify-center w-11 h-11 rounded-md text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface transition-colors cursor-pointer"
               aria-label={open ? "Close menu" : "Open menu"}
-              aria-expanded={open}
             >
               {open ? (
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -105,64 +115,62 @@ export default function Nav() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h16" />
                 </svg>
               )}
-            </button>
+            </label>
           </div>
         </div>
       </nav>
 
-      {/* Mobile menu — rendered OUTSIDE nav to avoid Safari stacking context quirks */}
-      {open && (
-        <div className="md:hidden fixed inset-0 z-50 bg-bb-bg-primary flex flex-col">
-          {/* Menu header */}
-          <div className="flex items-center justify-between h-14 px-4 border-b border-bb-border shrink-0">
-            <span className="text-[15px] font-semibold text-bb-text-primary">Menu</span>
-            <button
-              onClick={() => setOpen(false)}
-              className="inline-flex items-center justify-center w-11 h-11 rounded-md text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface transition-colors"
-              aria-label="Close menu"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-
-          {/* Menu links */}
-          <div className="flex-1 overflow-y-auto px-4 py-4">
-            {links.map((l) => (
-              <a
-                key={l.href}
-                href={l.href}
-                onClick={() => setOpen(false)}
-                className="h-12 flex items-center px-3 text-base text-bb-text-primary rounded-md hover:bg-bb-surface transition-colors border-b border-bb-border last:border-0"
-              >
-                {l.label}
-              </a>
-            ))}
-            <SignedIn>
-              <a
-                href="/settings"
-                onClick={() => setOpen(false)}
-                className="h-12 flex items-center px-3 text-base text-bb-text-primary rounded-md hover:bg-bb-surface transition-colors border-b border-bb-border"
-              >
-                Settings
-              </a>
-              <div className="px-3 pt-4">
-                <UserButton />
-              </div>
-            </SignedIn>
-            <SignedOut>
-              <a
-                href="/sign-in"
-                onClick={() => setOpen(false)}
-                className="h-12 flex items-center px-3 text-base text-bb-text-primary rounded-md hover:bg-bb-surface transition-colors"
-              >
-                Sign in
-              </a>
-            </SignedOut>
-          </div>
+      {/* Mobile menu drawer — always in DOM, CSS peer-checked: drives visibility (works without JS) */}
+      <div className="md:hidden hidden peer-checked:flex fixed inset-0 z-50 bg-bb-bg-primary flex-col">
+        {/* Menu header */}
+        <div className="flex items-center justify-between h-14 px-4 border-b border-bb-border shrink-0">
+          <span className="text-[15px] font-semibold text-bb-text-primary">Menu</span>
+          <label
+            htmlFor="nav-toggle"
+            className="inline-flex items-center justify-center w-11 h-11 rounded-md text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface transition-colors cursor-pointer"
+            aria-label="Close menu"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </label>
         </div>
-      )}
+
+        {/* Menu links */}
+        <div className="flex-1 overflow-y-auto px-4 py-4">
+          {links.map((l) => (
+            <a
+              key={l.href}
+              href={l.href}
+              onClick={handleClose}
+              className="h-12 flex items-center px-3 text-base text-bb-text-primary rounded-md hover:bg-bb-surface transition-colors border-b border-bb-border last:border-0"
+            >
+              {l.label}
+            </a>
+          ))}
+          <SignedIn>
+            <a
+              href="/settings"
+              onClick={handleClose}
+              className="h-12 flex items-center px-3 text-base text-bb-text-primary rounded-md hover:bg-bb-surface transition-colors border-b border-bb-border"
+            >
+              Settings
+            </a>
+            <div className="px-3 pt-4">
+              <UserButton />
+            </div>
+          </SignedIn>
+          <SignedOut>
+            <a
+              href="/sign-in"
+              onClick={handleClose}
+              className="h-12 flex items-center px-3 text-base text-bb-text-primary rounded-md hover:bg-bb-surface transition-colors"
+            >
+              Sign in
+            </a>
+          </SignedOut>
+        </div>
+      </div>
     </>
   );
 }
