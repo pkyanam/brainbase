@@ -25,90 +25,92 @@ export default function Nav() {
   ];
 
   return (
-    <nav className="sticky top-0 z-40 bg-bb-bg-primary/85 backdrop-blur-sm border-b border-bb-border">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
-        {/* Logo + wordmark */}
-        <a href="/" className="flex items-center gap-2 shrink-0 group">
-          <Image
-            src="/brainbaseLogo.png"
-            alt=""
-            width={22}
-            height={22}
-            className="rounded"
-            priority
-          />
-          <span className="text-[15px] font-semibold tracking-tight text-bb-text-primary group-hover:text-bb-accent transition-colors">
-            brainbase
-          </span>
-        </a>
+    <>
+      <nav className="sticky top-0 z-40 bg-bb-bg-primary/85 backdrop-blur-sm border-b border-bb-border">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
+          {/* Logo + wordmark */}
+          <a href="/" className="flex items-center gap-2 shrink-0 group">
+            <Image
+              src="/brainbaseLogo.png"
+              alt=""
+              width={22}
+              height={22}
+              className="rounded"
+              priority
+            />
+            <span className="text-[15px] font-semibold tracking-tight text-bb-text-primary group-hover:text-bb-accent transition-colors">
+              brainbase
+            </span>
+          </a>
 
-        {/* Desktop links */}
-        <div className="hidden md:flex items-center gap-1 text-sm">
-          {links.map((l) => (
-            <a
-              key={l.href}
-              href={l.href}
-              className="px-3 py-2 rounded-md text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface transition-colors"
-            >
-              {l.label}
-            </a>
-          ))}
-          <SignedIn>
-            <a
-              href="/settings"
-              className="px-3 py-2 rounded-md text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface transition-colors"
-            >
-              Settings
-            </a>
-          </SignedIn>
-        </div>
-
-        {/* Right cluster */}
-        <div className="flex items-center gap-2 shrink-0">
-          <SignedIn>
-            <div className="hidden md:block">
-              <UserButton />
-            </div>
-          </SignedIn>
-          <SignedOut>
-            <a
-              href="/sign-in"
-              className="hidden sm:inline-flex items-center h-9 px-3 text-sm text-bb-text-secondary hover:text-bb-text-primary transition-colors"
-            >
-              Sign in
-            </a>
-            {/* Hide "Get started" when mobile menu is open */}
-            {!open && (
+          {/* Desktop links */}
+          <div className="hidden md:flex items-center gap-1 text-sm">
+            {links.map((l) => (
               <a
-                href="/sign-up"
-                className="inline-flex items-center h-9 px-3.5 bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary text-sm font-medium rounded-md transition-colors"
+                key={l.href}
+                href={l.href}
+                className="px-3 py-2 rounded-md text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface transition-colors"
               >
-                Get started
+                {l.label}
               </a>
-            )}
-          </SignedOut>
+            ))}
+            <SignedIn>
+              <a
+                href="/settings"
+                className="px-3 py-2 rounded-md text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface transition-colors"
+              >
+                Settings
+              </a>
+            </SignedIn>
+          </div>
 
-          {/* Hamburger (mobile only) */}
-          <button
-            onClick={() => setOpen(!open)}
-            className="md:hidden inline-flex items-center justify-center w-11 h-11 rounded-md text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface transition-colors"
-            aria-label={open ? "Close menu" : "Open menu"}
-            aria-expanded={open}
-          >
-            {open ? (
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            ) : (
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h16" />
-              </svg>
-            )}
-          </button>
+          {/* Right cluster */}
+          <div className="flex items-center gap-2 shrink-0">
+            <SignedIn>
+              <div className="hidden md:block">
+                <UserButton />
+              </div>
+            </SignedIn>
+            <SignedOut>
+              <a
+                href="/sign-in"
+                className="hidden sm:inline-flex items-center h-9 px-3 text-sm text-bb-text-secondary hover:text-bb-text-primary transition-colors"
+              >
+                Sign in
+              </a>
+              {/* Hide "Get started" when mobile menu is open */}
+              {!open && (
+                <a
+                  href="/sign-up"
+                  className="inline-flex items-center h-9 px-3.5 bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary text-sm font-medium rounded-md transition-colors"
+                >
+                  Get started
+                </a>
+              )}
+            </SignedOut>
+
+            {/* Hamburger (mobile only) */}
+            <button
+              onClick={() => setOpen(!open)}
+              className="md:hidden inline-flex items-center justify-center w-11 h-11 rounded-md text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface transition-colors"
+              aria-label={open ? "Close menu" : "Open menu"}
+              aria-expanded={open}
+            >
+              {open ? (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h16" />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
-      </div>
+      </nav>
 
-      {/* Mobile menu — full-screen overlay, solid bg, no bleed-through */}
+      {/* Mobile menu — rendered OUTSIDE nav to avoid Safari stacking context quirks */}
       {open && (
         <div className="md:hidden fixed inset-0 z-50 bg-bb-bg-primary flex flex-col">
           {/* Menu header */}
@@ -161,6 +163,6 @@ export default function Nav() {
           </div>
         </div>
       )}
-    </nav>
+    </>
   );
 }
