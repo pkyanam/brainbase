@@ -237,6 +237,134 @@ export async function ensureCollaborationSchema(): Promise<void> {
 }
 
 /**
+ * v0.4 — Minions job queue schema (Phase 2: GBrain parity).
+ *
+ * Postgres-native job queue — no Redis, no BullMQ dependency.
+ * Inspired by GBrain's `minion_jobs` table but adapted for serverless
+ * Vercel deployment where the "worker" is a cron-driven batch tick,
+ * not a long-running polling loop.
+ */
+export async function ensureMinionsSchema(): Promise<void> {
+  try {
+    // --- Core jobs table ---
+    await query(`
+      CREATE TABLE IF NOT EXISTS minion_jobs (
+        id              BIGSERIAL PRIMARY KEY,
+        name            TEXT NOT NULL,
+        queue           TEXT NOT NULL DEFAULT 'default',
+        status          TEXT NOT NULL DEFAULT 'waiting',
+        priority        INTEGER NOT NULL DEFAULT 0,
+        data            JSONB NOT NULL DEFAULT '{}',
+        brain_id        UUID,
+
+        -- Retry
+        max_attempts    INTEGER NOT NULL DEFAULT 3,
+        attempts_made   INTEGER NOT NULL DEFAULT 0,
+
+        -- Lock / claim (serverless-safe: lock expires on its own)
+        lock_token      TEXT,
+        lock_until      TIMESTAMPTZ,
+        max_stalled     INTEGER NOT NULL DEFAULT 3,
+        stalled_counter INTEGER NOT NULL DEFAULT 0,
+
+        -- Scheduling
+        delay_until     TIMESTAMPTZ,
+
+        -- Timeout
+        timeout_ms      INTEGER,
+        timeout_at      TIMESTAMPTZ,
+
+        -- Dependencies (simplified: parent/child for subagent support)
+        parent_job_id   BIGINT REFERENCES minion_jobs(id) ON DELETE SET NULL,
+        on_child_fail   TEXT NOT NULL DEFAULT 'fail_parent',
+        depth           INTEGER NOT NULL DEFAULT 0,
+        max_children    INTEGER,
+
+        -- Idempotency
+        idempotency_key TEXT UNIQUE,
+
+        -- Results
+        result          JSONB,
+        progress        JSONB,
+        error_text      TEXT,
+        stacktrace      TEXT[] DEFAULT '{}',
+
+        -- Timestamps
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        started_at      TIMESTAMPTZ,
+        finished_at     TIMESTAMPTZ,
+        updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    // --- Inbox for side-channel messages (child_done notifications etc.) ---
+    await query(`
+      CREATE TABLE IF NOT EXISTS minion_inbox (
+        id        BIGSERIAL PRIMARY KEY,
+        job_id    BIGINT NOT NULL REFERENCES minion_jobs(id) ON DELETE CASCADE,
+        sender    TEXT NOT NULL DEFAULT 'system',
+        payload   JSONB NOT NULL DEFAULT '{}',
+        read_at   TIMESTAMPTZ,
+        sent_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    // --- Indexes ---
+    // Claim query: status='waiting' AND delay_until IS NULL, ordered by priority+created_at
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_minion_jobs_claim
+        ON minion_jobs (queue, status, priority, created_at)
+        WHERE status = 'waiting' AND delay_until IS NULL
+    `);
+
+    // Stall detection: status='active' with expired lock
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_minion_jobs_stalled
+        ON minion_jobs (lock_until)
+        WHERE status = 'active'
+    `);
+
+    // List by status
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_minion_jobs_status
+        ON minion_jobs (status, created_at DESC)
+    `);
+
+    // Idempotency lookups
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_minion_jobs_idempotency
+        ON minion_jobs (idempotency_key)
+        WHERE idempotency_key IS NOT NULL
+    `);
+
+    // Parent/child queries
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_minion_jobs_parent
+        ON minion_jobs (parent_job_id)
+        WHERE parent_job_id IS NOT NULL
+    `);
+
+    // Inbox lookups
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_minion_inbox_unread
+        ON minion_inbox (job_id, read_at)
+        WHERE read_at IS NULL
+    `);
+
+    // Brain-scoped listing
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_minion_jobs_brain
+        ON minion_jobs (brain_id, created_at DESC)
+        WHERE brain_id IS NOT NULL
+    `);
+
+    console.log("[brainbase] Minions schema ensured");
+  } catch (err) {
+    console.error("[brainbase] Minions schema error:", err);
+  }
+}
+
+/**
  * Install database triggers that auto-populate brain_id on INSERT
  * when it's NULL. This is a safety net for external tools (like gbrain
  * CLI) that haven't been updated to include brain_id in their queries.

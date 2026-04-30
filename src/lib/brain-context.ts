@@ -1,5 +1,5 @@
 import { queryOne, queryMany } from "./supabase/client";
-import { ensureSchema, installBrainIdTriggers, ensureCollaborationSchema } from "./db-setup";
+import { ensureSchema, installBrainIdTriggers, ensureCollaborationSchema, ensureMinionsSchema } from "./db-setup";
 import { encryptSupabaseKey, decryptSupabaseKey } from "./crypto";
 
 /**
@@ -10,6 +10,7 @@ export async function getBrainForUser(userId: string): Promise<string | null> {
   await ensureSchema();
   await installBrainIdTriggers();
   await ensureCollaborationSchema();
+  await ensureMinionsSchema();
   const brain = await queryOne<{ id: string }>(
     `SELECT id FROM brains WHERE owner_user_id = $1 LIMIT 1`,
     [userId]
@@ -21,6 +22,7 @@ export async function getOrCreateBrainForUser(userId: string): Promise<string> {
   await ensureSchema();
   await installBrainIdTriggers();
   await ensureCollaborationSchema();
+  await ensureMinionsSchema();
   const existing = await getBrainForUser(userId);
   if (existing) return existing;
 

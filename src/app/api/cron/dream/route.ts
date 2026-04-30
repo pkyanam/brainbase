@@ -9,8 +9,8 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { runDreamCycle } from "@/lib/dream-cycle";
 import { queryMany } from "@/lib/supabase/client";
+import { submitJob } from "@/lib/minions/queue";
 
 export async function GET(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
@@ -34,24 +34,36 @@ export async function GET(req: NextRequest) {
        ORDER BY COUNT(*) DESC`
     );
 
-    const reports = [];
+    const submitted: Array<{ brain_id: string; name: string; job_id: number }> = [];
+
     for (const brain of brains.slice(0, 10)) {
-      try {
-        const report = await runDreamCycle(brain.brain_id, 15);
-        reports.push({ brain_id: brain.brain_id, ...report });
-      } catch (err) {
-        reports.push({
-          brain_id: brain.brain_id,
-          status: "failed",
-          error: String(err),
-        });
-      }
+      // Submit extract job (finds new links + timeline entries)
+      const extract = await submitJob("extract", {
+        brain_id: brain.brain_id,
+        data: { full: false },
+      });
+      submitted.push({ brain_id: brain.brain_id, name: "extract", job_id: extract.id });
+
+      // Submit backlinks job (enforces reciprocal links)
+      const backlinks = await submitJob("backlinks", {
+        brain_id: brain.brain_id,
+        data: {},
+      });
+      submitted.push({ brain_id: brain.brain_id, name: "backlinks", job_id: backlinks.id });
+
+      // Submit embed job (for any un-embedded chunks)
+      const embed = await submitJob("embed", {
+        brain_id: brain.brain_id,
+        data: {},
+      });
+      submitted.push({ brain_id: brain.brain_id, name: "embed", job_id: embed.id });
     }
 
     return NextResponse.json({
       status: "ok",
-      brains_processed: reports.length,
-      reports,
+      brains_scheduled: brains.slice(0, 10).length,
+      jobs_submitted: submitted.length,
+      jobs: submitted,
     });
   } catch (err) {
     console.error("[brainbase] Cron dream error:", err);

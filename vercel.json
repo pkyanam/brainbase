@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/dream",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/jobs/worker",
+      "schedule": "* * * * *"
     }
   ]
 }
