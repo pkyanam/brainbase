@@ -109,6 +109,60 @@ export default function Dashboard() {
   const [liveStatus, setLiveStatus] = useState<"connecting" | "live" | "offline">("offline");
   const sseRef = useRef<EventSource | null>(null);
 
+  // Ask Your Brain — Skills Generator
+  const [taskQuery, setTaskQuery] = useState("");
+  const [taskLoading, setTaskLoading] = useState(false);
+  const [taskResult, setTaskResult] = useState<any | null>(null);
+
+  // Slack Integration
+  const [showSlackForm, setShowSlackForm] = useState(false);
+  const [slackToken, setSlackToken] = useState("");
+  const [slackTeamId, setSlackTeamId] = useState("");
+  const [slackLoading, setSlackLoading] = useState(false);
+  const [slackResult, setSlackResult] = useState<any | null>(null);
+
+  const handleSlackConnect = useCallback(async () => {
+    if (!slackToken || !slackTeamId) return;
+    setSlackLoading(true);
+    setSlackResult(null);
+    try {
+      const r = await fetch("/api/ingest/slack", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ botToken: slackToken, teamId: slackTeamId }),
+      });
+      const data = await r.json();
+      setSlackResult(data);
+    } catch {
+      setSlackResult({ error: "Failed to connect Slack" });
+    } finally {
+      setSlackLoading(false);
+    }
+  }, [slackToken, slackTeamId]);
+
+  const handleTaskQuery = useCallback(async () => {
+    if (!taskQuery.trim() || !currentBrainId) return;
+    setTaskLoading(true);
+    setTaskResult(null);
+    try {
+      const r = await fetch("/api/skills", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task: taskQuery.trim() }),
+      });
+      const data = await r.json();
+      if (!data.error) {
+        setTaskResult(data);
+      } else {
+        setTaskResult({ error: data.error });
+      }
+    } catch {
+      setTaskResult({ error: "Failed to generate skills file" });
+    } finally {
+      setTaskLoading(false);
+    }
+  }, [taskQuery, currentBrainId]);
+
   // Fetch brains list
   useEffect(() => {
     if (!isLoaded || !user) return;
@@ -333,6 +387,107 @@ export default function Dashboard() {
               )}
             </div>
           </div>
+
+          {/* Ask Your Brain — Skills Generator */}
+          {isLoaded && user && (
+            <div className="shrink-0 px-4 md:px-6 pb-3">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={taskQuery}
+                  onChange={(e) => setTaskQuery(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && taskQuery.trim()) handleTaskQuery(); }}
+                  placeholder="Ask your brain: e.g. 'How do pricing exceptions work?'"
+                  className="flex-1 bg-bb-bg-secondary border border-bb-border rounded-lg px-3 py-2 text-sm text-bb-text-secondary placeholder:text-bb-text-muted outline-none focus:border-bb-border-hover"
+                />
+                <button
+                  onClick={handleTaskQuery}
+                  disabled={!taskQuery.trim() || taskLoading}
+                  className="px-4 py-2 bg-bb-accent/10 border border-bb-accent/30 rounded-lg text-sm text-bb-accent hover:bg-bb-accent/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {taskLoading ? (
+                    <span className="inline-block w-4 h-4 border-2 border-bb-accent/30 border-t-bb-accent rounded-full animate-spin" />
+                  ) : (
+                    "Generate"
+                  )}
+                </button>
+              </div>
+              {taskResult && (
+                <div className="mt-2 p-3 rounded-lg bg-bb-bg-secondary border border-bb-accent/20">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium text-bb-accent">Skills File</span>
+                    <span className="text-[10px] text-bb-text-muted">
+                      confidence: {Math.round((taskResult.confidence || 0) * 100)}%
+                    </span>
+                  </div>
+                  <pre className="text-[11px] text-bb-text-secondary overflow-x-auto leading-relaxed bg-bb-bg-primary p-2 rounded border border-bb-border max-h-48">
+                    <code>{JSON.stringify(taskResult, null, 2)}</code>
+                  </pre>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Integrations */}
+          {isLoaded && user && (
+            <div className="shrink-0 px-4 md:px-6 pb-2">
+              <div className="flex items-center gap-3 text-xs">
+                <span className="text-bb-text-muted hidden md:inline">Integrations:</span>
+                <button
+                  onClick={() => setShowSlackForm(!showSlackForm)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-bb-bg-secondary border border-bb-border rounded-md text-bb-text-secondary hover:border-bb-border-hover transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z"/>
+                  </svg>
+                  Connect Slack
+                </button>
+                <span className="text-bb-text-muted/60">Gmail • Notion • Linear (soon)</span>
+              </div>
+              {showSlackForm && (
+                <div className="mt-2 p-3 rounded-lg bg-bb-bg-secondary border border-bb-border">
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="password"
+                      value={slackToken}
+                      onChange={(e) => setSlackToken(e.target.value)}
+                      placeholder="Slack Bot Token (xoxb-...)"
+                      className="flex-1 bg-bb-bg-primary border border-bb-border rounded-lg px-3 py-2 text-xs text-bb-text-secondary placeholder:text-bb-text-muted outline-none focus:border-bb-border-hover"
+                    />
+                    <input
+                      type="text"
+                      value={slackTeamId}
+                      onChange={(e) => setSlackTeamId(e.target.value)}
+                      placeholder="Team ID"
+                      className="w-32 bg-bb-bg-primary border border-bb-border rounded-lg px-3 py-2 text-xs text-bb-text-secondary placeholder:text-bb-text-muted outline-none focus:border-bb-border-hover"
+                    />
+                    <button
+                      onClick={handleSlackConnect}
+                      disabled={slackLoading || !slackToken || !slackTeamId}
+                      className="px-4 py-2 bg-bb-accent/10 border border-bb-accent/30 rounded-lg text-xs text-bb-accent hover:bg-bb-accent/20 transition-colors disabled:opacity-50"
+                    >
+                      {slackLoading ? (
+                        <span className="inline-block w-3 h-3 border-2 border-bb-accent/30 border-t-bb-accent rounded-full animate-spin" />
+                      ) : (
+                        "Ingest"
+                      )}
+                    </button>
+                  </div>
+                  {slackResult && (
+                    <div className="mt-2 text-[11px] text-bb-text-secondary">
+                      {slackResult.error ? (
+                        <span className="text-red-400">{slackResult.error}</span>
+                      ) : (
+                        <span>
+                          Fetched {slackResult.messages_fetched} messages, created {slackResult.pages_created} pages, {slackResult.decisions_detected} decisions.
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* API Key banner */}
           {isLoaded && user && (
