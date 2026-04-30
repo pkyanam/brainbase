@@ -1,5 +1,36 @@
 # Changelog
 
+## Unreleased (v0.4) — April 30, 2026
+
+### Phase 1 — Search Quality Overhaul
+- Hybrid search with RRF fusion (keyword + pgvector)
+- 7-stage gated search pipeline (AND FTS → OR FTS → chunks → timeline → pg_trgm → ILIKE)
+- Query intent classifier (temporal, entity, event, general) with proper noun heuristic
+- Exact match pinning at rank 0 + absolute score pinning (100.0)
+- Vector minimum similarity threshold (0.55) — kills the "magnet" page problem
+- Alias expansion for acronyms and abbreviations (YC, UVA, MIT, etc.)
+- Question prefix stripping ("who is X" → "X")
+- Compiled truth boost (1.15x), backlink boost, dedup-by-slug
+- Phase 1.6: Relational intent patterns, possessive stripping, bug/issue detection
+
+### Phase 2 — Minions Job Queue
+- Postgres-native background job queue (submit, claim, complete, fail, retry)
+- 4 handlers: embed, extract, backlinks, sync
+- Cron-driven batch processing (serverless-safe, 55s lock duration)
+
+### Phase 3 — Content Pipeline
+- Embed handler: real OpenAI text-embedding-3-small (was `'[pending]'` stub)
+- Dream cycle rewired — cron calls runDreamCycle() directly
+- Embed batch: 20 → 50 chunks per cycle
+- Orphan auto-linking via semantic similarity (10/cycle)
+- Brain score: 39 → 76
+
+### Search Eval
+- 50-pair ground truth with reproducible harness
+- MRR 0.83, P@3 0.49, R@10 0.85
+- Relational MRR: 0.49 → 0.78 (Phase 1.6)
+- Multi-entity MRR: 0.50 → 0.75 (Phase 1.6)
+
 ## 0.3.0 — April 29, 2026
 
 ### Added
@@ -21,7 +52,7 @@
 - Docs page expanded with API reference section
 
 ### Fixed
-- Clerk v7 compatibility — updated all auth props (`fallbackRedirectUrl`, etc.)
+- Clerk v7 compatibility — updated all auth props
 - SQL syntax error in schema setup (escaped apostrophe)
 - TypeScript errors with `useRef` in React 19
 

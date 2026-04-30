@@ -1,5 +1,7 @@
 # Skills File Spec — Brainbase
 
+> **Status: Draft / Planned.** Not yet implemented. This describes the target design.
+>
 > Tom Blomfield's phrase, implemented. A queryable, attributed subgraph scoped to a task.
 
 ## What it is

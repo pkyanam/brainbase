@@ -1,164 +1,117 @@
-# Brainbase — Multi-Tenant Architecture (v0.3+)
+# Brainbase — Architecture (v0.4)
 
-## Vision
-Brainbase.app is a cloud-native platform where anyone signs up, connects their data sources via OAuth, and gets a personal knowledge brain their AI agents can query via MCP. No CLI. No config files. No local dependencies.
+> **Current state:** April 30, 2026. This reflects what's actually deployed.
 
-## Architecture Overview
+## Stack
 
-```
-┌──────────────────────────────────────────────────────────┐
-│                    Brainbase.app                         │
-│                                                          │
-│  ┌─────────┐   ┌──────────┐   ┌────────────────────┐   │
-│  │  Auth    │   │  Dashboard │   │  Agent Endpoints  │   │
-│  │ (Clerk)  │   │  (Next.js) │   │  (MCP / llms.txt) │   │
-│  └────┬─────┘   └─────┬─────┘   └─────────┬──────────┘   │
-│       │               │                   │               │
-│       └───────┬───────┴───────────────────┘               │
-│               │                                           │
-│       ┌───────▼────────┐                                  │
-│       │   API Gateway   │  ← user-scoped, rate-limited    │
-│       │  (Next.js API)  │                                  │
-│       └───────┬────────┘                                  │
-│               │                                           │
-│   ┌───────────┼───────────┐                               │
-│   │           │           │                               │
-│   ▼           ▼           ▼                               │
-│ ┌─────┐  ┌──────┐  ┌──────────┐                          │
-│ │GitHub│  │  X   │  │ Calendar │  ← OAuth integrations    │
-│ │Ingest│  │Ingest│  │ Ingest   │                          │
-│ └──┬──┘  └──┬───┘  └────┬─────┘                          │
-│    │        │            │                                 │
-│    └────────┼────────────┘                                 │
-│             │                                              │
-│     ┌───────▼────────┐                                    │
-│     │  Brain Engine   │  ← per-user GBrain instance       │
-│     │  (Supabase PG)  │     or namespace                  │
-│     └───────┬────────┘                                    │
-│             │                                              │
-│     ┌───────▼────────┐                                    │
-│     │   Supabase      │  ← Postgres + pgvector            │
-│     │   (DB + Auth)   │     per-user tables or RLS        │
-│     └────────────────┘                                    │
-└──────────────────────────────────────────────────────────┘
-```
+| Layer | Technology | Status |
+|-------|-----------|--------|
+| Frontend | Next.js 16 (App Router) + React 19 + Tailwind CSS v4 | ✅ Deployed |
+| Database | Supabase Postgres + pgvector | ✅ Production |
+| Auth | Clerk v7 (GitHub OAuth) | ✅ Active |
+| 3D Graph | Three.js + @react-three/fiber | ✅ Deployed |
+| Search | Hybrid (RRF fusion: FTS + pgvector) | ✅ Deployed |
+| MCP | JSON-RPC 2.0, 12 tools | ✅ Deployed |
+| Background Jobs | Minions queue (Postgres-native) + Dream Cycle crons | ✅ Deployed |
+| Embedding | OpenAI text-embedding-3-small | ✅ Active |
+| SDK | TypeScript (`brainbase-sdk`) | ✅ Published |
+| CLI | `brainbase` command | ✅ Published |
 
-## Multi-Tenant Strategy
-
-### Phase 1: Prototype (Current — v0.2)
-- Single Supabase project with all pages
-- Pages namespaced by username: `{username}/people/...`, `{username}/projects/...`
-- Auth: no real auth (dev-only)
-- Ingestion: local gh CLI for prototype
-
-### Phase 2: Production MVP (v0.3 — target)
-- Clerk auth (GitHub OAuth)
-- Per-user Supabase schemas via Row-Level Security (RLS)
-- Pages table has `user_id` column → RLS enforces `user_id = auth.uid()`
-- Each user's brain is isolated at the database level
-- Ingestion: GitHub OAuth tokens stored per-user (encrypted)
-
-### Phase 3: Scale (v1.0)
-- Per-user Supabase projects for heavy users
-- Dedicated GBrain instances per user (optional, for power users)
-- Cross-brain linking (shared entities like "OpenAI", "YC")
-- Usage-based billing
-
-## Data Isolation
-
-### Option A: RLS (Recommended for MVP)
-```sql
--- pages table has user_id column
-ALTER TABLE pages ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can only access their own pages"
-  ON pages FOR ALL
-  USING (user_id = auth.uid());
-```
-
-**Pros:** Single database, simple queries, built-in Supabase support
-**Cons:** No per-user schema isolation, all users share DB resources
-
-### Option B: Namespace Prefix (Current Prototype)
-```
-preetham/people/preetham-kyanam
-alice/people/alice
-bob/projects/startup-idea
-```
-
-**Pros:** Ultra-simple, works with GBrain CLI directly
-**Cons:** No real security, relies on URL path filtering
-
-### Option C: Per-User Supabase Projects (Scale)
-- Each user gets their own Supabase project
-- Brainbase manages project provisioning via Supabase Management API
-- GBrain connects to user's dedicated database
-
-**Pros:** Full isolation, no noisy neighbors, scales independently
-**Cons:** Complex provisioning, higher cost
-
-## Routing Convention
+## Architecture
 
 ```
-/b/{username}              → User's brain homepage
-/b/{username}/dashboard    → User's brain dashboard  
-/b/{username}/api/status   → Brain stats
-/b/{username}/api/search   → Search across user's pages
-/b/{username}/mcp          → MCP server (JSON-RPC)
-/b/{username}/llms.txt     → Agent-readable brain map
+Clients
+├── Web UI (Three.js 3D graph, dashboard, search)
+├── AI Agents (MCP JSON-RPC, REST API)
+├── CLI (brainbase query, health, page, graph)
+└── SDK (TypeScript, npm)
+
+API Layer (Next.js)
+├── GET  /api/brain/health      → Brain stats
+├── GET  /api/brain/search?q=   → Hybrid search (FTS + vector + RRF)
+├── GET  /api/brain/graph       → Graph data (nodes + edges)
+├── GET  /api/brain/page/:slug  → Page content + links + timeline
+├── POST /api/mcp               → MCP JSON-RPC (12 tools)
+├── POST /api/brain/dream       → Manual dream cycle trigger
+└── GET  /api/cron/dream        → Scheduled dream cycle (Vercel cron)
+
+Data Layer
+└── Supabase Postgres
+    ├── pages (720 rows, 918 chunks)
+    ├── links (554 typed edges, from_page_id/to_page_id)
+    ├── content_chunks (918 rows, pgvector embeddings)
+    ├── timeline_entries (847 rows)
+    └── minion_jobs (background job queue)
+
+Background Processing
+├── Dream Cycle (daily Vercel cron + external triggers)
+│   ├── Extract: wikilinks + timeline from page content
+│   ├── Frontmatter: typed edges from YAML frontmatter
+│   ├── Embed: OpenAI embeddings for stale chunks (50/cycle)
+│   ├── Orphans: detect + auto-link via semantic similarity (10/cycle)
+│   ├── Patterns: cross-page co-occurrence detection
+│   └── Entity Tiers: auto-escalation based on link count
+└── Minions Queue (cron-driven batch ticks)
+    ├── embed — OpenAI embedding generation
+    ├── extract — wikilink + timeline parsing
+    ├── backlinks — reciprocal link enforcement
+    └── sync — brain re-index (skeleton)
 ```
 
-## Ingestion Pipeline (Multi-User)
+## Multi-Tenancy
 
-### Current (Prototype): Local gh CLI
-```python
-# Hardcoded to Preetham's machine
-gh api users/pkyanam/repos
-```
+Each user gets an isolated brain via `brain_id` column on all tables. Auth via Clerk JWT → `brain_id` lookup. API keys are `bb_live_*` format, SHA-256 hashed, prefix stored for display.
 
-### Target (Production): GitHub OAuth
-```typescript
-// User authorizes via OAuth → token stored in Clerk user metadata
-// Ingestion service uses user's token to fetch THEIR repos
-const token = await getGitHubToken(userId);
-const repos = await fetch("https://api.github.com/user/repos", {
-  headers: { Authorization: `Bearer ${token}` }
-});
-```
-
-## API Design (User-Scoped)
-
-All brain APIs are scoped to a user:
+## Search Pipeline
 
 ```
-GET  /api/brain/health?username=preetham       → Preetham's brain stats
-GET  /api/brain/search?q=ai&username=preetham  → Search Preetham's brain
-POST /api/ingest/github                         → body: { username: "preetham" }
+Query → expandQuery (aliases) → classifyIntent → hybrid search
+
+Hybrid search:
+  Keyword (FTS tsvector) ──┐
+  Vector (pgvector cosine) ─┤→ dedupBySlug → RRF fusion → normalize
+                            │     → exact match pin → compiled truth boost
+                            │     → backlink boost → dedup → sort → return
+                            │
+  Stages (gated):
+    1. FTS AND (primary, ts_rank_cd)
+    2. FTS OR with synonyms (if score < 0.25)
+    3. Content chunks FTS (if score < 0.25)
+    4. Timeline entries FTS (always, ×0.9)
+    5. pg_trgm title (always)
+    6. pg_trgm content (if score < 0.25)
+    7. ILIKE fallback (last resort)
 ```
 
-Or via URL path (recommended):
-```
-GET  /b/preetham/api/status
-GET  /b/preetham/api/search?q=ai
-POST /b/preetham/api/ingest/github
-```
+## Current Metrics (April 30, 2026)
 
-## Migration Path
+| Metric | Value |
+|--------|-------|
+| Pages | 720 |
+| Typed links | 554 |
+| Content chunks | 918 |
+| Timeline entries | 847 |
+| Orphans | 497 |
+| Brain score | 76/100 |
 
-1. **v0.2 (now):** Namespace prefix, local gh CLI
-2. **v0.3:** Add Clerk auth, RLS on Supabase, GitHub OAuth ingestion
-3. **v0.4:** X + Calendar OAuth
-4. **v1.0:** Per-user projects, billing, scale
+## Search Eval (50-pair ground truth, v1.7)
 
-## Environment Variables
+| Metric | Value |
+|--------|-------|
+| MRR | 0.83 |
+| P@3 | 0.49 |
+| P@10 | 0.41 |
+| R@10 | 0.85 |
+| Intent accuracy | 51% |
+| p50 latency | 619ms |
+| p95 latency | 1401ms |
 
-```bash
-# Required for production
-GBRAIN_BIN=/path/to/gbrain         # GBrain CLI binary
-SUPABASE_URL=https://...           # Supabase project URL
-SUPABASE_ANON_KEY=...              # Supabase anonymous key
-SUPABASE_SERVICE_ROLE_KEY=...      # For server-side RLS bypass
-CLERK_SECRET_KEY=...               # Clerk auth
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=...  # Clerk frontend
-GITHUB_CLIENT_ID=...               # GitHub OAuth app
-GITHUB_CLIENT_SECRET=...           # GitHub OAuth secret
-```
+## What We Learned
+
+- **CLI wrapper was a bottleneck.** Direct Supabase queries replaced GBrain CLI subprocess. 15s timeout → 500ms.
+- **D3.js 2D was wrong.** Three.js 3D with instanced rendering handles 720 nodes at 60fps.
+- **PGLite is dead.** macOS 26.3 XProtect kills WASM. Supabase only.
+- **Fake scoring was everywhere.** Phase 1 replaced hardcoded ladders with real ts_rank_cd + pgvector similarity.
+- **Minions queue shipped incomplete.** The embed handler was a `'[pending]'` stub for weeks. Phase 3 fixed it.
+- **Dream cycle was aspirational.** Cron submitted jobs to a queue with no worker. Phase 3 wired it directly.
+- **Embed coverage is the search quality ceiling.** 37% → we're working on it.

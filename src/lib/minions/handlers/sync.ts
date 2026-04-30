@@ -1,8 +1,11 @@
 import type { MinionHandler } from '../types';
-import { queryOne } from '../../supabase/client';
+import { queryOne, queryMany } from '../../supabase/client';
+import { runAutoExtract } from '../../auto-extract';
+import { indexPageEmbeddings } from '../../embeddings';
 
 /**
- * Sync handler — triggers a full brain re-index.
+ * Sync handler — re-extracts + re-embeds all pages in a brain.
+ * Used for full brain re-index operations.
  */
 export const syncHandler: MinionHandler = async (ctx) => {
   const full = ctx.data?.full === true;
@@ -14,18 +17,51 @@ export const syncHandler: MinionHandler = async (ctx) => {
 
   await ctx.log(`Starting ${full ? 'full' : 'incremental'} sync for brain ${brainId}`);
 
-  const pageCount = await queryOne<{ count: string }>(
-    'SELECT count(*)::text as count FROM pages WHERE brain_id = $1',
+  // Get all pages
+  const pages = await queryMany<{
+    slug: string;
+    type: string;
+    compiled_truth: string;
+  }>(
+    `SELECT slug, type, compiled_truth
+     FROM pages
+     WHERE brain_id = $1
+     ${full ? '' : "AND (last_extracted_at IS NULL OR last_extracted_at < updated_at)"}
+     ORDER BY updated_at DESC
+     LIMIT 100`,
     [brainId]
   );
 
-  const total = parseInt(pageCount?.count ?? '0', 10);
-  await ctx.updateProgress({ step: 0, total, message: 'Sync started' });
+  await ctx.updateProgress({ step: 0, total: pages.length, message: 'Syncing...' });
+
+  let extracted = 0;
+  let embedded = 0;
+
+  for (const page of pages) {
+    if (ctx.isTimeRunningOut()) break;
+
+    // Re-extract links + timeline
+    try {
+      await runAutoExtract(brainId, page.slug, page.type, page.compiled_truth || '');
+      extracted++;
+    } catch (err) {
+      await ctx.log(`Extract failed for ${page.slug}: ${String(err)}`);
+    }
+
+    // Re-embed chunks
+    try {
+      await indexPageEmbeddings(brainId, page.slug, page.compiled_truth || '');
+      embedded++;
+    } catch (err) {
+      await ctx.log(`Embed failed for ${page.slug}: ${String(err)}`);
+    }
+  }
 
   return {
     brain_id: brainId,
     full_sync: full,
-    pages_total: total,
-    status: 'sync_initiated',
+    pages_total: pages.length,
+    pages_extracted: extracted,
+    pages_embedded: embedded,
   };
 };

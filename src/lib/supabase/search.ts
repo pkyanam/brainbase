@@ -149,8 +149,11 @@ export async function searchBrain(
   limit = 20,
   writtenBy?: string
 ): Promise<SearchResult[]> {
-  const rawQuery = query;
-  const orTsQuery = buildOrTsQuery(query);
+  // Phase 1.6: Expand known acronyms/aliases for FTS keyword search
+  // "YC" → "Y Combinator", "UVA" → "University of Virginia"
+  const expandedQuery = expandQuery(query);
+  const rawQuery = expandedQuery;
+  const orTsQuery = buildOrTsQuery(expandedQuery);
   const wbClause = writtenBy ? "AND p.written_by = $4" : "";
   const wbParam = writtenBy ? [writtenBy] : [];
   const results = new Map<string, SearchResult>();

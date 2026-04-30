@@ -32,7 +32,7 @@ X-Brain-Id: <brain-uuid>
 
 ---
 
-## 3. MCP Tools (19 Available)
+## 3. MCP Tools (12 Available)
 
 Connect via JSON-RPC 2.0 to `POST /api/mcp`.
 
