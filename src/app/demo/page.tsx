@@ -459,7 +459,7 @@ export default function DemoPage() {
                       <code>{JSON.stringify(skillsFile, null, 2)}</code>
                     </pre>
                     <p className="text-xs text-bb-text-muted mt-2">
-                      Live output from POST /api/skills against a seeded demo brain.
+                      Live output from GET /api/skills/demo — no auth, no signup required.
                     </p>
                   </>
                 ) : (
