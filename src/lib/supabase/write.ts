@@ -61,7 +61,7 @@ export async function putPage(brainId: string, input: PutPageInput): Promise<Put
         await indexPageEmbeddings(brainId, input.slug, fullContent);
 
         // 2. Auto-extract: wikilinks, dates, semantic links
-        await runAutoExtract(brainId, input.slug, fullContent);
+        await runAutoExtract(brainId, input.slug, pageType, fullContent);
 
         // 3. Evaluate trigger rules
         const fired = await runTriggers(brainId, input.slug, input.title, pageType, fullContent);

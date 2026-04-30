@@ -133,6 +133,16 @@ export async function ensureSchema(): Promise<void> {
       END $$;
     `);
 
+    // Add last_extracted_at for dream cycle tracking
+    await query(`
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'pages') THEN
+          ALTER TABLE pages ADD COLUMN IF NOT EXISTS last_extracted_at TIMESTAMPTZ;
+        END IF;
+      END $$;
+    `);
+
     console.log("[brainbase] Schema ensured (multi-tenant)");
   } catch (err) {
     console.error("[brainbase] Schema setup error:", err);

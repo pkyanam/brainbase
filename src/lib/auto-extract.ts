@@ -1,53 +1,16 @@
 /**
  * Auto-extraction pipeline for Brainbase pages.
  * Parses page content for:
- *   - Wikilinks [[slug]] or [[slug|title]] → link rows
+ *   - Wikilinks [[slug]] or [[slug|title]] → typed link rows
  *   - Date patterns → timeline entries
  * Runs synchronously after putPage.
  */
 
 import { queryOne, queryMany } from "./supabase/client";
 import { createSemanticLinks } from "./semantic-links";
+import { extractPageLinks, extractEntityRefs } from "./link-inference";
 
-// ... (rest of the file)
-
-const WIKILINK_RE = /\[\[([^|\]]+)(?:\|([^|\]]+))?\]\]/g;
-
-interface ExtractedLink {
-  toSlug: string;
-  linkType: string;
-}
-
-export function extractWikilinks(content: string): ExtractedLink[] {
-  const links: ExtractedLink[] = [];
-  const seen = new Set<string>();
-
-  let match: RegExpExecArray | null;
-  while ((match = WIKILINK_RE.exec(content)) !== null) {
-    const rawSlug = match[1].trim();
-    // Normalize: allow spaces → dashes, lowercase
-    const toSlug = rawSlug.toLowerCase().replace(/\s+/g, "-");
-    if (seen.has(toSlug)) continue;
-    seen.add(toSlug);
-
-    // Infer link type from context
-    const contextStart = Math.max(0, match.index - 100);
-    const context = content.slice(contextStart, match.index).toLowerCase();
-    let linkType = "related";
-    if (context.includes("work") || context.includes("at ") || context.includes("job")) linkType = "works_at";
-    else if (context.includes("friend") || context.includes("met ") || context.includes("know")) linkType = "friend";
-    else if (context.includes("family") || context.includes("brother") || context.includes("sister") || context.includes("dad") || context.includes("mom")) linkType = "family";
-    else if (context.includes("invest") || context.includes("funded") || context.includes("backed")) linkType = "invested_in";
-    else if (context.includes("found") || context.includes("started") || context.includes("created")) linkType = "founded";
-    else if (context.includes("build") || context.includes("made") || context.includes("project")) linkType = "built";
-
-    links.push({ toSlug, linkType });
-  }
-
-  return links;
-}
-
-// ─── Date extraction ─────────────────────────────────────────
+// ─── Date extraction ──────────────────────────────────────────────
 
 const DATE_PATTERNS = [
   // ISO: 2024-01-15 or 2024/01/15
@@ -63,29 +26,25 @@ const DATE_PATTERNS = [
 ];
 
 interface ExtractedDate {
-  date: string; // ISO YYYY-MM-DD
+  date: string;
   summary: string;
   detail?: string;
 }
 
-export function extractDates(content: string): ExtractedDate[] {
+function extractDates(content: string): ExtractedDate[] {
   const dates: ExtractedDate[] = [];
   const seen = new Set<string>();
 
   for (const pattern of DATE_PATTERNS) {
     let match: RegExpExecArray | null;
-    // Reset regex
     pattern.re.lastIndex = 0;
     while ((match = pattern.re.exec(content)) !== null) {
       const iso = pattern.fmt(match);
       if (seen.has(iso)) continue;
       seen.add(iso);
-
-      // Extract surrounding sentence as summary
       const start = Math.max(0, match.index - 80);
       const end = Math.min(content.length, match.index + match[0].length + 80);
       const snippet = content.slice(start, end).replace(/\s+/g, " ").trim();
-
       dates.push({ date: iso, summary: snippet });
     }
   }
@@ -93,7 +52,7 @@ export function extractDates(content: string): ExtractedDate[] {
   return dates;
 }
 
-// ─── Orphan detection ────────────────────────────────────────
+// ─── Orphan detection ──────────────────────────────────────────────
 
 export async function findOrphans(brainId: string): Promise<string[]> {
   const rows = await queryMany<{ slug: string }>(
@@ -110,41 +69,41 @@ export async function findOrphans(brainId: string): Promise<string[]> {
   return rows.map(r => r.slug);
 }
 
-// ─── Main pipeline ───────────────────────────────────────────
+// ─── Main pipeline ────────────────────────────────────────────────
 
 export async function runAutoExtract(
   brainId: string,
   pageSlug: string,
+  pageType: string,
   content: string
-): Promise<{ linksCreated: number; timelineCreated: number }> {
+): Promise<{ linksCreated: number; timelineCreated: number; unresolved: string[] }> {
   let linksCreated = 0;
   let timelineCreated = 0;
+  const unresolved: string[] = [];
 
   if (!content || content.trim().length === 0) {
-    return { linksCreated, timelineCreated };
+    return { linksCreated, timelineCreated, unresolved };
   }
 
-  // 1. Extract wikilinks and create link rows
-  const links = extractWikilinks(content);
-  for (const link of links) {
+  // 1. Extract typed links using GBrain-style inference
+  const candidates = extractPageLinks(pageSlug, pageType, content);
+  for (const link of candidates) {
     try {
       // Ensure target page exists (stub if not)
       const targetExists = await queryOne<{ id: number }>(
         `SELECT id FROM pages WHERE brain_id = $1 AND slug = $2`,
-        [brainId, link.toSlug]
+        [brainId, link.targetSlug]
       );
       if (!targetExists) {
-        // Auto-stub the target page
-        const title = link.toSlug.split("/").pop()?.replace(/-/g, " ") || link.toSlug;
+        const title = link.targetSlug.split("/").pop()?.replace(/-/g, " ") || link.targetSlug;
         await queryOne(
           `INSERT INTO pages (brain_id, slug, title, type, compiled_truth, frontmatter, search_vector, written_by)
            VALUES ($1, $2, $3, 'unknown', '', '{}'::jsonb, to_tsvector('english', ''), 'system')
            ON CONFLICT (brain_id, slug) DO NOTHING`,
-          [brainId, link.toSlug, title]
+          [brainId, link.targetSlug, title]
         );
       }
 
-      // Create the link
       const linkResult = await queryOne<{ id: string }>(
         `INSERT INTO links (brain_id, from_page_id, to_page_id, link_type, written_by)
          VALUES (
@@ -156,11 +115,11 @@ export async function runAutoExtract(
          )
          ON CONFLICT DO NOTHING
          RETURNING id`,
-        [brainId, pageSlug, link.toSlug, link.linkType]
+        [brainId, pageSlug, link.targetSlug, link.linkType]
       );
       if (linkResult) linksCreated++;
     } catch (err) {
-      console.error(`[brainbase] Auto-link error ${pageSlug} → ${link.toSlug}:`, err);
+      console.error(`[brainbase] Auto-link error ${pageSlug} → ${link.targetSlug}:`, err);
     }
   }
 
@@ -188,12 +147,12 @@ export async function runAutoExtract(
 
   console.log(`[brainbase] Auto-extract for ${pageSlug}: ${linksCreated} links, ${timelineCreated} timeline entries`);
 
-  // 3. Semantic auto-linking: find related pages via embeddings
+  // 3. Semantic auto-linking
   try {
     await createSemanticLinks(brainId, pageSlug, "Auto-linked by semantic similarity");
   } catch (err) {
     console.error(`[brainbase] Semantic link error for ${pageSlug}:`, err);
   }
 
-  return { linksCreated, timelineCreated };
+  return { linksCreated, timelineCreated, unresolved };
 }

@@ -132,3 +132,36 @@ export async function indexPageEmbeddings(
 
   console.log(`[brainbase] Indexed ${chunks.length} chunks for ${pageSlug}`);
 }
+
+/**
+ * Batch-embed stale chunks (chunks with null embedding).
+ * Returns number of chunks embedded.
+ */
+export async function embedStaleChunks(brainId: string, limit = 50): Promise<number> {
+  const { rows } = await query<{ id: number; content: string; page_id: number }>(
+    `SELECT id, content, page_id
+     FROM content_chunks
+     WHERE brain_id = $1 AND embedding IS NULL
+     ORDER BY id
+     LIMIT $2`,
+    [brainId, limit]
+  );
+  if (rows.length === 0) return 0;
+
+  const embeddings = await generateEmbeddings(rows.map(r => r.content));
+  if (!embeddings) return 0;
+
+  let embedded = 0;
+  for (let i = 0; i < rows.length; i++) {
+    const emb = embeddings[i];
+    if (!emb) continue;
+    await query(
+      `UPDATE content_chunks SET embedding = $1::vector WHERE id = $2`,
+      [JSON.stringify(emb), rows[i].id]
+    );
+    embedded++;
+  }
+
+  console.log(`[brainbase] Embedded ${embedded}/${rows.length} stale chunks`);
+  return embedded;
+}
