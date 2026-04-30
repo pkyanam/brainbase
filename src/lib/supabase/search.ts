@@ -46,6 +46,13 @@ const SYNONYMS: Record<string, string[]> = {
   manager: ["boss", "manager", "supervisor", "lead"],
   coworker: ["coworker", "colleague", "peer", "teammate"],
   colleague: ["coworker", "colleague", "peer", "teammate"],
+  // Phase 1.6: Relational + agent synonyms
+  agent: ["agent", "assistant", "ai", "helper"],
+  assistant: ["agent", "assistant", "ai", "helper"],
+  friend: ["friend", "buddy", "pal", "companion"],
+  childhood: ["childhood", "school", "growing up", "family", "friends"],
+  family: ["family", "relative", "kin", "household"],
+  projects: ["projects", "side projects", "hack", "build"],
 };
 
 /** Alias map: short forms → full names. Used for query expansion. */
@@ -58,6 +65,11 @@ const ALIASES: Record<string, string> = {
   sf: "San Francisco",
   nyc: "New York City",
   la: "Los Angeles",
+  // Phase 1.6: Relationship expansion for relational queries
+  agents: "agent assistant",
+  assistants: "agent assistant",
+  childhood: "family friends school childhood",
+  projects: "projects side-projects",
 };
 
 /**
@@ -265,7 +277,7 @@ export async function searchBrain(
           to_tsvector('english', COALESCE(t.summary, '') || ' ' || COALESCE(t.detail, '')),
           to_tsquery('english', $2),
           32
-        ) * 0.85 as rank
+        ) * 0.9 as rank
        FROM timeline_entries t
        JOIN pages p ON p.id = t.page_id
        WHERE t.brain_id = $1

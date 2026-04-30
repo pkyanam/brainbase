@@ -408,6 +408,24 @@ const ENTITY_PATTERNS = [
   /\b(person|people|company|companies|org|organization|founder|ceo|cto|investor)\b/i,
 ];
 
+// Phase 1.6: Relational queries — "who helps me", "who did I grow up with", etc.
+// These are entity queries about people connected to the user through relationships.
+// They should NOT fall through to general intent.
+const RELATIONAL_PATTERNS = [
+  /\b(who helps me|who works with me|who do I work with|who supports me|who assists me|my agents|my assistants)\b/i,
+  /\b(who did I grow up with|who grew up with|childhood friends|grew up together)\b/i,
+  /\b(who do I know|who do we know|people I know|my network|my connections)\b/i,
+  /\b(who.*(?:helps|works|assists|supports|collaborates)\s+(?:me|with me))\b/i,
+];
+
+// Phase 1.6: Bug/issue patterns — trigger timeline + event search for diagnostic queries
+// "what's wrong with X", "broken", "bug", "not working" → search timeline entries
+const ISSUE_PATTERNS = [
+  /\b(what's wrong|what is wrong|whats wrong|something wrong|not working|is broken|is bugged)\b/i,
+  /\b(broken|bug|issue|fix|fixed|problem|error|crash|glitch|regression)\b/i,
+  /\b(doesn't work|does not work|won't load|can't load|cannot load|not showing)\b/i,
+];
+
 const EVENT_PATTERNS = [
   /\b(meeting|call|conference|talk|presentation|workshop|summit|hackathon|launch|demo day|batch)\b/i,
   /\b(happened|occurred|took place|went down|went|did.*go)\b/i,
@@ -423,19 +441,38 @@ const EVENT_PATTERNS = [
 export function classifyIntent(query: string): QueryIntent {
   const q = query.trim();
 
+  // Phase 1.6: Strip possessive prefix before classification
+  // "my side projects" → "side projects", "my brain" → "brain"
+  let processed = q;
+  const possessiveStripped = q.replace(/^my\s+/i, '').replace(/^mine\s+/i, '');
+  if (possessiveStripped !== q) {
+    processed = possessiveStripped;
+  }
+
   // Temporal
   for (const pattern of TEMPORAL_PATTERNS) {
-    if (pattern.test(q)) return "temporal";
+    if (pattern.test(q) || pattern.test(processed)) return "temporal";
   }
 
   // Entity patterns
   for (const pattern of ENTITY_PATTERNS) {
-    if (pattern.test(q)) return "entity";
+    if (pattern.test(q) || pattern.test(processed)) return "entity";
+  }
+
+  // Phase 1.6: Relational patterns (checked BEFORE event, after entity)
+  for (const pattern of RELATIONAL_PATTERNS) {
+    if (pattern.test(q) || pattern.test(processed)) return "entity";
   }
 
   // Event patterns (check BEFORE proper-noun — "Launch event" is event, not entity)
   for (const pattern of EVENT_PATTERNS) {
-    if (pattern.test(q)) return "event";
+    if (pattern.test(q) || pattern.test(processed)) return "event";
+  }
+
+  // Phase 1.6: Bug/issue queries → event intent (triggers timeline retrieval)
+  // "what's wrong with", "broken", "bug", "issue", "fix" should search timeline entries
+  for (const pattern of ISSUE_PATTERNS) {
+    if (pattern.test(q) || pattern.test(processed)) return "event";
   }
 
   // B3 FIX: Capitalized proper noun detection
@@ -443,7 +480,7 @@ export function classifyIntent(query: string): QueryIntent {
   //   has a capitalized word but is clearly an event query)
   // - If ANY word starts with uppercase in a multi-word query → entity
   // - Handles: "Apple bros", "YC pitch", "Matthew Kovalenko"
-  const words = q.split(/\s+/).filter(w => w.length >= 1);
+  const words = processed.split(/\s+/).filter(w => w.length >= 1);
   const particles = new Set([
     "van", "von", "de", "di", "da", "del", "della", "dela", "dos", "du",
     "le", "la", "ten", "ter", "bin", "ibn", "al", "el", "of", "the",
