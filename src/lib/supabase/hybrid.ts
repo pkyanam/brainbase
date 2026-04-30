@@ -90,18 +90,55 @@ export interface BoostFactors {
 /** Attach boost_factors to a search result entry */
 export type BoostedResult = SearchResult & { boost_factors?: BoostFactors };
 
-// ─── B2 FIX: Exact Match Boost ────────────────────────────────────
-const EXACT_TITLE_BOOST = 5.0;
-const EXACT_SLUG_BOOST = 4.0;
-const PREFIX_MATCH_BOOST = 2.5;
+// ─── B2 FIX v2: Pin Exact Matches at Rank 0 ─────────────────────
 
 /**
- * B2 FIX: Apply exact-match boost.
- * If the query exactly matches a page title → 5x
- * If the query exactly matches a page slug (after normalization) → 4x
- * If title starts with the query → 2.5x
+ * B2 FIX v2: Before RRF, reorder each result list so pages whose
+ * title or slug exactly matches the query appear at position 0.
+ * This gives them maximum RRF contribution (1/K) from every list,
+ * guaranteeing they outrank any non-exact-match page.
+ *
+ * Removed: the old score-multiplier approach (5x/4x/2.5x) which
+ * couldn't overcome the RRF baseline advantage of dense multi-list pages.
  */
-export function applyExactMatchBoost(
+export function pinExactMatches(
+  list: SearchResult[],
+  query: string
+): SearchResult[] {
+  const qLower = query.toLowerCase().trim();
+  if (!qLower) return list;
+
+  const exact: SearchResult[] = [];
+  const rest: SearchResult[] = [];
+
+  for (const r of list) {
+    const titleLower = (r.title || "").toLowerCase();
+    const slugLower = (r.slug || "").toLowerCase();
+    const slugBase = slugLower.split("/").pop() || slugLower;
+    const slugNormalized = slugBase.replace(/[-_]/g, " ");
+
+    if (titleLower === qLower || slugNormalized === qLower || slugLower === qLower) {
+      exact.push(r);
+    } else {
+      rest.push(r);
+    }
+  }
+
+  // Exact matches first, then rest (preserving relative order within each group)
+  return [...exact, ...rest];
+}
+
+/**
+ * B2 FIX v2: After RRF and all boosts, force exact-match pages
+ * to the absolute top by giving them a score above the normal range.
+ *
+ * Score 100.0 is well above any possible RRF-normalized+boosted score
+ * (which maxes out around 1.0-5.0). This guarantees exact matches
+ * appear before any other page regardless of chunk density.
+ */
+const EXACT_PIN_SCORE = 100.0;
+
+export function forceExactMatchTop(
   fused: Map<string, { score: number; results: SearchResult[]; boost_factors?: BoostFactors }>,
   query: string
 ): void {
@@ -111,29 +148,13 @@ export function applyExactMatchBoost(
     const titleLower = (entry.results[0]?.title || "").toLowerCase();
     const slugLower = slug.toLowerCase();
     const slugBase = slugLower.split("/").pop() || slugLower;
-
-    let boost = 1.0;
-    let reason = "";
-
-    // Normalize slug: replace hyphens/underscores with spaces
     const slugNormalized = slugBase.replace(/[-_]/g, " ");
 
-    if (titleLower === qLower) {
-      boost = EXACT_TITLE_BOOST;
-      reason = "exact_title";
-    } else if (slugNormalized === qLower || slugLower === qLower) {
-      boost = EXACT_SLUG_BOOST;
-      reason = "exact_slug";
-    } else if (titleLower.startsWith(qLower)) {
-      boost = PREFIX_MATCH_BOOST;
-      reason = "prefix_match";
-    }
-
-    if (boost > 1.0) {
-      entry.score *= boost;
+    if (titleLower === qLower || slugNormalized === qLower || slugLower === qLower) {
+      entry.score = EXACT_PIN_SCORE;
       if (!entry.boost_factors) entry.boost_factors = { total: 1.0 };
-      (entry.boost_factors as any)[reason] = boost;
-      entry.boost_factors.total = (entry.boost_factors.total || 1) * boost;
+      entry.boost_factors.exact_match = EXACT_PIN_SCORE;
+      entry.boost_factors.total = EXACT_PIN_SCORE;
     }
   }
 }

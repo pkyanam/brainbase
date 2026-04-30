@@ -6,8 +6,9 @@ import { queryMany } from "@/lib/supabase/client";
 import {
   rrfFusion,
   dedupBySlug,
+  pinExactMatches,
+  forceExactMatchTop,
   normalizeScores,
-  applyExactMatchBoost,
   applyCompiledTruthBoost,
   applyBacklinkBoost,
   capPageContributions,
@@ -75,24 +76,30 @@ export async function POST(req: NextRequest) {
     // Collapse to one per slug (max score) so RRF doesn't get flooded.
     const dedupedVector = dedupBySlug(vectorResults);
 
+    // B2 FIX v2: Pin exact title/slug matches at rank 0 in each list
+    // so they get maximum RRF contribution from every list.
+    const pinnedKeyword = pinExactMatches(keywordResults, q);
+    const pinnedVector = pinExactMatches(dedupedVector, q);
+
     // ── Phase 2: RRF Fusion ─────────────────────────────────────
-    const fused = rrfFusion([keywordResults, dedupedVector]);
+    const fused = rrfFusion([pinnedKeyword, pinnedVector]);
 
     // ── Phase 3: Normalize scores 0-1 ────────────────────────────
     const normed = normalizeScores(fused);
 
-    // ── Phase 4: Exact match boost (B2 FIX — 3-5x for exact title/slug) ──
-    applyExactMatchBoost(normed, q);
-
-    // ── Phase 5: Compiled truth boost (2.0x for compiled_truth chunks)
+    // ── Phase 4: Compiled truth boost (2.0x for compiled_truth chunks)
     applyCompiledTruthBoost(normed);
 
-    // ── Phase 6: Backlink boost ──────────────────────────────────
+    // ── Phase 5: Backlink boost ──────────────────────────────────
     const backlinks = await fetchBacklinks(
       auth.brainId,
       Array.from(normed.keys())
     );
     applyBacklinkBoost(normed, backlinks);
+
+    // B2 FIX v2: After all boosts, force exact-match pages to
+    // score 100.0 so they outrank everything unconditionally.
+    forceExactMatchTop(normed, q);
 
     // ── Phase 7: Flatten + cap page contributions ────────────────
     // B1 FIX: cap per-page entries at 1 for entity/low-detail queries
