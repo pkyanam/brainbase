@@ -221,24 +221,27 @@ export default function Dashboard() {
   return (
     <div className="h-screen flex flex-col bg-bb-bg-primary overflow-hidden">
       {/* Nav */}
-      <header className="shrink-0 h-12 flex items-center justify-between px-6 border-b border-bb-border">
-        <div className="flex items-center gap-3">
-          <Image src="/brainbaseLogo.png" alt="Brainbase" width={24} height={24} className="rounded" priority />
-          <span className="text-sm font-medium text-bb-text-primary tracking-tight">brainbase</span>
+      <header className="shrink-0 h-12 flex items-center justify-between px-4 md:px-6 border-b border-bb-border">
+        <div className="flex items-center gap-3 min-w-0">
+          <Image src="/brainbaseLogo.png" alt="Brainbase" width={24} height={24} className="rounded shrink-0" priority />
+          <span className="text-sm font-medium text-bb-text-primary tracking-tight truncate">brainbase</span>
         </div>
-        <div className="flex items-center gap-4 text-xs text-bb-text-muted">
-          <a href="/" className="hover:text-bb-text-secondary transition-colors">Home</a>
-          <a href="/docs" className="hover:text-bb-text-secondary transition-colors">Docs</a>
+        <div className="flex items-center gap-2 md:gap-4 text-xs text-bb-text-muted min-w-0">
+          {/* Desktop nav links */}
+          <div className="hidden md:flex items-center gap-4">
+            <a href="/" className="hover:text-bb-text-secondary transition-colors">Home</a>
+            <a href="/docs" className="hover:text-bb-text-secondary transition-colors">Docs</a>
+          </div>
           {isLoaded && user ? (
             <>
-              <a href="/dashboard/settings" className="hover:text-bb-text-secondary transition-colors">Settings</a>
-              <span className="font-mono text-bb-border">|</span>
+              <a href="/settings" className="hidden md:block hover:text-bb-text-secondary transition-colors">Settings</a>
+              <span className="hidden md:block font-mono text-bb-border">|</span>
               {/* Brain Switcher */}
               {brains.length > 1 && (
                 <select
                   value={currentBrainId || ""}
                   onChange={(e) => handleSwitchBrain(e.target.value)}
-                  className="bg-bb-bg-secondary border border-bb-border rounded px-2 py-1 text-xs text-bb-text-secondary outline-none focus:border-bb-border-hover"
+                  className="hidden md:block bg-bb-bg-secondary border border-bb-border rounded px-2 py-1 text-xs text-bb-text-secondary outline-none focus:border-bb-border-hover"
                 >
                   {brains.map((b) => (
                     <option key={b.id} value={b.id}>
@@ -248,30 +251,38 @@ export default function Dashboard() {
                 </select>
               )}
               {/* Live indicator */}
-              <span className={`w-2 h-2 rounded-full ${liveStatus === "live" ? "bg-emerald-400" : liveStatus === "connecting" ? "bg-amber-400 animate-pulse" : "bg-bb-border"}`} title={liveStatus} />
-              <span className="text-bb-text-secondary">{user.primaryEmailAddress?.emailAddress?.split("@")[0] || user.id.slice(0, 6)}</span>
+              <span className={`hidden md:inline-block w-2 h-2 rounded-full ${liveStatus === "live" ? "bg-emerald-400" : liveStatus === "connecting" ? "bg-amber-400 animate-pulse" : "bg-bb-border"}`} title={liveStatus} />
+              <span className="hidden md:inline-block text-bb-text-secondary truncate max-w-[120px]" title={user.primaryEmailAddress?.emailAddress || ""}>{user.primaryEmailAddress?.emailAddress?.split("@")[0] || user.id.slice(0, 6)}</span>
               <SignOutButton>
-                <button className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Sign out</button>
+                <button className="hidden md:block text-bb-text-muted hover:text-bb-text-secondary transition-colors">Sign out</button>
+              </SignOutButton>
+              {/* Mobile: just a user icon / sign out */}
+              <SignOutButton>
+                <button className="md:hidden text-bb-text-muted hover:text-bb-text-secondary transition-colors p-2">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                </button>
               </SignOutButton>
             </>
           ) : (
             <a href="/sign-in" className="text-bb-accent hover:text-bb-accent-dim transition-colors">Sign in</a>
           )}
-          <span className="font-mono text-bb-border">|</span>
-          <span className="font-mono text-bb-accent text-[11px]">MCP: /api/mcp</span>
+          <span className="hidden md:block font-mono text-bb-border">|</span>
+          <span className="hidden md:block font-mono text-bb-accent text-[11px]">MCP: /api/mcp</span>
           {statsError ? (
-            <span className="text-red-400">API offline</span>
+            <span className="hidden md:block text-xs text-red-400">API offline</span>
           ) : (
-            <span className="text-bb-text-muted">{stats?.page_count ?? "—"} pages</span>
+            <span className="hidden md:block text-bb-text-muted">{stats?.page_count ?? "—"} pages</span>
           )}
         </div>
       </header>
 
-      <div className="flex-1 flex min-h-0">
+      <div className="flex-1 flex flex-col md:flex-row min-h-0">
         {/* Main */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0">
           {/* Stats bar */}
-          <div className="shrink-0 px-6 py-4 flex items-center gap-4 border-b border-bb-border overflow-x-auto">
+          <div className="shrink-0 px-4 md:px-6 py-3 md:py-4 grid grid-cols-3 md:flex md:items-center gap-3 md:gap-4 border-b border-bb-border">
             {[
               { label: "Pages", value: stats?.page_count, color: "text-bb-accent" },
               { label: "Links", value: stats?.link_count, color: "text-bb-accent-dim" },
@@ -280,19 +291,19 @@ export default function Dashboard() {
               { label: "Projects", value: pageTypes.project, color: "text-amber-400" },
               { label: "Score", value: stats?.brain_score, suffix: "/100", color: "text-bb-text-secondary" },
             ].map((s) => (
-              <div key={s.label} className="flex items-baseline gap-2 shrink-0">
-                <span className="text-bb-text-muted text-xs uppercase tracking-wide font-medium">{s.label}</span>
-                <span className={`text-lg font-bold tabular-nums ${s.color}`}>
+              <div key={s.label} className="flex items-baseline gap-1.5 md:gap-2 shrink-0">
+                <span className="text-bb-text-muted text-[10px] md:text-xs uppercase tracking-wide font-medium">{s.label}</span>
+                <span className={`text-sm md:text-lg font-bold tabular-nums ${s.color}`}>
                   {s.value ?? "—"}{s.suffix || ""}
                 </span>
               </div>
             ))}
-            {statsError && <span className="text-xs text-red-400">Stats unavailable — API may be down</span>}
+            {statsError && <span className="col-span-3 text-xs text-red-400">Stats unavailable — API may be down</span>}
           </div>
 
           {/* Search */}
-          <div className="shrink-0 px-6 py-3">
-            <div className={`relative max-w-lg ${searchFocused ? "ring-1 ring-bb-border-hover rounded-lg" : ""}`}>
+          <div className="shrink-0 px-4 md:px-6 py-3">
+            <div className={`relative w-full md:max-w-lg ${searchFocused ? "ring-1 ring-bb-border-hover rounded-lg" : ""}`}>
               <input
                 type="text"
                 value={query}
@@ -325,26 +336,45 @@ export default function Dashboard() {
 
           {/* API Key banner */}
           {isLoaded && user && (
-            <div className="shrink-0 px-6 pb-2">
-              <div className="flex items-center gap-3 text-xs">
-                <span className="text-bb-text-muted">API key:</span>
+            <div className="shrink-0 px-4 md:px-6 pb-2">
+              <div className="flex items-center gap-2 md:gap-3 text-xs">
+                <span className="text-bb-text-muted hidden md:inline">API key:</span>
                 {apiKey ? (
                   <>
-                    <code className="text-bb-text-secondary font-mono bg-bb-bg-secondary px-2 py-1 rounded border border-bb-border">{showKey ? apiKey : apiKey.slice(0, 16) + "...···"}</code>
-                    <button onClick={() => setShowKey(!showKey)} className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">
+                    <code className="hidden md:inline text-bb-text-secondary font-mono bg-bb-bg-secondary px-2 py-1 rounded border border-bb-border">{showKey ? apiKey : apiKey.slice(0, 16) + "...···"}</code>
+                    {/* Mobile: tap-to-copy pill */}
+                    <button
+                      onClick={async () => {
+                        try {
+                          const fullKey = apiKey; // We only have prefix in state; ideally fetch full key
+                          await navigator.clipboard.writeText(fullKey);
+                          alert("API key copied to clipboard");
+                        } catch {
+                          alert("Could not copy. Visit Settings to see your full key.");
+                        }
+                      }}
+                      className="md:hidden flex items-center gap-1.5 px-3 py-1.5 bg-bb-bg-secondary border border-bb-border rounded-full text-bb-text-secondary active:bg-bb-bg-tertiary transition-colors"
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                      <span className="font-mono">{apiKey.slice(0, 10)}...</span>
+                      <span className="text-bb-text-muted">Tap to copy</span>
+                    </button>
+                    <button onClick={() => setShowKey(!showKey)} className="hidden md:block text-bb-text-muted hover:text-bb-text-secondary transition-colors">
                       {showKey ? "Hide" : "Show"}
                     </button>
-                    <a href="/dashboard/settings" className="text-bb-accent hover:text-bb-accent-dim transition-colors">Manage keys →</a>
+                    <a href="/settings" className="text-bb-accent hover:text-bb-accent-dim transition-colors">Manage keys →</a>
                   </>
                 ) : (
-                  <a href="/dashboard/settings" className="text-bb-accent hover:text-bb-accent-dim transition-colors">Create API key →</a>
+                  <a href="/settings" className="text-bb-accent hover:text-bb-accent-dim transition-colors">Create API key →</a>
                 )}
               </div>
             </div>
           )}
 
           {/* 3D Graph or Fallback */}
-          <div className="flex-1 min-h-0 px-6 pb-6">
+          <div className="flex-1 min-h-0 px-4 md:px-6 pb-4 md:pb-6">
             <div className="h-full rounded-xl overflow-hidden border border-bb-border bg-bb-bg-secondary">
               {graphError ? (
                 <div className="h-full flex items-center justify-center">
@@ -379,8 +409,8 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Right panels */}
-        <div className="shrink-0 w-72 border-l border-bb-border bg-bb-bg-secondary/90 backdrop-blur flex flex-col">
+        {/* Right panels — hidden on mobile */}
+        <div className="hidden md:flex shrink-0 w-72 border-l border-bb-border bg-bb-bg-secondary/90 backdrop-blur flex-col">
           {/* Activity Feed */}
           <div className="flex-1 min-h-0 flex flex-col border-b border-bb-border">
             <button
@@ -388,12 +418,15 @@ export default function Dashboard() {
               className="shrink-0 px-4 py-3 flex items-center justify-between text-xs font-medium uppercase tracking-wider text-bb-text-muted hover:text-bb-text-secondary transition-colors"
             >
               <span>Activity</span>
-              <span>{activityOpen ? "−" : "+"}</span>
+              <span className="w-5 h-5 flex items-center justify-center">{activityOpen ? "−" : "+"}</span>
             </button>
             {activityOpen && (
               <div className="flex-1 overflow-y-auto px-4 pb-3 space-y-2">
                 {activities.length === 0 ? (
-                  <p className="text-xs text-bb-text-muted">No recent activity.</p>
+                  <div className="py-8 text-center">
+                    <p className="text-xs text-bb-text-muted mb-1">No recent activity yet.</p>
+                    <p className="text-[10px] text-bb-text-muted/60">Pages, links, and timeline entries will appear here.</p>
+                  </div>
                 ) : (
                   activities.map((a) => (
                     <div key={a.id} className="text-xs py-1.5 border-b border-bb-border/50 last:border-0">
@@ -425,7 +458,7 @@ export default function Dashboard() {
               className="shrink-0 px-4 py-3 flex items-center justify-between text-xs font-medium uppercase tracking-wider text-bb-text-muted hover:text-bb-text-secondary transition-colors"
             >
               <span>Members ({members.length + 1})</span>
-              <span>{membersOpen ? "−" : "+"}</span>
+              <span className="w-5 h-5 flex items-center justify-center">{membersOpen ? "−" : "+"}</span>
             </button>
             {membersOpen && (
               <div className="overflow-y-auto px-4 pb-3 space-y-1.5">
@@ -447,7 +480,7 @@ export default function Dashboard() {
                   </div>
                 )}
                 <a
-                  href="/dashboard/settings"
+                  href="/settings"
                   className="block text-center text-[10px] text-bb-accent hover:text-bb-accent-dim pt-1"
                 >
                   Manage sharing →
@@ -458,9 +491,9 @@ export default function Dashboard() {
         </div>
 
         {/* Page Sidebar */}
-        <div className={`shrink-0 border-l border-bb-border bg-bb-bg-secondary/90 backdrop-blur transition-all duration-300 overflow-hidden ${sidebarOpen && selectedPage ? "w-96" : "w-0"}`}>
+        <div className={`shrink-0 border-l border-bb-border bg-bb-bg-secondary/90 backdrop-blur transition-all duration-300 overflow-hidden ${sidebarOpen && selectedPage ? "w-full md:w-96" : "w-0"}`}>
           {sidebarOpen && selectedPage && (
-            <div className="w-96 h-full flex flex-col">
+            <div className="w-full md:w-96 h-full flex flex-col">
               <div className="shrink-0 px-5 py-4 flex items-start justify-between border-b border-bb-border">
                 <div className="min-w-0">
                   <span className="text-[10px] font-mono uppercase tracking-wider text-bb-accent">{selectedPage.type}</span>
