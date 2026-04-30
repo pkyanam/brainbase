@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveApiAuth } from "@/lib/api-auth";
-import { searchBrain, vectorSearchBrain, SearchResult } from "@/lib/supabase/search";
+import { searchBrain, vectorSearchBrain, expandQuery, SearchResult } from "@/lib/supabase/search";
 import { generateEmbeddings } from "@/lib/embeddings";
 import { queryMany } from "@/lib/supabase/client";
 import {
@@ -55,9 +55,13 @@ export async function POST(req: NextRequest) {
   try {
     // ── Phase 1: Parallel keyword + vector search ────────────────
     const keywordLimit = detail === "high" ? limit * 3 : limit * 2;
+
+    // Expand aliases: "YC" → "Y Combinator", "UVA" → "University of Virginia"
+    const expandedQ = expandQuery(q);
+
     const [keywordResults, embedding] = await Promise.all([
       searchBrain(auth.brainId, q, keywordLimit),
-      generateEmbeddings([q]).then((e) => e?.[0] ?? null),
+      generateEmbeddings([expandedQ]).then((e) => e?.[0] ?? null),
     ]);
 
     let vectorResults: SearchResult[] = [];

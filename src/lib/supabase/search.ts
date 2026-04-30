@@ -17,6 +17,12 @@ const MIN_SCORE = 0.35;
 /** If best score is below this, trigger deeper fallbacks */
 const WEAK_THRESHOLD = 0.25;
 
+/** Minimum vector similarity (1 - cosine_distance) for a result to be meaningful.
+ *  Below this threshold, vector results are noise — a generic page weakly matching
+ *  everything. This stops the "agents/arlan magnet" where one dense page becomes
+ *  the zero-signal fallback for every unrelated query. */
+const VECTOR_MIN_SIMILARITY = 0.55;
+
 /** Slugs to exclude from search (meta pages that quote query strings) */
 const EXCLUDED_SLUGS = new Set(["projects/brainbase/search-quality-audit"]);
 
@@ -41,6 +47,31 @@ const SYNONYMS: Record<string, string[]> = {
   coworker: ["coworker", "colleague", "peer", "teammate"],
   colleague: ["coworker", "colleague", "peer", "teammate"],
 };
+
+/** Alias map: short forms → full names. Used for query expansion. */
+const ALIASES: Record<string, string> = {
+  yc: "Y Combinator",
+  uva: "University of Virginia",
+  mit: "Massachusetts Institute of Technology",
+  nyu: "New York University",
+  ucla: "University of California Los Angeles",
+  sf: "San Francisco",
+  nyc: "New York City",
+  la: "Los Angeles",
+};
+
+/**
+ * Expand known aliases in the query.
+ * "YC batch" → "Y Combinator batch", "UVA" → "University of Virginia"
+ */
+export function expandQuery(query: string): string {
+  const words = query.split(/\s+/);
+  const expanded = words.map((w) => {
+    const key = w.toLowerCase().replace(/[^a-z]/g, "");
+    return ALIASES[key] || w;
+  });
+  return expanded.join(" ");
+}
 
 function sanitize(query: string): string {
   return query.replace(/[^\w\s'-]/g, "").trim();
@@ -440,13 +471,15 @@ export async function vectorSearchBrain(
     [brainId, JSON.stringify(queryEmbedding), limit]
   );
 
-  return rows.map((r) => ({
-    slug: r.slug,
-    title: r.title,
-    type: r.type,
-    excerpt: r.chunk_text.slice(0, 200) + (r.chunk_text.length > 200 ? "..." : ""),
-    score: Math.max(0, 1 - r.distance),
-    source: "vector" as const,
-    chunk_source: r.chunk_source || undefined,
-  }));
+  return rows
+    .map((r) => ({
+      slug: r.slug,
+      title: r.title,
+      type: r.type,
+      excerpt: r.chunk_text.slice(0, 200) + (r.chunk_text.length > 200 ? "..." : ""),
+      score: Math.max(0, 1 - r.distance),
+      source: "vector" as const,
+      chunk_source: r.chunk_source || undefined,
+    }))
+    .filter((r) => r.score >= VECTOR_MIN_SIMILARITY);
 }
