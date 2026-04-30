@@ -9,58 +9,67 @@ export default function Nav() {
 
   return (
     <nav className="px-4 sm:px-6 py-4 border-b border-bb-border">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         {/* Logo */}
-        <a href="/" className="flex items-center gap-2.5 shrink-0">
+        <a href="/" className="flex items-center gap-2.5 shrink-0 min-w-0">
           <Image
             src="/brainbaseLogo.png"
-            alt="Brainbase"
+            alt=""
             width={28}
             height={28}
-            className="rounded-md"
+            className="rounded-md shrink-0"
             priority
           />
-          <span className="text-sm font-semibold tracking-tight text-bb-text-primary">brainbase</span>
+          <span className="text-sm font-semibold tracking-tight text-bb-text-primary truncate">
+            brainbase
+          </span>
         </a>
 
-        {/* Desktop links */}
-        <div className="hidden md:flex items-center gap-6 text-sm">
-          <a href="/docs" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Docs</a>
-          <a href="/pricing" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Pricing</a>
-          <a href="/dashboard" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Dashboard</a>
-          <SignedIn>
-            <div className="flex items-center gap-3">
+        {/* Right side: CTA (always visible) + desktop links + hamburger */}
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {/* Desktop text links */}
+          <div className="hidden md:flex items-center gap-6 text-sm mr-2">
+            <a href="/docs" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Docs</a>
+            <a href="/pricing" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Pricing</a>
+            <a href="/dashboard" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Dashboard</a>
+            <SignedIn>
               <a href="/settings" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Settings</a>
+            </SignedIn>
+          </div>
+
+          {/* Auth / CTA — always visible, compact on mobile */}
+          <SignedIn>
+            <div className="hidden md:block">
               <UserButton />
             </div>
           </SignedIn>
           <SignedOut>
-            <a href="/sign-in" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Sign in</a>
             <a
               href="/sign-up"
-              className="px-4 py-2 bg-bb-accent hover:bg-bb-accent-dim text-bb-bg-primary text-sm font-medium rounded-lg transition-colors"
+              className="px-3 py-1.5 sm:px-4 sm:py-2 bg-bb-accent hover:bg-bb-accent-dim text-bb-bg-primary text-xs sm:text-sm font-medium rounded-lg transition-colors whitespace-nowrap"
             >
-              Get started
+              <span className="sm:hidden">Start</span>
+              <span className="hidden sm:inline">Get started</span>
             </a>
           </SignedOut>
-        </div>
 
-        {/* Mobile hamburger */}
-        <button
-          onClick={() => setOpen(!open)}
-          className="md:hidden p-2 text-bb-text-muted hover:text-bb-text-primary transition-colors"
-          aria-label="Toggle menu"
-        >
-          {open ? (
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          ) : (
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          )}
-        </button>
+          {/* Mobile hamburger */}
+          <button
+            onClick={() => setOpen(!open)}
+            className="md:hidden p-2 -mr-2 text-bb-text-muted hover:text-bb-text-primary transition-colors"
+            aria-label="Toggle menu"
+          >
+            {open ? (
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Mobile menu */}
@@ -77,12 +86,6 @@ export default function Nav() {
           </SignedIn>
           <SignedOut>
             <a href="/sign-in" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Sign in</a>
-            <a
-              href="/sign-up"
-              className="px-4 py-2 bg-bb-accent hover:bg-bb-accent-dim text-bb-bg-primary text-sm font-medium rounded-lg transition-colors text-center"
-            >
-              Get started
-            </a>
           </SignedOut>
         </div>
       )}
