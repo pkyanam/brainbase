@@ -107,7 +107,7 @@ async function runEmbedPhase(brainId: string): Promise<DreamPhaseResult> {
       `SELECT COUNT(*) as cnt FROM content_chunks WHERE brain_id = $1 AND embedding IS NULL`,
       [brainId]
     );
-    const staleCount = countRow?.cnt || 0;
+    const staleCount = parseInt(String(countRow?.cnt || 0), 10);
 
     if (staleCount === 0) {
       return {
@@ -285,7 +285,7 @@ async function runEntityTiersPhase(brainId: string): Promise<DreamPhaseResult> {
            SET frontmatter = jsonb_set(
              COALESCE(frontmatter, '{}'),
              '{enrichment_tier}',
-             to_jsonb($3)
+             to_jsonb($3::int)
            ),
            updated_at = NOW()
            WHERE brain_id = $1 AND slug = $2`,

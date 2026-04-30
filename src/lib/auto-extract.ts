@@ -127,12 +127,12 @@ export async function runAutoExtract(
   const dates = extractDates(content);
   for (const d of dates) {
     try {
-      const tlResult = await queryOne<{ id: string }>(
+        const tlResult = await queryOne<{ id: string }>(
         `INSERT INTO timeline_entries (brain_id, page_id, date, summary, detail, written_by)
          VALUES (
            $1,
            (SELECT id FROM pages WHERE brain_id = $1 AND slug = $2),
-           $3, $4, $5,
+           $3, $4, COALESCE($5, ''),
            'system'
          )
          ON CONFLICT DO NOTHING
