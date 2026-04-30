@@ -297,6 +297,21 @@ export async function ensureMinionsSchema(): Promise<void> {
       )
     `);
 
+    // --- Idempotent column additions (for existing tables from earlier deploys) ---
+    await query(`ALTER TABLE minion_jobs DROP CONSTRAINT IF EXISTS chk_attempts_order`);
+    await query(`ALTER TABLE minion_jobs ADD COLUMN IF NOT EXISTS brain_id UUID`);
+    await query(`ALTER TABLE minion_jobs ADD COLUMN IF NOT EXISTS timeout_ms INTEGER`);
+    await query(`ALTER TABLE minion_jobs ADD COLUMN IF NOT EXISTS timeout_at TIMESTAMPTZ`);
+    await query(`ALTER TABLE minion_jobs ADD COLUMN IF NOT EXISTS depth INTEGER NOT NULL DEFAULT 0`);
+    await query(`ALTER TABLE minion_jobs ADD COLUMN IF NOT EXISTS max_children INTEGER`);
+    await query(`ALTER TABLE minion_jobs ADD COLUMN IF NOT EXISTS parent_job_id BIGINT`);
+    await query(`ALTER TABLE minion_jobs ADD COLUMN IF NOT EXISTS on_child_fail TEXT NOT NULL DEFAULT 'fail_parent'`);
+    await query(`ALTER TABLE minion_jobs ADD COLUMN IF NOT EXISTS idempotency_key TEXT`);
+    await query(`ALTER TABLE minion_jobs ADD COLUMN IF NOT EXISTS progress JSONB`);
+    await query(`ALTER TABLE minion_jobs ADD COLUMN IF NOT EXISTS stacktrace TEXT[] DEFAULT '{}'`);
+    await query(`ALTER TABLE minion_jobs ADD COLUMN IF NOT EXISTS max_stalled INTEGER NOT NULL DEFAULT 3`);
+    await query(`ALTER TABLE minion_jobs ADD COLUMN IF NOT EXISTS stalled_counter INTEGER NOT NULL DEFAULT 0`);
+
     // --- Inbox for side-channel messages (child_done notifications etc.) ---
     await query(`
       CREATE TABLE IF NOT EXISTS minion_inbox (

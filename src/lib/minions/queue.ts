@@ -210,7 +210,7 @@ export async function failJob(
       `UPDATE minion_jobs
        SET status = $3,
            error_text = $4,
-           stacktrace = array_append(COALESCE(stacktrace, '{}'), $5),
+           stacktrace = COALESCE(stacktrace, '[]'::jsonb) || to_jsonb($5::text),
            finished_at = NOW(),
            lock_token = NULL,
            lock_until = NULL,
@@ -237,7 +237,7 @@ export async function failJob(
          lock_until = NULL,
          delay_until = $3,
          error_text = $4,
-         stacktrace = array_append(COALESCE(stacktrace, '{}'), $5),
+         stacktrace = COALESCE(stacktrace, '[]'::jsonb) || to_jsonb($5::text),
          updated_at = NOW()
      WHERE id = $1 AND lock_token = $2 AND status = 'active'
      RETURNING *`,
