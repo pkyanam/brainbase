@@ -224,6 +224,7 @@ interface ReasoningStep {
 const DEMO_QUERIES = [
   {
     label: "How do pricing exceptions work?",
+    task: "pricing exceptions",
     steps: [
       { text: "Searching for 'pricing exceptions' in company brain...", highlightNodes: ["pricing-exceptions"], highlightEdges: [], delay: 800 },
       { text: "Found concept: Pricing Exceptions. 8 linked entities.", highlightNodes: ["pricing-exceptions"], highlightEdges: [], delay: 600 },
@@ -232,37 +233,15 @@ const DEMO_QUERIES = [
       { text: "Precedent analysis: 23 decisions under $50K (Sales Manager approves). 8 decisions over $100K (requires Legal + escalation).", highlightNodes: ["deal-value-50k", "deal-value-100k", "sales-manager", "legal-review", "escalation-process"], highlightEdges: ["deal-value-50k-sales-manager", "deal-value-100k-legal-review", "deal-value-100k-escalation-process"], delay: 1200 },
       { text: "Alert: Unwritten rule detected. The $100K threshold was never formally documented but enforced in every precedent.", highlightNodes: ["unwritten-rule", "deal-value-100k"], highlightEdges: ["unwritten-rule-pricing-exceptions", "unwritten-rule-deal-value-100k"], delay: 1000 },
     ],
-    skillsFile: {
-      task: "pricing_exception",
-      confidence: 0.94,
-      sources: ["slack", "linear"],
-      rules: [
-        { condition: "deal_value < 50000", owner: "sales_manager", precedents: 23, confidence: 0.97 },
-        { condition: "deal_value >= 100000", owner: "legal", escalation_required: true, precedents: 8, confidence: 0.91 },
-      ],
-      people: ["Alice Chen (Sales)", "Bob Martinez (Legal)", "Carol White (Finance)"],
-      exceptions: ["Enterprise tier customers may bypass standard process with VP approval"],
-      last_updated: "2026-04-29T18:00:00Z",
-    },
   },
   {
     label: "Who handles refunds?",
+    task: "refund policy",
     steps: [
       { text: "Searching for 'refund' in company brain...", highlightNodes: ["refund-policy"], highlightEdges: [], delay: 800 },
       { text: "Found: Refund Policy. Owned by Finance Team.", highlightNodes: ["refund-policy", "finance-team"], highlightEdges: ["refund-policy-finance-team"], delay: 600 },
       { text: "Carol White (Finance) is the primary contact. Customer Success also handles initial triage.", highlightNodes: ["refund-policy", "carol-white", "customer-success", "finance-team"], highlightEdges: ["refund-policy-carol-white", "refund-policy-customer-success"], delay: 800 },
     ],
-    skillsFile: {
-      task: "refund_request",
-      confidence: 0.89,
-      sources: ["slack", "docs"],
-      rules: [
-        { condition: "standard_refund", owner: "customer_success", precedents: 45, confidence: 0.95 },
-        { condition: "partial_refund_over_10k", owner: "finance_team", precedents: 12, confidence: 0.88 },
-      ],
-      people: ["Carol White (Finance)", "Customer Success Team"],
-      last_updated: "2026-04-29T18:00:00Z",
-    },
   },
 ];
 
@@ -273,6 +252,8 @@ export default function DemoPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [showSkillsFile, setShowSkillsFile] = useState(false);
+  const [skillsFile, setSkillsFile] = useState<unknown | null>(null);
+  const [skillsLoading, setSkillsLoading] = useState(false);
   const [activeNodes, setActiveNodes] = useState<Set<string>>(new Set());
   const [activeEdges, setActiveEdges] = useState<Set<string>>(new Set());
   const [typedText, setTypedText] = useState("");
@@ -291,6 +272,8 @@ export default function DemoPage() {
     setCurrentStep(0);
     setIsRunning(true);
     setShowSkillsFile(false);
+    setSkillsFile(null);
+    setSkillsLoading(false);
     setTypedText("");
     setActiveNodes(new Set());
     setActiveEdges(new Set());
@@ -323,6 +306,21 @@ export default function DemoPage() {
     const t2 = window.setTimeout(() => {
       setIsRunning(false);
       setShowSkillsFile(true);
+      setSkillsLoading(true);
+      // Call real skills endpoint
+      fetch("/api/skills", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task: q.task }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (!data.error) {
+            setSkillsFile(data);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setSkillsLoading(false));
     }, accumulatedDelay + 400);
     timeoutsRef.current.push(t2);
   }, [clearTimeouts]);
@@ -340,7 +338,7 @@ export default function DemoPage() {
         <div className="text-center mb-12">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-bb-bg-secondary border border-bb-border text-xs text-bb-text-muted mb-6">
             <span className="w-1.5 h-1.5 rounded-full bg-bb-accent animate-pulse" />
-            Interactive Demo — Built with GPT-5.5
+            Interactive Demo
           </div>
           <h1 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4">
             See how AI agents{" "}
@@ -454,12 +452,29 @@ export default function DemoPage() {
                   <span className="text-bb-accent text-lg">⚡</span>
                   <h3 className="text-sm font-semibold text-bb-accent">Generated Skills File</h3>
                 </div>
-                <pre className="text-xs text-bb-text-secondary overflow-x-auto leading-relaxed bg-bb-bg-primary p-3 rounded-xl border border-bb-border">
-                  <code>{JSON.stringify(query.skillsFile, null, 2)}</code>
-                </pre>
-                <p className="text-xs text-bb-text-muted mt-2">
-                  This structured output is what your AI agent receives to handle the task correctly.
-                </p>
+                {skillsLoading ? (
+                  <div className="flex items-center gap-2 text-xs text-bb-text-muted py-4">
+                    <span className="w-3 h-3 border-2 border-bb-accent/30 border-t-bb-accent rounded-full animate-spin" />
+                    Generating from your brain...
+                  </div>
+                ) : skillsFile ? (
+                  <>
+                    <pre className="text-xs text-bb-text-secondary overflow-x-auto leading-relaxed bg-bb-bg-primary p-3 rounded-xl border border-bb-border">
+                      <code>{JSON.stringify(skillsFile, null, 2)}</code>
+                    </pre>
+                    <p className="text-xs text-bb-text-muted mt-2">
+                      Live output from your brain via POST /api/skills.
+                    </p>
+                  </>
+                ) : (
+                  <div className="text-xs text-bb-text-muted py-3">
+                    <p className="mb-2">No matching data in your brain yet.</p>
+                    <p>
+                      The graph visualization above is simulated, but the skills file generator is real.
+                      Connect Slack or add pages to your brain to see live output here.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -475,55 +490,33 @@ export default function DemoPage() {
               <div className="w-10 h-10 rounded-lg bg-bb-accent-glow border border-bb-accent/20 flex items-center justify-center mb-4">
                 <span className="text-bb-accent text-sm font-bold">01</span>
               </div>
-              <h3 className="font-semibold mb-2">Ingest with GPT-5.5</h3>
+              <h3 className="font-semibold mb-2">Ingest</h3>
               <p className="text-sm text-bb-text-muted leading-relaxed">
-                Raw Slack threads, Linear tickets, and emails are parsed by GPT-5.5 to extract entities,
-                decisions, and relationships into a typed knowledge graph.
+                Connect Slack (and soon Gmail, Notion, Linear). We extract entities,
+                links, and decisions automatically.
               </p>
             </div>
             <div className="p-6 rounded-2xl bg-bb-bg-secondary border border-bb-border">
               <div className="w-10 h-10 rounded-lg bg-bb-accent-glow border border-bb-accent/20 flex items-center justify-center mb-4">
                 <span className="text-bb-accent text-sm font-bold">02</span>
               </div>
-              <h3 className="font-semibold mb-2">Structure as a graph</h3>
+              <h3 className="font-semibold mb-2">Structure</h3>
               <p className="text-sm text-bb-text-muted leading-relaxed">
-                Pages, links, timeline entries, and embeddings form a queryable graph in Supabase + pgvector.
-                Every piece of knowledge is attributed and confidence-scored.
+                Typed pages, wikilinks, timeline entries, and embeddings build a
+                queryable graph of how your company actually works.
               </p>
             </div>
             <div className="p-6 rounded-2xl bg-bb-bg-secondary border border-bb-border">
               <div className="w-10 h-10 rounded-lg bg-bb-accent-glow border border-bb-accent/20 flex items-center justify-center mb-4">
                 <span className="text-bb-accent text-sm font-bold">03</span>
               </div>
-              <h3 className="font-semibold mb-2">Export skills files</h3>
+              <h3 className="font-semibold mb-2">Execute</h3>
               <p className="text-sm text-bb-text-muted leading-relaxed">
-                GPT-5.5 traverses the graph to generate task-scoped skills files — structured context
-                with rules, precedents, people, and exceptions for any AI agent to execute on.
+                Export skills files scoped to any task. Your agents get attributed,
+                confidence-scored context and handle work correctly the first time.
               </p>
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* Tech Stack / Built With */}
-      <section className="py-20">
-        <div className="max-w-3xl mx-auto px-6 text-center">
-          <h2 className="text-2xl font-bold mb-6">Built with</h2>
-          <div className="flex flex-wrap justify-center gap-3">
-            {["GPT-5.5", "Next.js 15", "React Three Fiber", "TypeScript", "Supabase", "pgvector", "Tailwind CSS"].map((tech) => (
-              <span
-                key={tech}
-                className="px-4 py-2 rounded-full bg-bb-bg-secondary border border-bb-border text-sm text-bb-text-secondary"
-              >
-                {tech}
-              </span>
-            ))}
-          </div>
-          <p className="text-sm text-bb-text-muted mt-8 max-w-xl mx-auto">
-            This demo runs entirely in the browser. The 3D visualization uses React Three Fiber with
-            custom force-directed layout. The agent reasoning is powered by GPT-5.5 traversing a
-            Supabase-backed knowledge graph with vector search.
-          </p>
         </div>
       </section>
 

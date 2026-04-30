@@ -91,7 +91,7 @@ export default function Home() {
               </div>
               <h3 className="font-semibold mb-2">Ingest</h3>
               <p className="text-sm text-bb-text-muted leading-relaxed">
-                Connect Slack, Gmail, Notion, Linear, GitHub. We extract entities,
+                Connect Slack (and soon Gmail, Notion, Linear). We extract entities,
                 links, and decisions automatically.
               </p>
             </div>
