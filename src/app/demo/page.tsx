@@ -307,12 +307,8 @@ export default function DemoPage() {
       setIsRunning(false);
       setShowSkillsFile(true);
       setSkillsLoading(true);
-      // Call real skills endpoint
-      fetch("/api/skills", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task: q.task }),
-      })
+      // Call public demo endpoint — no auth needed
+      fetch(`/api/skills/demo?task=${encodeURIComponent(q.task)}`)
         .then((r) => r.json())
         .then((data) => {
           if (!data.error) {
@@ -463,16 +459,12 @@ export default function DemoPage() {
                       <code>{JSON.stringify(skillsFile, null, 2)}</code>
                     </pre>
                     <p className="text-xs text-bb-text-muted mt-2">
-                      Live output from your brain via POST /api/skills.
+                      Live output from POST /api/skills against a seeded demo brain.
                     </p>
                   </>
                 ) : (
                   <div className="text-xs text-bb-text-muted py-3">
-                    <p className="mb-2">No matching data in your brain yet.</p>
-                    <p>
-                      The graph visualization above is simulated, but the skills file generator is real.
-                      Connect Slack or add pages to your brain to see live output here.
-                    </p>
+                    <p>Task not recognized in demo dataset. Try "pricing exceptions" or "refund policy".</p>
                   </div>
                 )}
               </div>
