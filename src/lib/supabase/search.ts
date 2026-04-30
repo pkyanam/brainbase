@@ -6,7 +6,7 @@ export interface SearchResult {
   type: string;
   excerpt: string;
   score: number;
-  source: "fts_and" | "fts_or" | "fts_chunk" | "timeline" | "trgm_title" | "trgm_content" | "keyword";
+  source: "fts_and" | "fts_or" | "fts_chunk" | "timeline" | "trgm_title" | "trgm_content" | "keyword" | "vector";
 }
 
 /** Minimum score to include in results */
@@ -412,4 +412,36 @@ export async function searchBrain(
   }
 
   return output.slice(0, limit);
+}
+
+export async function vectorSearchBrain(
+  brainId: string,
+  queryEmbedding: number[],
+  limit = 10
+): Promise<SearchResult[]> {
+  const rows = await queryMany<{
+    slug: string;
+    title: string;
+    type: string;
+    chunk_text: string;
+    distance: number;
+  }>(
+    `SELECT p.slug, p.title, p.type, c.chunk_text,
+            c.embedding <=> $2::vector as distance
+     FROM content_chunks c
+     JOIN pages p ON p.id = c.page_id
+     WHERE c.brain_id = $1
+     ORDER BY c.embedding <=> $2::vector
+     LIMIT $3`,
+    [brainId, JSON.stringify(queryEmbedding), limit]
+  );
+
+  return rows.map((r) => ({
+    slug: r.slug,
+    title: r.title,
+    type: r.type,
+    excerpt: r.chunk_text.slice(0, 200) + (r.chunk_text.length > 200 ? "..." : ""),
+    score: Math.max(0, 1 - r.distance),
+    source: "vector" as const,
+  }));
 }

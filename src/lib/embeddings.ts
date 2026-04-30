@@ -117,13 +117,13 @@ export async function indexPageEmbeddings(
 
     if (embedding) {
       await query(
-        `INSERT INTO content_chunks (brain_id, page_id, chunk_index, content, embedding)
+        `INSERT INTO content_chunks (brain_id, page_id, chunk_index, chunk_text, embedding)
          VALUES ($1, $2, $3, $4, $5::vector)`,
         [brainId, pageId, chunk.index, chunk.content, JSON.stringify(embedding)]
       );
     } else {
       await query(
-        `INSERT INTO content_chunks (brain_id, page_id, chunk_index, content)
+        `INSERT INTO content_chunks (brain_id, page_id, chunk_index, chunk_text)
          VALUES ($1, $2, $3, $4)`,
         [brainId, pageId, chunk.index, chunk.content]
       );
@@ -138,8 +138,8 @@ export async function indexPageEmbeddings(
  * Returns number of chunks embedded.
  */
 export async function embedStaleChunks(brainId: string, limit = 50): Promise<number> {
-  const { rows } = await query<{ id: number; content: string; page_id: number }>(
-    `SELECT id, content, page_id
+  const { rows } = await query<{ id: number; chunk_text: string; page_id: number }>(
+    `SELECT id, chunk_text, page_id
      FROM content_chunks
      WHERE brain_id = $1 AND embedding IS NULL
      ORDER BY id
@@ -148,7 +148,7 @@ export async function embedStaleChunks(brainId: string, limit = 50): Promise<num
   );
   if (rows.length === 0) return 0;
 
-  const embeddings = await generateEmbeddings(rows.map(r => r.content));
+  const embeddings = await generateEmbeddings(rows.map(r => r.chunk_text));
   if (!embeddings) return 0;
 
   let embedded = 0;
