@@ -6,17 +6,42 @@
  * Why: Currently ZERO tables have RLS enabled. Any direct DB access
  * (leaked key, backup script, SQL injection) bypasses ALL tenant isolation.
  *
- * What this does:
- * 1. Enables RLS on every tenant-scoped table
- * 2. Creates tenant-based policies using session variables
- * 3. Adds missing indexes for RLS performance
- * 4. Logs results
- *
  * Safety: The Next.js app connects as the table owner (postgres role),
  * which BYPASSES RLS by default. This does NOT affect the app at all.
  * It only blocks non-owner connections (e.g., Supabase anon key).
  */
-import { query } from "../src/lib/supabase/client";
+import { Pool } from "pg";
+
+const DB_URL = process.env.SUPABASE_DATABASE_URL;
+
+if (!DB_URL) {
+  console.error("[security] SUPABASE_DATABASE_URL not set. Run:");
+  console.error("  export SUPABASE_DATABASE_URL=$(grep '^SUPABASE_DATABASE_URL=' .env.local | cut -d'=' -f2-)");
+  process.exit(1);
+}
+
+// Dedicated pool with longer timeout for remote Supabase
+const pool = new Pool({
+  connectionString: DB_URL,
+  max: 2,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 30000, // 30s instead of 5s
+  ssl: { rejectUnauthorized: false },
+});
+
+async function query(text: string, params?: unknown[]) {
+  const client = await pool.connect();
+  try {
+    return await client.query(text, params);
+  } finally {
+    client.release();
+  }
+}
+
+async function queryOne<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T | null> {
+  const result = await query(text, params);
+  return (result.rows[0] as T) || null;
+}
 
 const TABLES = [
   "brains",
@@ -231,10 +256,23 @@ async function main() {
   console.log("  Brainbase Security Migration — Enable RLS");
   console.log("=".repeat(60));
 
+  // Test connection first
+  console.log("\n[security] Testing DB connection...");
+  try {
+    const test = await queryOne("SELECT NOW() as now");
+    console.log(`  ✅ Connected. Server time: ${test?.now}`);
+  } catch (e: any) {
+    console.error(`  ❌ Connection failed: ${e.message}`);
+    console.error("\nMake sure SUPABASE_DATABASE_URL is exported correctly.");
+    process.exit(1);
+  }
+
   await enableRLS();
   await createPolicies();
   await addIndexes();
   await logMigration();
+
+  await pool.end();
 
   console.log("\n" + "=".repeat(60));
   console.log("  ✅ RLS enabled on all tables.");
@@ -245,5 +283,6 @@ async function main() {
 
 main().catch((err) => {
   console.error("[security] Fatal error:", err);
+  pool.end();
   process.exit(1);
 });

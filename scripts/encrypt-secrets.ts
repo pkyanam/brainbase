@@ -14,13 +14,44 @@
  * NEVER commit it. Rotate it if leaked.
  */
 import crypto from "crypto";
-import { query, queryOne } from "../src/lib/supabase/client";
+import { Pool } from "pg";
 
 const ENCRYPTION_KEY = process.env.BRAINBASE_ENCRYPTION_KEY;
+const DB_URL = process.env.SUPABASE_DATABASE_URL;
+
+if (!DB_URL) {
+  console.error("[encrypt] SUPABASE_DATABASE_URL not set. Run:");
+  console.error("  export SUPABASE_DATABASE_URL=$(grep '^SUPABASE_DATABASE_URL=' .env.local | cut -d'=' -f2-)");
+  process.exit(1);
+}
 
 if (!ENCRYPTION_KEY || ENCRYPTION_KEY.length !== 32) {
   console.error("[encrypt] Set BRAINBASE_ENCRYPTION_KEY to exactly 32 characters");
+  console.error("  Generate one: node -e \"console.log(require('crypto').randomBytes(16).toString('hex'))\"");
   process.exit(1);
+}
+
+// Dedicated pool with longer timeout for remote Supabase
+const pool = new Pool({
+  connectionString: DB_URL,
+  max: 2,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 30000, // 30s instead of 5s
+  ssl: { rejectUnauthorized: false },
+});
+
+async function query(text: string, params?: unknown[]) {
+  const client = await pool.connect();
+  try {
+    return await client.query(text, params);
+  } finally {
+    client.release();
+  }
+}
+
+async function queryOne<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T | null> {
+  const result = await query(text, params);
+  return (result.rows[0] as T) || null;
 }
 
 const ALGORITHM = "aes-256-gcm";
@@ -46,26 +77,28 @@ async function encryptSupabaseKeys() {
   console.log("[encrypt] Checking brains.supabase_key...\n");
 
   // Add encrypted column if not exists
-  const colCheck = await queryOne(`
-    SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'brains' AND column_name = 'encrypted_supabase_key'
-  `);
+  const colCheck = await queryOne(
+    `SELECT 1 FROM information_schema.columns
+     WHERE table_name = 'brains' AND column_name = 'encrypted_supabase_key'`
+  );
 
   if (!colCheck) {
     await query(`
       ALTER TABLE brains
-      ADD COLUMN encrypted_supabase_key TEXT,
-      ADD COLUMN encrypted_supabase_key_iv TEXT,
-      ADD COLUMN encrypted_supabase_key_tag TEXT
+      ADD COLUMN IF NOT EXISTS encrypted_supabase_key TEXT,
+      ADD COLUMN IF NOT EXISTS encrypted_supabase_key_iv TEXT,
+      ADD COLUMN IF NOT EXISTS encrypted_supabase_key_tag TEXT
     `);
     console.log("  ✅ Added encrypted_supabase_key columns to brains");
+  } else {
+    console.log("  ✅ encrypted_supabase_key columns already exist");
   }
 
   // Encrypt existing keys
-  const rows = await query(`
-    SELECT id, supabase_key FROM brains
-    WHERE supabase_key IS NOT NULL AND encrypted_supabase_key IS NULL
-  `);
+  const rows = await query(
+    `SELECT id, supabase_key FROM brains
+     WHERE supabase_key IS NOT NULL AND encrypted_supabase_key IS NULL`
+  );
 
   console.log(`  → Found ${rows.rowCount} brains with plain-text keys to encrypt`);
 
@@ -93,21 +126,23 @@ async function hashInviteTokens() {
   console.log("\n[encrypt] Checking brain_invites.token...\n");
 
   // Add hash column if not exists
-  const colCheck = await queryOne(`
-    SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'brain_invites' AND column_name = 'token_hash'
-  `);
+  const colCheck = await queryOne(
+    `SELECT 1 FROM information_schema.columns
+     WHERE table_name = 'brain_invites' AND column_name = 'token_hash'`
+  );
 
   if (!colCheck) {
     await query(`ALTER TABLE brain_invites ADD COLUMN token_hash TEXT`);
     console.log("  ✅ Added token_hash column to brain_invites");
+  } else {
+    console.log("  ✅ token_hash column already exists");
   }
 
   // Hash existing tokens
-  const rows = await query(`
-    SELECT id, token FROM brain_invites
-    WHERE token IS NOT NULL AND token_hash IS NULL
-  `);
+  const rows = await query(
+    `SELECT id, token FROM brain_invites
+     WHERE token IS NOT NULL AND token_hash IS NULL`
+  );
 
   console.log(`  → Found ${rows.rowCount} invites with plain-text tokens to hash`);
 
@@ -131,8 +166,22 @@ async function main() {
   console.log("  Brainbase Secret Encryption Migration");
   console.log("=".repeat(60));
 
+  // Test connection first
+  console.log("\n[encrypt] Testing DB connection...");
+  try {
+    const test = await queryOne("SELECT NOW() as now");
+    console.log(`  ✅ Connected. Server time: ${test?.now}`);
+  } catch (e: any) {
+    console.error(`  ❌ Connection failed: ${e.message}`);
+    console.error("\nMake sure SUPABASE_DATABASE_URL is exported correctly.");
+    pool.end();
+    process.exit(1);
+  }
+
   await encryptSupabaseKeys();
   await hashInviteTokens();
+
+  await pool.end();
 
   console.log("\n" + "=".repeat(60));
   console.log("  ✅ Migration complete.");
@@ -143,5 +192,6 @@ async function main() {
 
 main().catch((err) => {
   console.error("[encrypt] Fatal error:", err);
+  pool.end();
   process.exit(1);
 });
