@@ -7,12 +7,10 @@ import {
   rrfFusion,
   dedupBySlug,
   pinExactMatches,
-  forceExactMatchTop,
+  forceExactMatchTopFinal,
   normalizeScores,
   applyCompiledTruthBoost,
   applyBacklinkBoost,
-  capPageContributions,
-  dedupResults,
   classifyIntent,
   detailForIntent,
   QueryIntent,
@@ -87,7 +85,7 @@ export async function POST(req: NextRequest) {
     // ── Phase 3: Normalize scores 0-1 ────────────────────────────
     const normed = normalizeScores(fused);
 
-    // ── Phase 4: Compiled truth boost (2.0x for compiled_truth chunks)
+    // ── Phase 4: Compiled truth boost (1.15x, subtle — avoid artificial ceiling)
     applyCompiledTruthBoost(normed);
 
     // ── Phase 5: Backlink boost ──────────────────────────────────
@@ -97,34 +95,27 @@ export async function POST(req: NextRequest) {
     );
     applyBacklinkBoost(normed, backlinks);
 
-    // B2 FIX v2: After all boosts, force exact-match pages to
-    // score 100.0 so they outrank everything unconditionally.
-    forceExactMatchTop(normed, q);
-
-    // ── Phase 7: Flatten + cap page contributions ────────────────
-    // B1 FIX: cap per-page entries at 1 for entity/low-detail queries
-    const maxPerSlug = detail === "high" ? 2 : 1;
+    // ── Phase 6: Flatten → FINAL dedup by slug ──────────────────
+    // B1 FIX v3: Single dedupBySlug at the end. No 4-layer dedup.
+    // One entry per slug, max score wins. Guarantees zero duplicates.
     const allResults = flattenResults(normed);
-    const capped = capPageContributions(allResults, maxPerSlug);
+    const finalResults = dedupBySlug(allResults);
 
-    // ── Phase 8: 4-layer dedup ───────────────────────────────────
-    const deduped = dedupResults(capped, {
-      maxPerPage: detail === "high" ? 3 : 2,
-      maxTypeFraction: 0.6,
-    });
+    // B2 FIX v2: Force exact-match pages to score 100.0 (AFTER dedup)
+    // This ensures exact matches are ALWAYS #1, period.
+    forceExactMatchTopFinal(finalResults, q);
 
-    // ── Phase 9: Sort by final score ─────────────────────────────
-    deduped.sort((a, b) => b.score - a.score);
-    const final = deduped.slice(0, limit).map((r) => ({
+    // ── Phase 7: Sort + slice ────────────────────────────────────
+    finalResults.sort((a, b) => b.score - a.score);
+    const final = finalResults.slice(0, limit).map((r) => ({
       slug: r.slug,
       title: r.title,
       type: r.type,
       excerpt: r.excerpt,
       score: Math.round(r.score * 100) / 100,
       source: r.source,
-      // B4 FIX: expose chunk_source and boost_factors in response
-      chunk_source: r.chunk_source || null,
-      boost_factors: r.boost_factors || null,
+      chunk_source: (r as any).chunk_source || null,
+      boost_factors: (r as any).boost_factors || null,
     }));
 
     return NextResponse.json({

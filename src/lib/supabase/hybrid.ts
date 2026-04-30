@@ -47,8 +47,8 @@ export function rrfFusion(
  * Before RRF, collapse to one entry per slug keeping the max score.
  * This prevents the same page from flooding RRF with duplicate entries.
  */
-export function dedupBySlug(list: SearchResult[]): SearchResult[] {
-  const seen = new Map<string, SearchResult>();
+export function dedupBySlug<T extends { slug: string; score: number }>(list: T[]): T[] {
+  const seen = new Map<string, T>();
   for (const r of list) {
     const existing = seen.get(r.slug);
     if (!existing || r.score > existing.score) {
@@ -159,11 +159,37 @@ export function forceExactMatchTop(
   }
 }
 
+/**
+ * Array-based version of forceExactMatchTop — works on flat result arrays
+ * after flattenResults + dedupBySlug. Sets exact-match scores to 100.0.
+ */
+export function forceExactMatchTopFinal(
+  results: Array<{ slug: string; score: number; title: string; boost_factors?: BoostFactors }>,
+  query: string
+): void {
+  const qLower = query.toLowerCase().trim();
+
+  for (const r of results) {
+    const titleLower = (r.title || "").toLowerCase();
+    const slugLower = (r.slug || "").toLowerCase();
+    const slugBase = slugLower.split("/").pop() || slugLower;
+    const slugNormalized = slugBase.replace(/[-_]/g, " ");
+
+    if (titleLower === qLower || slugNormalized === qLower || slugLower === qLower) {
+      r.score = EXACT_PIN_SCORE;
+      if (!r.boost_factors) r.boost_factors = { total: 1.0 };
+      r.boost_factors.exact_match = EXACT_PIN_SCORE;
+      r.boost_factors.total = EXACT_PIN_SCORE;
+    }
+  }
+}
+
 // ─── Compiled Truth Boost ─────────────────────────────────────────
-const COMPILED_TRUTH_BOOST = 2.0;
+const COMPILED_TRUTH_BOOST = 1.15;
 
 /**
- * Apply compiled_truth boost (2.0x) to results whose best chunk is from compiled_truth.
+ * Apply compiled_truth boost (1.15x) to results whose best chunk is from compiled_truth.
+ * Subtle boost — does NOT create an artificial score ceiling like 2.0x did.
  */
 export function applyCompiledTruthBoost(
   fused: Map<string, { score: number; results: SearchResult[]; boost_factors?: BoostFactors }>
