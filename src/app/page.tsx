@@ -10,7 +10,7 @@ export default function Home() {
       <section className="max-w-4xl mx-auto px-6 pt-24 pb-16 text-center">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-bb-bg-secondary border border-bb-border text-xs text-bb-text-muted mb-8">
           <span className="w-1.5 h-1.5 rounded-full bg-bb-accent animate-pulse" />
-          YC W25 · Now accepting design partners
+          Now accepting early access partners
         </div>
         <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
           Your company&apos;s brain,{" "}
@@ -25,10 +25,10 @@ export default function Home() {
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <a
-            href="/sign-up"
+            href="/apply"
             className="w-full sm:w-auto px-6 py-3 bg-bb-accent hover:bg-bb-accent-dim text-bb-bg-primary font-medium rounded-xl transition-colors text-center"
           >
-            Become a design partner
+            Apply for early access
           </a>
           <a
             href="/docs"
@@ -158,23 +158,23 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Social proof / design partners */}
+      {/* Social proof / early access */}
       <section className="py-24">
         <div className="max-w-4xl mx-auto px-6 text-center">
           <h2 className="text-2xl font-bold mb-4">Built for AI-native teams</h2>
           <p className="text-bb-text-secondary mb-12 max-w-xl mx-auto">
-            We&apos;re working with a small group of design partners to refine the
+            We&apos;re working with a small group of early partners to refine the
             company brain primitive. If your team runs on AI agents and messy Slack,
             we should talk.
           </p>
           <a
-            href="/sign-up"
+            href="/apply"
             className="inline-block px-8 py-4 bg-bb-accent hover:bg-bb-accent-dim text-bb-bg-primary font-medium rounded-xl transition-colors"
           >
-            Apply for design partner program
+            Apply for early access
           </a>
           <p className="text-xs text-bb-text-muted mt-4">
-            Limited to 5 companies. YC W25 batch priority.
+            Limited to 10 teams. We review every application personally.
           </p>
         </div>
       </section>

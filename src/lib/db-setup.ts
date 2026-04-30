@@ -203,6 +203,20 @@ export async function ensureCollaborationSchema(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_activities ON activities(brain_id, created_at DESC)
     `);
 
+    // Design partner applications
+    await query(`
+      CREATE TABLE IF NOT EXISTS applications (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name TEXT NOT NULL,
+        email TEXT NOT NULL,
+        company TEXT,
+        team_size TEXT,
+        message TEXT,
+        source TEXT DEFAULT 'landing_page',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
     console.log("[brainbase] Collaboration schema ensured");
   } catch (err) {
     console.error("[brainbase] Collaboration schema error:", err);
