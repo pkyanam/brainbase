@@ -5,13 +5,17 @@ import { generateEmbeddings } from "@/lib/embeddings";
 import { queryMany } from "@/lib/supabase/client";
 import {
   rrfFusion,
+  dedupBySlug,
   normalizeScores,
+  applyExactMatchBoost,
   applyCompiledTruthBoost,
   applyBacklinkBoost,
+  capPageContributions,
   dedupResults,
   classifyIntent,
   detailForIntent,
   QueryIntent,
+  BoostFactors,
 } from "@/lib/supabase/hybrid";
 
 export async function POST(req: NextRequest) {
@@ -32,8 +36,15 @@ export async function POST(req: NextRequest) {
   }
 
   const q = body.q;
-  if (!q || typeof q !== "string") {
-    return NextResponse.json({ error: "Missing 'q' field" }, { status: 400 });
+  // B5 FIX: empty q returns 200 with empty results, not 400
+  if (!q || typeof q !== "string" || q.trim().length === 0) {
+    return NextResponse.json({
+      q: q || "",
+      limit: body.limit || 20,
+      intent: null,
+      detail: null,
+      results: [],
+    });
   }
 
   const limit = Math.min(Number(body.limit) || 20, 100);
@@ -59,30 +70,43 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // B1 FIX: Dedup vector results by slug BEFORE RRF.
+    // Vector search returns one row per chunk — multiple rows per page.
+    // Collapse to one per slug (max score) so RRF doesn't get flooded.
+    const dedupedVector = dedupBySlug(vectorResults);
+
     // ── Phase 2: RRF Fusion ─────────────────────────────────────
-    const fused = rrfFusion([keywordResults, vectorResults]);
+    const fused = rrfFusion([keywordResults, dedupedVector]);
 
     // ── Phase 3: Normalize scores 0-1 ────────────────────────────
     const normed = normalizeScores(fused);
 
-    // ── Phase 4: Compiled truth boost (2.0x for compiled_truth chunks)
+    // ── Phase 4: Exact match boost (B2 FIX — 3-5x for exact title/slug) ──
+    applyExactMatchBoost(normed, q);
+
+    // ── Phase 5: Compiled truth boost (2.0x for compiled_truth chunks)
     applyCompiledTruthBoost(normed);
 
-    // ── Phase 5: Backlink boost ──────────────────────────────────
+    // ── Phase 6: Backlink boost ──────────────────────────────────
     const backlinks = await fetchBacklinks(
       auth.brainId,
       Array.from(normed.keys())
     );
     applyBacklinkBoost(normed, backlinks);
 
-    // ── Phase 6: 4-layer dedup ───────────────────────────────────
+    // ── Phase 7: Flatten + cap page contributions ────────────────
+    // B1 FIX: cap per-page entries at 1 for entity/low-detail queries
+    const maxPerSlug = detail === "high" ? 2 : 1;
     const allResults = flattenResults(normed);
-    const deduped = dedupResults(allResults, {
+    const capped = capPageContributions(allResults, maxPerSlug);
+
+    // ── Phase 8: 4-layer dedup ───────────────────────────────────
+    const deduped = dedupResults(capped, {
       maxPerPage: detail === "high" ? 3 : 2,
       maxTypeFraction: 0.6,
     });
 
-    // ── Phase 7: Sort by final score ─────────────────────────────
+    // ── Phase 9: Sort by final score ─────────────────────────────
     deduped.sort((a, b) => b.score - a.score);
     const final = deduped.slice(0, limit).map((r) => ({
       slug: r.slug,
@@ -91,6 +115,9 @@ export async function POST(req: NextRequest) {
       excerpt: r.excerpt,
       score: Math.round(r.score * 100) / 100,
       source: r.source,
+      // B4 FIX: expose chunk_source and boost_factors in response
+      chunk_source: r.chunk_source || null,
+      boost_factors: r.boost_factors || null,
     }));
 
     return NextResponse.json({
@@ -106,11 +133,30 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/** Flatten fused map into result array for dedup. */
+/**
+ * Flatten fused map into result array for dedup.
+ * B4 FIX: carries boost_factors through from fused map entries.
+ */
 function flattenResults(
-  fused: Map<string, { score: number; results: SearchResult[] }>
-): { slug: string; score: number; excerpt: string; type: string; source: string; title: string; chunk_source?: string }[] {
-  const output: {
+  fused: Map<
+    string,
+    {
+      score: number;
+      results: SearchResult[];
+      boost_factors?: BoostFactors;
+    }
+  >
+): Array<{
+  slug: string;
+  score: number;
+  excerpt: string;
+  type: string;
+  source: string;
+  title: string;
+  chunk_source?: string;
+  boost_factors?: BoostFactors;
+}> {
+  const output: Array<{
     slug: string;
     score: number;
     excerpt: string;
@@ -118,18 +164,20 @@ function flattenResults(
     source: string;
     title: string;
     chunk_source?: string;
-  }[] = [];
+    boost_factors?: BoostFactors;
+  }> = [];
 
   for (const [slug, entry] of fused) {
     for (const r of entry.results) {
       output.push({
         slug,
-        score: entry.score, // fused score, not individual chunk score
+        score: entry.score,
         excerpt: r.excerpt,
         type: r.type,
         source: r.source,
         title: r.title,
         chunk_source: (r as any).chunk_source,
+        boost_factors: entry.boost_factors,
       });
     }
   }

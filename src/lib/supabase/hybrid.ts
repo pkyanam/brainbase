@@ -1,10 +1,15 @@
 /**
- * Hybrid Search Engine — Phase 1 Search Quality for Brainbase.
+ * Hybrid Search Engine — Phase 1.1 Search Quality Fixes for Brainbase.
  *
- * Pipeline: Keyword + Vector → RRF Fusion → Normalize →
- *   Compiled Truth Boost → Backlink Boost → 4-Layer Dedup → Sort
+ * Pipeline: Keyword + Vector → Vector Slug Dedup → RRF Fusion → Normalize →
+ *   Exact Match Boost → Compiled Truth Boost → Backlink Boost →
+ *   Single-Page Cap → 4-Layer Dedup → Sort
  *
- * Architecture mirrors GBrain's hybrid.ts, adapted for multi-tenant Brainbase.
+ * Fixes from Arlan's stress test (2026-04-30):
+ *   B1: Dedup vector results by slug BEFORE RRF (fixes duplicate slugs)
+ *   B2: Exact-title/slug match boost (3-5x, fixes buried entity pages)
+ *   B3: Capitalized proper noun → entity intent
+ *   B4: chunk_source + boost_factors exposed in response
  */
 
 import { SearchResult } from "./search";
@@ -37,6 +42,23 @@ export function rrfFusion(
 }
 
 /**
+ * B1 FIX: Dedup a ranked list by slug BEFORE RRF.
+ * Vector search returns one row per CHUNK — multiple rows per page.
+ * Before RRF, collapse to one entry per slug keeping the max score.
+ * This prevents the same page from flooding RRF with duplicate entries.
+ */
+export function dedupBySlug(list: SearchResult[]): SearchResult[] {
+  const seen = new Map<string, SearchResult>();
+  for (const r of list) {
+    const existing = seen.get(r.slug);
+    if (!existing || r.score > existing.score) {
+      seen.set(r.slug, r);
+    }
+  }
+  return Array.from(seen.values()).sort((a, b) => b.score - a.score);
+}
+
+/**
  * Normalize RRF scores to 0-1 range.
  */
 export function normalizeScores(
@@ -51,9 +73,69 @@ export function normalizeScores(
   const normed = new Map(fused);
   for (const [slug, entry] of normed) {
     entry.score = entry.score / maxScore;
-    normed.set(slug, entry);
   }
   return normed;
+}
+
+// ─── Boost Factor Tracking ───────────────────────────────────────
+
+export interface BoostFactors {
+  exact_match?: number;
+  compiled_truth?: number;
+  backlinks?: number;
+  /** Total multiplier applied */
+  total: number;
+}
+
+/** Attach boost_factors to a search result entry */
+export type BoostedResult = SearchResult & { boost_factors?: BoostFactors };
+
+// ─── B2 FIX: Exact Match Boost ────────────────────────────────────
+const EXACT_TITLE_BOOST = 5.0;
+const EXACT_SLUG_BOOST = 4.0;
+const PREFIX_MATCH_BOOST = 2.5;
+
+/**
+ * B2 FIX: Apply exact-match boost.
+ * If the query exactly matches a page title → 5x
+ * If the query exactly matches a page slug (after normalization) → 4x
+ * If title starts with the query → 2.5x
+ */
+export function applyExactMatchBoost(
+  fused: Map<string, { score: number; results: SearchResult[]; boost_factors?: BoostFactors }>,
+  query: string
+): void {
+  const qLower = query.toLowerCase().trim();
+
+  for (const [slug, entry] of fused) {
+    const titleLower = (entry.results[0]?.title || "").toLowerCase();
+    const slugLower = slug.toLowerCase();
+    const slugBase = slugLower.split("/").pop() || slugLower;
+
+    let boost = 1.0;
+    let reason = "";
+
+    // Normalize slug: replace hyphens/underscores with spaces
+    const slugNormalized = slugBase.replace(/[-_]/g, " ");
+
+    if (titleLower === qLower) {
+      boost = EXACT_TITLE_BOOST;
+      reason = "exact_title";
+    } else if (slugNormalized === qLower || slugLower === qLower) {
+      boost = EXACT_SLUG_BOOST;
+      reason = "exact_slug";
+    } else if (titleLower.startsWith(qLower)) {
+      boost = PREFIX_MATCH_BOOST;
+      reason = "prefix_match";
+    }
+
+    if (boost > 1.0) {
+      entry.score *= boost;
+      if (!entry.boost_factors) entry.boost_factors = { total: 1.0 };
+      (entry.boost_factors as any)[reason] = boost;
+      entry.boost_factors.total = (entry.boost_factors.total || 1) * boost;
+    }
+  }
 }
 
 // ─── Compiled Truth Boost ─────────────────────────────────────────
@@ -61,18 +143,19 @@ const COMPILED_TRUTH_BOOST = 2.0;
 
 /**
  * Apply compiled_truth boost (2.0x) to results whose best chunk is from compiled_truth.
- * Page-level results (undefined chunk_source) are implicitly compiled truth
- * since they come from the page's compiled_truth field via FTS.
  */
 export function applyCompiledTruthBoost(
-  fused: Map<string, { score: number; results: SearchResult[] }>
+  fused: Map<string, { score: number; results: SearchResult[]; boost_factors?: BoostFactors }>
 ): void {
-  for (const [slug, entry] of fused) {
+  for (const [, entry] of fused) {
     const hasCompiledTruth = entry.results.some(
       (r) => (r as any).chunk_source === "compiled_truth" || (r as any).chunk_source === undefined
     );
     if (hasCompiledTruth) {
       entry.score *= COMPILED_TRUTH_BOOST;
+      if (!entry.boost_factors) entry.boost_factors = { total: 1.0 };
+      entry.boost_factors.compiled_truth = COMPILED_TRUTH_BOOST;
+      entry.boost_factors.total = (entry.boost_factors.total || 1) * COMPILED_TRUTH_BOOST;
     }
   }
 }
@@ -80,30 +163,52 @@ export function applyCompiledTruthBoost(
 // ─── Backlink Boost ───────────────────────────────────────────────
 /**
  * Apply backlink boost: score *= (1 + 0.05 * log(1 + backlink_count))
- * backlinks is a Map of slug → backlink_count.
  */
 export function applyBacklinkBoost(
-  fused: Map<string, { score: number; results: SearchResult[] }>,
+  fused: Map<string, { score: number; results: SearchResult[]; boost_factors?: BoostFactors }>,
   backlinks: Map<string, number>
 ): void {
   for (const [slug, entry] of fused) {
     const bl = backlinks.get(slug) || 0;
     if (bl > 0) {
-      entry.score *= 1 + 0.05 * Math.log(1 + bl);
+      const multiplier = 1 + 0.05 * Math.log(1 + bl);
+      entry.score *= multiplier;
+      if (!entry.boost_factors) entry.boost_factors = { total: 1.0 };
+      entry.boost_factors.backlinks = Math.round(multiplier * 1000) / 1000;
+      entry.boost_factors.total = (entry.boost_factors.total || 1) * multiplier;
     }
   }
+}
+
+// ─── B1+B2 FIX: Single-Page Contribution Cap ─────────────────────
+
+/**
+ * B1 FIX: Cap single-page multi-chunk contribution.
+ * For each page in the fused results, keep only the best 1-2 results
+ * (depending on detail level) rather than letting one dense page flood
+ * the output with many chunks.
+ */
+export function capPageContributions<T extends { slug: string }>(
+  results: T[],
+  maxPerPage: number = 1
+): T[] {
+  const counts = new Map<string, number>();
+  const output: T[] = [];
+  for (const r of results) {
+    const cnt = counts.get(r.slug) || 0;
+    if (cnt >= maxPerPage) continue;
+    counts.set(r.slug, cnt + 1);
+    output.push(r);
+  }
+  return output;
 }
 
 // ─── 4-Layer Dedup ────────────────────────────────────────────────
 
 export interface DedupOptions {
-  /** Max chunks per page (default 2) */
   maxPerPage?: number;
-  /** Max fraction of results that can be one page type (default 0.6) */
   maxTypeFraction?: number;
-  /** Jaccard similarity threshold for text dedup (default 0.85) */
   jaccardThreshold?: number;
-  /** Max chunks per page by source (default 3) */
   maxPerSource?: number;
 }
 
@@ -114,9 +219,6 @@ const DEFAULT_DEDUP: Required<DedupOptions> = {
   maxPerSource: 3,
 };
 
-/**
- * Jaccard similarity between two strings (word-level).
- */
 function jaccardSimilarity(a: string, b: string): number {
   const wordsA = new Set(a.toLowerCase().split(/\s+/).filter((w) => w.length > 2));
   const wordsB = new Set(b.toLowerCase().split(/\s+/).filter((w) => w.length > 2));
@@ -128,21 +230,13 @@ function jaccardSimilarity(a: string, b: string): number {
   return intersection / (wordsA.size + wordsB.size - intersection);
 }
 
-/**
- * 4-layer dedup pipeline:
- *  1. By Source — top N chunks per source per page
- *  2. By Text Similarity — remove near-duplicates (Jaccard > threshold)
- *  3. By Type Diversity — no page type exceeds maxTypeFraction
- *  4. By Page — max chunks per page
- *  5. Compiled Truth Guarantee — ensure ≥1 compiled_truth chunk per page
- */
 export function dedupResults<T extends { slug: string; score: number; excerpt: string; type: string; source: string; chunk_source?: string }>(
   results: T[],
   opts: DedupOptions = {}
 ): T[] {
   const o = { ...DEFAULT_DEDUP, ...opts };
 
-  // ── Layer 1: Top chunks per source per page ─────────────────
+  // Layer 1: Top chunks per source per page
   const byPageSource = new Map<string, Map<string, typeof results>>();
   for (const r of results) {
     const pageMap = byPageSource.get(r.slug) || new Map();
@@ -160,7 +254,7 @@ export function dedupResults<T extends { slug: string; score: number; excerpt: s
     }
   }
 
-  // ── Layer 2: Text similarity dedup ─────────────────────────
+  // Layer 2: Text similarity dedup
   layer1.sort((a, b) => b.score - a.score);
   const layer2: typeof results = [];
   for (const r of layer1) {
@@ -174,7 +268,7 @@ export function dedupResults<T extends { slug: string; score: number; excerpt: s
     if (!isDup) layer2.push(r);
   }
 
-  // ── Layer 3: Type diversity ────────────────────────────────
+  // Layer 3: Type diversity
   const typeCounts = new Map<string, number>();
   for (const r of layer2) {
     typeCounts.set(r.type, (typeCounts.get(r.type) || 0) + 1);
@@ -190,18 +284,10 @@ export function dedupResults<T extends { slug: string; score: number; excerpt: s
     layer3.push(r);
   }
 
-  // ── Layer 4: Page cap ──────────────────────────────────────
-  const pageCounts = new Map<string, number>();
-  const layer4: typeof results = [];
-  for (const r of layer3) {
-    const pc = pageCounts.get(r.slug) || 0;
-    if (pc >= o.maxPerPage) continue;
-    pageCounts.set(r.slug, pc + 1);
-    layer4.push(r);
-  }
+  // Layer 4: Page cap
+  const layer4 = capPageContributions(layer3, o.maxPerPage);
 
-  // ── Layer 5: Compiled truth guarantee ──────────────────────
-  // Ensure at least one compiled_truth chunk per page survives
+  // Layer 5: Compiled truth guarantee
   const pageHasCT = new Map<string, boolean>();
   for (const r of layer4) {
     if (r.chunk_source === "compiled_truth") {
@@ -209,16 +295,18 @@ export function dedupResults<T extends { slug: string; score: number; excerpt: s
     }
   }
 
-  // If a page appears in results but has no compiled_truth chunk,
-  // try to rescue one from earlier layers
+  const pageCounts = new Map<string, number>();
+  for (const r of layer4) {
+    pageCounts.set(r.slug, (pageCounts.get(r.slug) || 0) + 1);
+  }
+
   for (let i = 0; i < layer1.length; i++) {
     const r = layer1[i];
     if (
       r.chunk_source === "compiled_truth" &&
       !pageHasCT.get(r.slug) &&
-      pageCounts.has(r.slug) // only for pages already present
+      pageCounts.has(r.slug)
     ) {
-      // Insert at end to preserve it
       layer4.push(r);
       pageHasCT.set(r.slug, true);
     }
@@ -227,7 +315,7 @@ export function dedupResults<T extends { slug: string; score: number; excerpt: s
   return layer4;
 }
 
-// ─── Query Intent Classifier ──────────────────────────────────────
+// ─── B3 FIX: Query Intent Classifier ──────────────────────────────
 
 export type QueryIntent = "temporal" | "entity" | "event" | "general";
 
@@ -250,23 +338,47 @@ const EVENT_PATTERNS = [
 ];
 
 /**
- * Classify query intent using zero-latency heuristic pattern matching.
- * Returns the intent type — no LLM call required.
+ * B3 FIX: Classify query intent using pattern matching + proper noun heuristic.
+ *
+ * New: capitalized multi-token inputs (e.g. "Matthew Kovalenko", "Tyler van Burk")
+ * auto-classify as entity queries. Handles mid-name lowercase particles
+ * (van, von, de, etc.) so "Tyler van Burk" → entity, not general.
  */
 export function classifyIntent(query: string): QueryIntent {
   const q = query.trim();
 
-  // Check temporal first (most common)
+  // Temporal
   for (const pattern of TEMPORAL_PATTERNS) {
     if (pattern.test(q)) return "temporal";
   }
 
-  // Check entity
+  // Entity patterns
   for (const pattern of ENTITY_PATTERNS) {
     if (pattern.test(q)) return "entity";
   }
 
-  // Check event
+  // B3 FIX: Capitalized proper noun detection
+  // All non-particle words should start with uppercase
+  const words = q.split(/\s+/).filter(w => w.length > 1);
+  const particles = new Set([
+    "van", "von", "de", "di", "da", "del", "della", "dela", "dos", "du",
+    "le", "la", "ten", "ter", "bin", "ibn", "al", "el", "of", "the",
+  ]);
+
+  if (words.length >= 2) {
+    const allCapitalized = words.every((w, i) => {
+      if (i > 0 && particles.has(w.toLowerCase())) return true;
+      return /^[A-Z]/.test(w);
+    });
+    if (allCapitalized) return "entity";
+  }
+
+  // Single capitalized word that looks like a name (not a common word)
+  if (words.length === 1 && /^[A-Z][a-z]{2,}$/.test(words[0]) && words[0].length >= 3) {
+    return "entity";
+  }
+
+  // Event
   for (const pattern of EVENT_PATTERNS) {
     if (pattern.test(q)) return "event";
   }
@@ -276,9 +388,6 @@ export function classifyIntent(query: string): QueryIntent {
 
 /**
  * Get the recommended detail level for a given intent.
- * - temporal/event → high (return everything, don't over-summarize)
- * - entity → low (compiled truth only, synthetic answer)
- * - general → medium (balanced)
  */
 export function detailForIntent(intent: QueryIntent): "low" | "medium" | "high" {
   switch (intent) {
