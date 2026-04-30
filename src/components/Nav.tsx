@@ -77,18 +77,21 @@ export default function Nav() {
             >
               Sign in
             </a>
-            <a
-              href="/sign-up"
-              className="inline-flex items-center h-9 px-3.5 bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary text-sm font-medium rounded-md transition-colors"
-            >
-              Get started
-            </a>
+            {/* Hide "Get started" when mobile menu is open */}
+            {!open && (
+              <a
+                href="/sign-up"
+                className="inline-flex items-center h-9 px-3.5 bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary text-sm font-medium rounded-md transition-colors"
+              >
+                Get started
+              </a>
+            )}
           </SignedOut>
 
           {/* Hamburger (mobile only) */}
           <button
             onClick={() => setOpen(!open)}
-            className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded-md text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface transition-colors"
+            className="md:hidden inline-flex items-center justify-center w-11 h-11 rounded-md text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface transition-colors"
             aria-label={open ? "Close menu" : "Open menu"}
             aria-expanded={open}
           >
@@ -105,13 +108,25 @@ export default function Nav() {
         </div>
       </div>
 
-      {/* Mobile menu drawer */}
+      {/* Mobile menu — full-screen overlay, solid bg, no bleed-through */}
       {open && (
-        <div
-          className="md:hidden fixed inset-0 top-14 z-30 bg-bb-bg-primary animate-fade-in"
-          onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
-        >
-          <div className="px-4 py-4 flex flex-col">
+        <div className="md:hidden fixed inset-0 z-50 bg-bb-bg-primary flex flex-col">
+          {/* Menu header */}
+          <div className="flex items-center justify-between h-14 px-4 border-b border-bb-border shrink-0">
+            <span className="text-[15px] font-semibold text-bb-text-primary">Menu</span>
+            <button
+              onClick={() => setOpen(false)}
+              className="inline-flex items-center justify-center w-11 h-11 rounded-md text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface transition-colors"
+              aria-label="Close menu"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Menu links */}
+          <div className="flex-1 overflow-y-auto px-4 py-4">
             {links.map((l) => (
               <a
                 key={l.href}
