@@ -164,13 +164,24 @@ program
   .description("create or update a page")
   .option("-t, --type <type>", "page type (e.g. person, company, idea)")
   .option("-c, --content <content>", "page markdown content")
+  .option("--stdin", "read content from stdin instead of --content flag")
   .action(async (slug, title, options) => {
     const config = getConfig();
     const globalOpts = program.opts();
+
+    let content = options.content;
+    if (options.stdin) {
+      const chunks: Buffer[] = [];
+      for await (const chunk of process.stdin) {
+        chunks.push(chunk);
+      }
+      content = Buffer.concat(chunks).toString("utf-8");
+    }
+
     await putPageCommand(slug, title, config, {
       ...globalOpts,
       type: options.type,
-      content: options.content,
+      content,
     });
   });
 

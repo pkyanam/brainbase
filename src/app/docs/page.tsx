@@ -24,7 +24,7 @@ You are an autonomous agent with **persistent memory** via Brainbase — a knowl
 All write operations (and MCP calls) require an API key:
 
 \`\`\`
-Authorization: Bearer <BB_API_KEY_PLACEHOLDER>
+Authorization: Bearer <BB_AP...DER>
 \`\`\`
 
 **Base URL:** \`https://brainbase.belweave.ai/api/mcp\`
@@ -226,6 +226,164 @@ Every page has:
 **Questions?** Ask Preetham or check the brain for \`brainbase\` docs.
 `;
 
+const MCP_SETUP = (baseUrl: string) => `# MCP Setup — Copy/Paste
+
+## Option A: HTTP Endpoint (Recommended for Agents)
+
+Connect via JSON-RPC 2.0 over HTTP. All tools are available immediately.
+
+### Headers
+\`\`\`
+Authorization: Bearer <YOUR_API_KEY>
+Content-Type: application/json
+\`\`\`
+
+### Initialize
+\`\`\`bash
+curl -X POST ${baseUrl}/api/mcp \\
+  -H "Authorization: Bearer <YOUR_API_KEY>" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "initialize",
+    "id": 1
+  }'
+\`\`\`
+
+### List Tools
+\`\`\`bash
+curl -X POST ${baseUrl}/api/mcp \\
+  -H "Authorization: Bearer <YOUR_API_KEY>" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/list",
+    "id": 2
+  }'
+\`\`\`
+
+### Search
+\`\`\`bash
+curl -X POST ${baseUrl}/api/mcp \\
+  -H "Authorization: Bearer <YOUR_API_KEY>" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "search",
+      "arguments": {"query": "Garry Tan"}
+    },
+    "id": 3
+  }'
+\`\`\`
+
+### Get Page
+\`\`\`bash
+curl -X POST ${baseUrl}/api/mcp \\
+  -H "Authorization: Bearer <YOUR_API_KEY>" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "get_page",
+      "arguments": {"slug": "people/garry-tan"}
+    },
+    "id": 4
+  }'
+\`\`\`
+
+### Write a Page
+\`\`\`bash
+curl -X POST ${baseUrl}/api/mcp \\
+  -H "Authorization: Bearer <YOUR_API_KEY>" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "put_page",
+      "arguments": {
+        "slug": "ideas/new-thing",
+        "title": "My New Idea",
+        "type": "idea",
+        "content": "This is a markdown note."
+      }
+    },
+    "id": 5
+  }'
+\`\`\`
+
+## Option B: CLI (For Humans & Scripts)
+
+Install the CLI, configure once, use everywhere.
+
+\`\`\`bash
+# 1. Install
+npm install -g brainbase-cli
+
+# 2. Configure once
+brainbase config set apiKey <YOUR_API_KEY>
+brainbase config set baseUrl ${baseUrl}
+brainbase config set brainId <YOUR_BRAIN_ID>  # optional
+
+# 3. Use
+brainbase search "Garry Tan"
+brainbase health
+brainbase page people/garry-tan
+brainbase links people/garry-tan
+brainbase graph
+brainbase put-page ideas/new-thing "My Idea" --type idea --content "# Hello"
+brainbase add-link people/garry-tan companies/y-combinator --type works_at
+
+# Priority: CLI flags > env vars > config file. So you can always override per-command:
+brainbase health --api-key bb_live_other --brain-id other-brain
+\`\`\`
+
+## Option C: SDK (For Node.js/Bun Apps)
+
+\`\`\`bash
+npm install brainbase-sdk
+\`\`\`
+
+\`\`\`ts
+import { Brainbase } from "brainbase-sdk";
+
+const brain = new Brainbase({
+  apiKey: "bb_live_...",
+  baseUrl: "${baseUrl}",
+});
+
+// Read
+const results = await brain.search("Garry Tan");
+const page = await brain.getPage("people/garry-tan");
+const health = await brain.health();
+
+// Write
+await brain.putPage({
+  slug: "ideas/new-thing",
+  title: "My New Idea",
+  type: "idea",
+  content: "# Markdown content",
+});
+
+// Link
+await brain.addLink("people/garry-tan", "companies/y-combinator", "works_at");
+\`\`\`
+`;
+
+const MCP_CONFIG = (baseUrl: string) => `{
+  "mcpServers": {
+    "brainbase": {
+      "url": "${baseUrl}/api/mcp",
+      "headers": {
+        "Authorization": "Bearer <YOUR_API_KEY>"
+      }
+    }
+  }
+}`;
+
 function useBaseUrl() {
   const [baseUrl, setBaseUrl] = useState("https://brainbase.belweave.ai");
   useEffect(() => {
@@ -313,75 +471,143 @@ export default function Docs() {
         <h2 className="text-lg font-semibold mb-3">Quickstart</h2>
         <div className="bg-bb-bg-secondary border border-bb-border rounded-xl p-5">
           <pre className="text-sm text-bb-text-secondary overflow-x-auto">
-            <code>{`npm install brainbase-sdk`}</code>
+            <code>{`npm install brainbase-cli`}</code>
           </pre>
         </div>
       </section>
 
-      <section id="sdk" className="mb-12 scroll-mt-24">
-        <h2 className="text-lg font-semibold mb-3">SDK Usage</h2>
-        <div className="bg-bb-bg-secondary border border-bb-border rounded-xl p-5">
-          <pre className="text-sm text-bb-text-secondary overflow-x-auto leading-relaxed">
-            <code>{`import { Brainbase } from "brainbase-sdk";
-
-const brain = new Brainbase({ apiKey: "bb_live_..." });
-
-// Search your brain
-const results = await brain.search("who do I know at Apple?");
-// → [{ slug: "people/tim-cook", title: "Tim Cook", score: 0.92, ... }]
-
-// Get a page
-const page = await brain.getPage("people/garry-tan");
-// → { title: "Garry Tan", content: "...", links: [...], timeline: [...] }
-
-// Brain health
-const stats = await brain.health();
-// → { page_count: 687, link_count: 257, brain_score: 75 }
-
-// Full knowledge graph
-const graph = await brain.graph();
-// → { nodes: [...], edges: [...] }
-
-// Page links
-const links = await brain.links("people/preetham-kyanam");
-// → { outgoing: [...], incoming: [...] }`}</code>
-          </pre>
+      {/* MCP Setup — Copy/Paste */}
+      <section id="mcp-setup" className="mb-12 scroll-mt-24">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <h2 className="text-lg font-semibold mb-1">Connect via MCP</h2>
+            <p className="text-sm text-bb-text-secondary">
+              Copy-paste ready configs for any MCP-compatible agent. Pick your poison.
+            </p>
+          </div>
+          <CopyButton text={MCP_CONFIG(baseUrl)} label="Copy Config" />
         </div>
-      </section>
 
-      <section id="mcp" className="mb-12 scroll-mt-24">
-        <h2 className="text-lg font-semibold mb-3">MCP Server</h2>
-        <p className="text-sm text-bb-text-secondary mb-3">Connect any MCP-compatible agent directly:</p>
-        <div className="bg-bb-bg-secondary border border-bb-border rounded-xl p-5">
-          <pre className="text-sm text-bb-text-secondary overflow-x-auto">
-            <code>{`// OpenCode / Claude Code / Cursor config
-{
-  "mcpServers": {
-    "brainbase": {
-      "command": "node",
-      "args": ["brainbase-mcp"],
-      "env": { "BRAINBASE_URL": "${baseUrl}" }
-    }
-  }
-}`}</code>
-          </pre>
-        </div>
-        <p className="text-sm text-bb-text-secondary mt-3">
-          Or use the HTTP endpoint: <code className="text-bb-text-primary">POST /api/mcp</code> with{" "}
-          <code className="text-bb-text-primary">Authorization: Bearer ***</code>
-        </p>
-      </section>
+        <div className="space-y-6">
+          {/* Option A: HTTP */}
+          <div className="border border-bb-border rounded-xl overflow-hidden">
+            <div className="bg-bb-bg-secondary px-4 py-3 border-b border-bb-border flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-bb-text-primary">Option A: HTTP Endpoint</h3>
+                <p className="text-xs text-bb-text-muted mt-0.5">Best for agents, scripts, curl. JSON-RPC 2.0.</p>
+              </div>
+              <CopyButton text={`curl -X POST ${baseUrl}/api/mcp \\\n  -H "Authorization: Bearer <YOUR_API_KEY>" \\\n  -H "Content-Type: application/json" \\\n  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'`} label="Copy" />
+            </div>
+            <div className="p-4 bg-bb-bg-primary">
+              <pre className="text-xs text-bb-text-secondary overflow-x-auto">
+                <code>{`// 1. Initialize
+POST ${baseUrl}/api/mcp
+{ "jsonrpc": "2.0", "method": "initialize", "id": 1 }
 
-      <section id="cli" className="mb-12 scroll-mt-24">
-        <h2 className="text-lg font-semibold mb-3">CLI</h2>
-        <div className="bg-bb-bg-secondary border border-bb-border rounded-xl p-5">
-          <pre className="text-sm text-bb-text-secondary overflow-x-auto">
-            <code>{`brainbase search "garry tan"
+// 2. Search
+POST ${baseUrl}/api/mcp
+{ "jsonrpc": "2.0", "method": "tools/call",
+  "params": { "name": "search", "arguments": { "query": "Garry Tan" }},
+  "id": 2 }
+
+// 3. Get page
+POST ${baseUrl}/api/mcp
+{ "jsonrpc": "2.0", "method": "tools/call",
+  "params": { "name": "get_page", "arguments": { "slug": "people/garry-tan" }},
+  "id": 3 }
+
+// 4. Write
+POST ${baseUrl}/api/mcp
+{ "jsonrpc": "2.0", "method": "tools/call",
+  "params": { "name": "put_page",
+    "arguments": {
+      "slug": "ideas/new-thing",
+      "title": "My New Idea",
+      "type": "idea",
+      "content": "# Hello world"
+    }},
+  "id": 4 }`}</code>
+              </pre>
+            </div>
+          </div>
+
+          {/* Option B: CLI */}
+          <div className="border border-bb-border rounded-xl overflow-hidden">
+            <div className="bg-bb-bg-secondary px-4 py-3 border-b border-bb-border flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-bb-text-primary">Option B: CLI</h3>
+                <p className="text-xs text-bb-text-muted mt-0.5">Shell composability, pipes, jq. Lowest cognitive overhead.</p>
+              </div>
+              <CopyButton text={`npm install -g brainbase-cli
+brainbase config set apiKey <YOUR_API_KEY>
+brainbase config set baseUrl ${baseUrl}
+brainbase search "Garry Tan"
+brainbase health --json | jq '.brain_score'`} label="Copy" />
+            </div>
+            <div className="p-4 bg-bb-bg-primary">
+              <pre className="text-xs text-bb-text-secondary overflow-x-auto">
+                <code>{`# Install & configure once
+npm install -g brainbase-cli
+brainbase config set apiKey <YOUR_API_KEY>
+brainbase config set baseUrl ${baseUrl}
+brainbase config set brainId <BRAIN_ID>  # optional
+
+# Read
+brainbase search "Garry Tan"
+brainbase query "who invested in Anthropic"
 brainbase health
-brainbase page "people/garry-tan"
-brainbase links "people/preetham-kyanam"
-brainbase graph`}</code>
-          </pre>
+brainbase page people/garry-tan
+brainbase links people/garry-tan
+brainbase graph --json | jq '.nodes | length'
+brainbase traverse people/garry-tan --depth 2
+
+# Write
+brainbase put-page ideas/new-thing "My Idea" --type idea --content "# Hello"
+cat note.md | brainbase put-page ideas/new-thing "My Idea" --type idea --stdin
+brainbase add-link people/garry-tan companies/y-combinator --type works_at
+brainbase add-timeline people/garry-tan "2024-03-01" "Became YC CEO"
+
+# Override per-command (flags > env > config)
+brainbase health --api-key bb_live_other --brain-id other-brain`}</code>
+              </pre>
+            </div>
+          </div>
+
+          {/* Option C: SDK */}
+          <div className="border border-bb-border rounded-xl overflow-hidden">
+            <div className="bg-bb-bg-secondary px-4 py-3 border-b border-bb-border flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-bb-text-primary">Option C: SDK</h3>
+                <p className="text-xs text-bb-text-muted mt-0.5">For Node.js / Bun apps. Same MCP endpoint underneath.</p>
+              </div>
+              <CopyButton text={`npm install brainbase-sdk`} label="Copy" />
+            </div>
+            <div className="p-4 bg-bb-bg-primary">
+              <pre className="text-xs text-bb-text-secondary overflow-x-auto">
+                <code>{`import { Brainbase } from "brainbase-sdk";
+
+const brain = new Brainbase({
+  apiKey: "bb_live_...",
+  baseUrl: "${baseUrl}",
+});
+
+// Read
+const results = await brain.search("Garry Tan");     // [{slug, title, score}]
+const page    = await brain.getPage("people/garry-tan");
+const health  = await brain.health();                // {page_count, link_count, brain_score}
+const graph   = await brain.graph();                 // {nodes, edges}
+
+// Write
+await brain.putPage({
+  slug: "ideas/new-thing",
+  title: "My New Idea",
+  type: "idea",
+  content: "# Markdown",
+});
+await brain.addLink("people/garry-tan", "companies/y-combinator", "works_at");`}</code>
+              </pre>
+            </div>
+          </div>
         </div>
       </section>
 

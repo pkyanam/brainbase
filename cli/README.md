@@ -79,6 +79,23 @@ brainbase health --brain-id <uuid>
 | `brainbase remove-link <from> <to>` | Remove a link |
 | `brainbase add-timeline <slug> <date> <summary>` | Add timeline entry |
 
+### Page Content from Stdin
+
+Pipe markdown content directly instead of escaping it in a flag:
+
+```bash
+# Write from a file
+cat note.md | brainbase put-page ideas/new-thing "My Idea" --type idea --stdin
+
+# Write from heredoc
+brainbase put-page email/2026-04-29/subject "Subject" --type email --stdin <<'EOF'
+# Meeting Notes
+
+- Point one
+- Point two
+EOF
+```
+
 ### Global Flags
 
 | Flag | Description |
@@ -153,7 +170,7 @@ Priority (highest to lowest):
 
 - **API keys are never logged or displayed.** If an error leaks a key, it is redacted before output.
 - The CLI requires an API key for all remote endpoints. Localhost is exempt for development.
-- No secrets are stored on disk — everything is read from environment variables.
+- Config file is stored at `~/.brainbase/config.json` with `600` permissions (user read/write only).
 
 ## Development
 
