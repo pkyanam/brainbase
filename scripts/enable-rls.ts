@@ -21,12 +21,12 @@ if (!DB_URL) {
 }
 
 // Dedicated pool with longer timeout for remote Supabase
+// If connection string has sslmode, don't override it
 const pool = new Pool({
   connectionString: DB_URL,
   max: 2,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 30000, // 30s instead of 5s
-  ssl: { rejectUnauthorized: false },
 });
 
 async function query(text: string, params?: unknown[]) {
@@ -99,8 +99,9 @@ async function createPolicies() {
   console.log("  ✅ Created get_current_app_user_id() helper");
 
   // Brains: owner or member access
+  await query(`DROP POLICY IF EXISTS brains_owner_access ON brains`);
   await query(`
-    CREATE POLICY IF NOT EXISTS brains_owner_access ON brains
+    CREATE POLICY brains_owner_access ON brains
       FOR ALL
       USING (
         owner_user_id = get_current_app_user_id()
@@ -116,8 +117,9 @@ async function createPolicies() {
   // Shared brain-access CTE pattern for content tables
   const contentTables = ["pages", "links", "content_chunks", "timeline_entries"];
   for (const table of contentTables) {
+    await query(`DROP POLICY IF EXISTS ${table}_brain_access ON ${table}`);
     await query(`
-      CREATE POLICY IF NOT EXISTS ${table}_brain_access ON ${table}
+      CREATE POLICY ${table}_brain_access ON ${table}
         FOR ALL
         USING (
           EXISTS (
@@ -136,8 +138,9 @@ async function createPolicies() {
   }
 
   // API keys: owner only
+  await query(`DROP POLICY IF EXISTS api_keys_owner_access ON api_keys`);
   await query(`
-    CREATE POLICY IF NOT EXISTS api_keys_owner_access ON api_keys
+    CREATE POLICY api_keys_owner_access ON api_keys
       FOR ALL
       USING (
         EXISTS (
@@ -150,8 +153,9 @@ async function createPolicies() {
   console.log("  ✅ Policy: api_keys_owner_access");
 
   // Brain members: owner only
+  await query(`DROP POLICY IF EXISTS brain_members_owner_access ON brain_members`);
   await query(`
-    CREATE POLICY IF NOT EXISTS brain_members_owner_access ON brain_members
+    CREATE POLICY brain_members_owner_access ON brain_members
       FOR ALL
       USING (
         EXISTS (
@@ -164,8 +168,9 @@ async function createPolicies() {
   console.log("  ✅ Policy: brain_members_owner_access");
 
   // Brain invites: owner only
+  await query(`DROP POLICY IF EXISTS brain_invites_owner_access ON brain_invites`);
   await query(`
-    CREATE POLICY IF NOT EXISTS brain_invites_owner_access ON brain_invites
+    CREATE POLICY brain_invites_owner_access ON brain_invites
       FOR ALL
       USING (
         EXISTS (
@@ -177,14 +182,16 @@ async function createPolicies() {
   `);
   console.log("  ✅ Policy: brain_invites_owner_access");
 
-  // Page versions: owner/member
+  // Page versions: owner/member (join through pages)
+  await query(`DROP POLICY IF EXISTS page_versions_brain_access ON page_versions`);
   await query(`
-    CREATE POLICY IF NOT EXISTS page_versions_brain_access ON page_versions
+    CREATE POLICY page_versions_brain_access ON page_versions
       FOR ALL
       USING (
         EXISTS (
-          SELECT 1 FROM brains
-          WHERE brains.id = page_versions.brain_id
+          SELECT 1 FROM pages
+          JOIN brains ON brains.id = pages.brain_id
+          WHERE pages.id = page_versions.page_id
             AND (brains.owner_user_id = get_current_app_user_id()
                  OR EXISTS (
                    SELECT 1 FROM brain_members
@@ -196,24 +203,29 @@ async function createPolicies() {
   `);
   console.log("  ✅ Policy: page_versions_brain_access");
 
-  // Activities: owner/member
+  // Activities: owner/member (only if table exists)
   await query(`
-    CREATE POLICY IF NOT EXISTS activities_brain_access ON activities
-      FOR ALL
-      USING (
-        EXISTS (
-          SELECT 1 FROM brains
-          WHERE brains.id = activities.brain_id
-            AND (brains.owner_user_id = get_current_app_user_id()
-                 OR EXISTS (
-                   SELECT 1 FROM brain_members
-                   WHERE brain_members.brain_id = brains.id
-                     AND brain_members.user_id = get_current_app_user_id()
-                 ))
-        )
-      )
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'activities') THEN
+        DROP POLICY IF EXISTS activities_brain_access ON activities;
+        CREATE POLICY activities_brain_access ON activities
+          FOR ALL
+          USING (
+            EXISTS (
+              SELECT 1 FROM brains
+              WHERE brains.id = activities.brain_id
+                AND (brains.owner_user_id = get_current_app_user_id()
+                     OR EXISTS (
+                       SELECT 1 FROM brain_members
+                       WHERE brain_members.brain_id = brains.id
+                         AND brain_members.user_id = get_current_app_user_id()
+                     ))
+            )
+          );
+      END IF;
+    END $$;
   `);
-  console.log("  ✅ Policy: activities_brain_access");
+  console.log("  ✅ Policy: activities_brain_access (if table exists)");
 }
 
 async function addIndexes() {

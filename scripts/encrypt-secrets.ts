@@ -32,12 +32,12 @@ if (!ENCRYPTION_KEY || ENCRYPTION_KEY.length !== 32) {
 }
 
 // Dedicated pool with longer timeout for remote Supabase
+// If connection string has sslmode, don't override it
 const pool = new Pool({
   connectionString: DB_URL,
   max: 2,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 30000, // 30s instead of 5s
-  ssl: { rejectUnauthorized: false },
 });
 
 async function query(text: string, params?: unknown[]) {
