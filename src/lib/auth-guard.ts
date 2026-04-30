@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
-import { queryOne } from "./supabase/client";
 import { getOrCreateBrainForUser, canAccessBrain, getBrainsForUser } from "./brain-context";
 import { NextResponse } from "next/server";
+import { validateApiKey } from "./api-keys";
 
 const DEV_USER_ID = "dev-user-001";
 const isDev = process.env.NODE_ENV === "development";
@@ -30,6 +30,52 @@ export async function getCurrentUser(): Promise<{ id: string; email?: string | n
 export interface AuthContext {
   userId: string;
   brainId: string;
+}
+
+/**
+ * Extract Bearer token from Authorization header.
+ */
+function getBearerToken(req: Request): string | null {
+  const auth = req.headers.get("authorization");
+  if (!auth) return null;
+  const match = auth.match(/^Bearer\s+(.+)$/i);
+  return match?.[1] || null;
+}
+
+/**
+ * Unified auth resolver — tries API key first, then Clerk session.
+ * This is what all API routes should use for machine-to-machine access.
+ *
+ * Supports multi-brain via X-Brain-Id header when using API keys.
+ */
+export async function resolveAuth(
+  req: Request
+): Promise<{ userId: string; brainId: string } | null> {
+  // 1. Try API key auth
+  const token = getBearerToken(req);
+  if (token) {
+    const keyData = await validateApiKey(token);
+    if (keyData) {
+      const requestedBrainId = req.headers.get("x-brain-id");
+      if (requestedBrainId && requestedBrainId !== keyData.brainId) {
+        const access = await canAccessBrain(keyData.userId, requestedBrainId);
+        if (!access) return null;
+        return { userId: keyData.userId, brainId: requestedBrainId };
+      }
+      return { userId: keyData.userId, brainId: keyData.brainId };
+    }
+  }
+
+  // 2. Fall back to Clerk session
+  const userId = await getCurrentUserId();
+  if (!userId) return null;
+
+  try {
+    const brainId = await getOrCreateBrainForUser(userId);
+    return { userId, brainId };
+  } catch {
+    return null;
+  }
 }
 
 /**

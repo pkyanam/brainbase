@@ -18,11 +18,11 @@ export const ENV = {
   TIMEOUT: "BRAINBASE_TIMEOUT_MS",
 } as const;
 
-/** Load configuration from environment variables */
-export function loadConfig(): CliConfig {
+/** Load configuration from environment variables with optional CLI overrides */
+export function loadConfig(overrides: { apiKey?: string; brainId?: string } = {}): CliConfig {
   const baseUrl = process.env[ENV.BASE_URL]?.trim() || DEFAULT_BASE_URL;
-  const apiKey = process.env[ENV.API_KEY]?.trim() || "";
-  const brainId = process.env[ENV.BRAIN_ID]?.trim() || undefined;
+  const apiKey = overrides.apiKey?.trim() || process.env[ENV.API_KEY]?.trim() || "";
+  const brainId = overrides.brainId?.trim() || process.env[ENV.BRAIN_ID]?.trim() || undefined;
   const timeoutMs = parseInt(process.env[ENV.TIMEOUT]?.trim() || String(DEFAULT_TIMEOUT_MS), 10);
 
   if (Number.isNaN(timeoutMs) || timeoutMs < 1) {

@@ -44,6 +44,24 @@ describe("config", () => {
       expect(config.timeoutMs).toBe(10_000);
     });
 
+    it("allows CLI overrides for apiKey and brainId", () => {
+      process.env[ENV.API_KEY] = "env_key";
+      process.env[ENV.BRAIN_ID] = "env_brain";
+
+      const config = loadConfig({ apiKey: "cli_key", brainId: "cli_brain" });
+      expect(config.apiKey).toBe("cli_key");
+      expect(config.brainId).toBe("cli_brain");
+    });
+
+    it("falls back to env when no overrides provided", () => {
+      process.env[ENV.API_KEY] = "env_key";
+      process.env[ENV.BRAIN_ID] = "env_brain";
+
+      const config = loadConfig();
+      expect(config.apiKey).toBe("env_key");
+      expect(config.brainId).toBe("env_brain");
+    });
+
     it("strips trailing slash from baseUrl", () => {
       process.env[ENV.BASE_URL] = "https://api.example.com/";
       const config = loadConfig();

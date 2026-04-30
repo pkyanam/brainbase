@@ -25,11 +25,20 @@ import { addTimelineCommand } from "./commands/add-timeline.js";
 
 const program = new Command();
 
+function getConfig(): ReturnType<typeof loadConfig> {
+  const opts = program.opts();
+  return loadConfig({
+    apiKey: opts.apiKey,
+    brainId: opts.brainId,
+  });
+}
+
 program
   .name("brainbase")
   .description("CLI for Brainbase — the knowledge graph for AI agents")
   .version("0.1.0")
   .option("--brain-id <id>", "target a specific brain (overrides BRAINBASE_BRAIN_ID)")
+  .option("--api-key <key>", "API key (overrides BRAINBASE_API_KEY)")
   .option("--json", "output raw JSON instead of formatted text")
   .option("--quiet", "suppress non-error output")
   .option("--verbose", "enable verbose logging")
@@ -42,7 +51,7 @@ program
   .description("full-text search across your brain")
   .option("-l, --limit <n>", "max results", parseInt, 20)
   .action(async (query, options) => {
-    const config = loadConfig();
+    const config = getConfig();
     const globalOpts = program.opts();
     await searchCommand(query, config, {
       ...globalOpts,
@@ -55,7 +64,7 @@ program
   .description("natural language query")
   .option("-l, --limit <n>", "max results", parseInt, 20)
   .action(async (question, options) => {
-    const config = loadConfig();
+    const config = getConfig();
     const globalOpts = program.opts();
     await queryCommand(question, config, {
       ...globalOpts,
@@ -67,7 +76,7 @@ program
   .command("health")
   .description("show brain health dashboard")
   .action(async () => {
-    const config = loadConfig();
+    const config = getConfig();
     await healthCommand(config, program.opts());
   });
 
@@ -75,7 +84,7 @@ program
   .command("stats")
   .description("show detailed brain statistics")
   .action(async () => {
-    const config = loadConfig();
+    const config = getConfig();
     await statsCommand(config, program.opts());
   });
 
@@ -83,7 +92,7 @@ program
   .command("page <slug>")
   .description("get a page by slug")
   .action(async (slug) => {
-    const config = loadConfig();
+    const config = getConfig();
     await pageCommand(slug, config, program.opts());
   });
 
@@ -91,7 +100,7 @@ program
   .command("links <slug>")
   .description("show links for a page")
   .action(async (slug) => {
-    const config = loadConfig();
+    const config = getConfig();
     await linksCommand(slug, config, program.opts());
   });
 
@@ -99,7 +108,7 @@ program
   .command("timeline <slug>")
   .description("show timeline entries for a page")
   .action(async (slug) => {
-    const config = loadConfig();
+    const config = getConfig();
     await timelineCommand(slug, config, program.opts());
   });
 
@@ -110,7 +119,7 @@ program
   .option("-l, --limit <n>", "max results", parseInt, 50)
   .option("-o, --offset <n>", "skip N results", parseInt, 0)
   .action(async (options) => {
-    const config = loadConfig();
+    const config = getConfig();
     const globalOpts = program.opts();
     await listCommand(config, {
       ...globalOpts,
@@ -130,7 +139,7 @@ program
       .default("out")
   )
   .action(async (slug, options) => {
-    const config = loadConfig();
+    const config = getConfig();
     const globalOpts = program.opts();
     await traverseCommand(slug, config, {
       ...globalOpts,
@@ -143,7 +152,7 @@ program
   .command("graph")
   .description("dump the full knowledge graph as JSON")
   .action(async () => {
-    const config = loadConfig();
+    const config = getConfig();
     await graphCommand(config, program.opts());
   });
 
@@ -155,7 +164,7 @@ program
   .option("-t, --type <type>", "page type (e.g. person, company, idea)")
   .option("-c, --content <content>", "page markdown content")
   .action(async (slug, title, options) => {
-    const config = loadConfig();
+    const config = getConfig();
     const globalOpts = program.opts();
     await putPageCommand(slug, title, config, {
       ...globalOpts,
@@ -168,7 +177,7 @@ program
   .command("delete-page <slug>")
   .description("delete a page")
   .action(async (slug) => {
-    const config = loadConfig();
+    const config = getConfig();
     await deletePageCommand(slug, config, program.opts());
   });
 
@@ -177,7 +186,7 @@ program
   .description("create a link between two pages")
   .option("-t, --type <type>", "link type (e.g. works_at, invested_in)")
   .action(async (from, to, options) => {
-    const config = loadConfig();
+    const config = getConfig();
     const globalOpts = program.opts();
     await addLinkCommand(from, to, config, {
       ...globalOpts,
@@ -189,7 +198,7 @@ program
   .command("remove-link <from> <to>")
   .description("remove a link between two pages")
   .action(async (from, to) => {
-    const config = loadConfig();
+    const config = getConfig();
     await removeLinkCommand(from, to, config, program.opts());
   });
 
@@ -199,7 +208,7 @@ program
   .option("-d, --detail <detail>", "detailed description")
   .option("-s, --source <source>", "source URL or citation")
   .action(async (slug, date, summary, options) => {
-    const config = loadConfig();
+    const config = getConfig();
     const globalOpts = program.opts();
     await addTimelineCommand(slug, date, summary, config, {
       ...globalOpts,
