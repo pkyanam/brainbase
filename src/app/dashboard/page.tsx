@@ -5,6 +5,7 @@ import Image from "next/image";
 import dynamic from "next/dynamic";
 import { useUser, SignOutButton } from "@clerk/nextjs";
 import type { GraphNode } from "@/lib/supabase/graph";
+import DreamStatusCard from "@/components/DreamStatusCard";
 
 const BrainGalaxy = dynamic(() => import("@/components/BrainGalaxy"), {
   ssr: false,
@@ -534,6 +535,13 @@ export default function Dashboard() {
                   <a href="/settings" className="text-bb-accent hover:text-bb-accent-dim transition-colors">Create API key →</a>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Dream Status */}
+          {isLoaded && user && (
+            <div className="shrink-0 px-4 md:px-6 pb-2">
+              <DreamStatusCard brainId={currentBrainId} />
             </div>
           )}
 

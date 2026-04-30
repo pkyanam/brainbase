@@ -40,7 +40,7 @@ export interface DreamReport {
 
 // ── Phase 1: Extract links + timeline from recently-updated pages ────────
 
-async function runExtractPhase(brainId: string): Promise<DreamPhaseResult> {
+async function runExtractPhase(brainId: string, batchSize = 200): Promise<DreamPhaseResult> {
   const start = Date.now();
   let pagesExtracted = 0;
   let linksCreated = 0;
@@ -59,8 +59,8 @@ async function runExtractPhase(brainId: string): Promise<DreamPhaseResult> {
          AND updated_at > NOW() - INTERVAL '7 days'
          AND (last_extracted_at IS NULL OR last_extracted_at < updated_at)
        ORDER BY updated_at DESC
-       LIMIT 200`,
-      [brainId]
+       LIMIT $2`,
+      [brainId, batchSize]
     );
 
     for (const page of pages) {
@@ -320,11 +320,11 @@ function computeTier(mentionCount: number): number {
 
 // ── Main dream cycle ────────────────────────────────────────────────
 
-export async function runDreamCycle(brainId: string): Promise<DreamReport> {
+export async function runDreamCycle(brainId: string, batchSize = 200): Promise<DreamReport> {
   const start = Date.now();
   const phases: DreamPhaseResult[] = [];
 
-  phases.push(await runExtractPhase(brainId));
+  phases.push(await runExtractPhase(brainId, batchSize));
   phases.push(await runEmbedPhase(brainId));
   phases.push(await runOrphansPhase(brainId));
   phases.push(await runPatternsPhase(brainId));
