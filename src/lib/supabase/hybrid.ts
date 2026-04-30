@@ -93,6 +93,55 @@ export type BoostedResult = SearchResult & { boost_factors?: BoostFactors };
 // ─── B2 FIX v2: Pin Exact Matches at Rank 0 ─────────────────────
 
 /**
+ * B2 FIX v3: Strip question prefixes ("who is", "what is", etc.)
+ * before comparing for exact match. So "who is Tyler van Burk"
+ * matches the page "Tyler van Burk".
+ */
+const QUESTION_PREFIXES = [
+  /^who\s+is\s+/i,
+  /^who's\s+/i,
+  /^what\s+is\s+/i,
+  /^what's\s+/i,
+  /^what\s+are\s+/i,
+  /^tell\s+me\s+about\s+/i,
+  /^info\s+on\s+/i,
+  /^details\s+on\s+/i,
+  /^profile\s+of\s+/i,
+];
+
+export function stripQuestionPrefix(query: string): string {
+  for (const pattern of QUESTION_PREFIXES) {
+    const stripped = query.replace(pattern, "").trim();
+    if (stripped !== query) return stripped;
+  }
+  return query;
+}
+
+/** Check if a slug or title exactly matches the query (after prefix stripping). */
+function isExactMatch(slug: string, title: string, query: string): boolean {
+  const qLower = query.toLowerCase().trim();
+  const titleLower = (title || "").toLowerCase();
+  const slugLower = (slug || "").toLowerCase();
+  const slugBase = slugLower.split("/").pop() || slugLower;
+  const slugNormalized = slugBase.replace(/[-_]/g, " ");
+
+  // Try exact match first
+  if (titleLower === qLower || slugNormalized === qLower || slugLower === qLower) {
+    return true;
+  }
+
+  // Try with question prefix stripped
+  const stripped = stripQuestionPrefix(qLower);
+  if (stripped !== qLower) {
+    if (titleLower === stripped || slugNormalized === stripped || slugLower === stripped) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * B2 FIX v2: Before RRF, reorder each result list so pages whose
  * title or slug exactly matches the query appear at position 0.
  * This gives them maximum RRF contribution (1/K) from every list,
@@ -105,26 +154,19 @@ export function pinExactMatches(
   list: SearchResult[],
   query: string
 ): SearchResult[] {
-  const qLower = query.toLowerCase().trim();
-  if (!qLower) return list;
+  if (!query.trim()) return list;
 
   const exact: SearchResult[] = [];
   const rest: SearchResult[] = [];
 
   for (const r of list) {
-    const titleLower = (r.title || "").toLowerCase();
-    const slugLower = (r.slug || "").toLowerCase();
-    const slugBase = slugLower.split("/").pop() || slugLower;
-    const slugNormalized = slugBase.replace(/[-_]/g, " ");
-
-    if (titleLower === qLower || slugNormalized === qLower || slugLower === qLower) {
+    if (isExactMatch(r.slug, r.title, query)) {
       exact.push(r);
     } else {
       rest.push(r);
     }
   }
 
-  // Exact matches first, then rest (preserving relative order within each group)
   return [...exact, ...rest];
 }
 
@@ -142,15 +184,9 @@ export function forceExactMatchTop(
   fused: Map<string, { score: number; results: SearchResult[]; boost_factors?: BoostFactors }>,
   query: string
 ): void {
-  const qLower = query.toLowerCase().trim();
-
   for (const [slug, entry] of fused) {
-    const titleLower = (entry.results[0]?.title || "").toLowerCase();
-    const slugLower = slug.toLowerCase();
-    const slugBase = slugLower.split("/").pop() || slugLower;
-    const slugNormalized = slugBase.replace(/[-_]/g, " ");
-
-    if (titleLower === qLower || slugNormalized === qLower || slugLower === qLower) {
+    const title = entry.results[0]?.title || "";
+    if (isExactMatch(slug, title, query)) {
       entry.score = EXACT_PIN_SCORE;
       if (!entry.boost_factors) entry.boost_factors = { total: 1.0 };
       entry.boost_factors.exact_match = EXACT_PIN_SCORE;
@@ -167,15 +203,8 @@ export function forceExactMatchTopFinal(
   results: Array<{ slug: string; score: number; title: string; boost_factors?: BoostFactors }>,
   query: string
 ): void {
-  const qLower = query.toLowerCase().trim();
-
   for (const r of results) {
-    const titleLower = (r.title || "").toLowerCase();
-    const slugLower = (r.slug || "").toLowerCase();
-    const slugBase = slugLower.split("/").pop() || slugLower;
-    const slugNormalized = slugBase.replace(/[-_]/g, " ");
-
-    if (titleLower === qLower || slugNormalized === qLower || slugLower === qLower) {
+    if (isExactMatch(r.slug, r.title, query)) {
       r.score = EXACT_PIN_SCORE;
       if (!r.boost_factors) r.boost_factors = { total: 1.0 };
       r.boost_factors.exact_match = EXACT_PIN_SCORE;
@@ -404,30 +433,52 @@ export function classifyIntent(query: string): QueryIntent {
     if (pattern.test(q)) return "entity";
   }
 
+  // Event patterns (check BEFORE proper-noun — "Launch event" is event, not entity)
+  for (const pattern of EVENT_PATTERNS) {
+    if (pattern.test(q)) return "event";
+  }
+
   // B3 FIX: Capitalized proper noun detection
-  // All non-particle words should start with uppercase
-  const words = q.split(/\s+/).filter(w => w.length > 1);
+  // - Check event patterns FIRST (before proper-noun, since "Launch event"
+  //   has a capitalized word but is clearly an event query)
+  // - If ANY word starts with uppercase in a multi-word query → entity
+  // - Handles: "Apple bros", "YC pitch", "Matthew Kovalenko"
+  const words = q.split(/\s+/).filter(w => w.length >= 1);
   const particles = new Set([
     "van", "von", "de", "di", "da", "del", "della", "dela", "dos", "du",
     "le", "la", "ten", "ter", "bin", "ibn", "al", "el", "of", "the",
   ]);
 
+  // Common lowercase words that suggest entity search (relationship terms)
+  const personWords = new Set([
+    "mom", "mother", "dad", "father", "sister", "brother", "sibling",
+    "cousin", "aunt", "uncle", "wife", "husband", "girlfriend", "boyfriend",
+    "partner", "friend", "boss", "coworker", "colleague", "neighbor",
+    "phone", "number", "email", "address", "contact",
+  ]);
+
   if (words.length >= 2) {
-    const allCapitalized = words.every((w, i) => {
-      if (i > 0 && particles.has(w.toLowerCase())) return true;
-      return /^[A-Z]/.test(w);
+    // Check for person-indicating words first (handles "mom phone number")
+    const hasPersonWord = words.some(w => personWords.has(w.toLowerCase()));
+    if (hasPersonWord) return "entity";
+
+    // Any capitalized word that's not a particle → entity
+    const hasProperNoun = words.some((w, i) => {
+      if (i > 0 && particles.has(w.toLowerCase())) return false;
+      // Must start with uppercase and be at least 2 chars (catches "YC")
+      return /^[A-Z]/.test(w) && w.length >= 2;
     });
-    if (allCapitalized) return "entity";
+    if (hasProperNoun) return "entity";
   }
 
-  // Single capitalized word that looks like a name (not a common word)
+  // Single capitalized word ≥3 chars that looks like a name
   if (words.length === 1 && /^[A-Z][a-z]{2,}$/.test(words[0]) && words[0].length >= 3) {
     return "entity";
   }
 
-  // Event
-  for (const pattern of EVENT_PATTERNS) {
-    if (pattern.test(q)) return "event";
+  // Single all-caps word (acronym like "YC", "AI", "CEO")
+  if (words.length === 1 && /^[A-Z]{2,}$/.test(words[0])) {
+    return "entity";
   }
 
   return "general";
