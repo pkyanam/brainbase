@@ -1,44 +1,70 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { SignedIn, SignedOut, UserButton } from "@/components/SafeClerk";
 
 export default function Nav() {
   const [open, setOpen] = useState(false);
 
+  // Lock body scroll when mobile menu is open
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => { document.body.style.overflow = ""; };
+  }, [open]);
+
+  const links = [
+    { href: "/demo", label: "Demo" },
+    { href: "/docs", label: "Docs" },
+    { href: "/pricing", label: "Pricing" },
+    { href: "/dashboard", label: "Dashboard" },
+  ];
+
   return (
-    <nav className="px-4 sm:px-6 py-4 border-b border-bb-border">
-      <div className="flex items-center justify-between gap-3">
-        {/* Logo */}
-        <a href="/" className="flex items-center gap-2.5 shrink-0 min-w-0">
+    <nav className="sticky top-0 z-40 bg-bb-bg-primary/85 backdrop-blur-sm border-b border-bb-border">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
+        {/* Logo + wordmark */}
+        <a href="/" className="flex items-center gap-2 shrink-0 group">
           <Image
             src="/brainbaseLogo.png"
             alt=""
-            width={28}
-            height={28}
-            className="rounded-md shrink-0"
+            width={22}
+            height={22}
+            className="rounded"
             priority
           />
-          <span className="text-sm font-semibold tracking-tight text-bb-text-primary truncate">
+          <span className="text-[15px] font-semibold tracking-tight text-bb-text-primary group-hover:text-bb-accent transition-colors">
             brainbase
           </span>
         </a>
 
-        {/* Right side: CTA (always visible) + desktop links + hamburger */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          {/* Desktop text links */}
-          <div className="hidden md:flex items-center gap-6 text-sm mr-2">
-            <a href="/demo" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Demo</a>
-            <a href="/docs" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Docs</a>
-            <a href="/pricing" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Pricing</a>
-            <a href="/dashboard" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Dashboard</a>
-            <SignedIn>
-              <a href="/settings" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Settings</a>
-            </SignedIn>
-          </div>
+        {/* Desktop links */}
+        <div className="hidden md:flex items-center gap-1 text-sm">
+          {links.map((l) => (
+            <a
+              key={l.href}
+              href={l.href}
+              className="px-3 py-2 rounded-md text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface transition-colors"
+            >
+              {l.label}
+            </a>
+          ))}
+          <SignedIn>
+            <a
+              href="/settings"
+              className="px-3 py-2 rounded-md text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface transition-colors"
+            >
+              Settings
+            </a>
+          </SignedIn>
+        </div>
 
-          {/* Auth / CTA — always visible, compact on mobile */}
+        {/* Right cluster */}
+        <div className="flex items-center gap-2 shrink-0">
           <SignedIn>
             <div className="hidden md:block">
               <UserButton />
@@ -46,19 +72,25 @@ export default function Nav() {
           </SignedIn>
           <SignedOut>
             <a
-              href="/sign-up"
-              className="px-3 py-1.5 sm:px-4 sm:py-2 bg-bb-accent hover:bg-bb-accent-dim text-bb-bg-primary text-xs sm:text-sm font-medium rounded-lg transition-colors whitespace-nowrap"
+              href="/sign-in"
+              className="hidden sm:inline-flex items-center h-9 px-3 text-sm text-bb-text-secondary hover:text-bb-text-primary transition-colors"
             >
-              <span className="sm:hidden">Start</span>
-              <span className="hidden sm:inline">Get started</span>
+              Sign in
+            </a>
+            <a
+              href="/sign-up"
+              className="inline-flex items-center h-9 px-3.5 bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary text-sm font-medium rounded-md transition-colors"
+            >
+              Get started
             </a>
           </SignedOut>
 
-          {/* Mobile hamburger */}
+          {/* Hamburger (mobile only) */}
           <button
             onClick={() => setOpen(!open)}
-            className="md:hidden p-2 -mr-2 text-bb-text-muted hover:text-bb-text-primary transition-colors"
-            aria-label="Toggle menu"
+            className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded-md text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface transition-colors"
+            aria-label={open ? "Close menu" : "Open menu"}
+            aria-expanded={open}
           >
             {open ? (
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -66,29 +98,52 @@ export default function Nav() {
               </svg>
             ) : (
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h16" />
               </svg>
             )}
           </button>
         </div>
       </div>
 
-      {/* Mobile menu */}
+      {/* Mobile menu drawer */}
       {open && (
-        <div className="md:hidden mt-4 pt-4 border-t border-bb-border flex flex-col gap-3 text-sm">
-          <a href="/demo" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Demo</a>
-          <a href="/docs" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Docs</a>
-          <a href="/pricing" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Pricing</a>
-          <a href="/dashboard" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Dashboard</a>
-          <SignedIn>
-            <a href="/settings" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Settings</a>
-            <div className="pt-1">
-              <UserButton />
-            </div>
-          </SignedIn>
-          <SignedOut>
-            <a href="/sign-in" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Sign in</a>
-          </SignedOut>
+        <div
+          className="md:hidden fixed inset-0 top-14 z-30 bg-bb-bg-primary animate-fade-in"
+          onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
+        >
+          <div className="px-4 py-4 flex flex-col">
+            {links.map((l) => (
+              <a
+                key={l.href}
+                href={l.href}
+                onClick={() => setOpen(false)}
+                className="h-12 flex items-center px-3 text-base text-bb-text-primary rounded-md hover:bg-bb-surface transition-colors border-b border-bb-border last:border-0"
+              >
+                {l.label}
+              </a>
+            ))}
+            <SignedIn>
+              <a
+                href="/settings"
+                onClick={() => setOpen(false)}
+                className="h-12 flex items-center px-3 text-base text-bb-text-primary rounded-md hover:bg-bb-surface transition-colors border-b border-bb-border"
+              >
+                Settings
+              </a>
+              <div className="px-3 pt-4">
+                <UserButton />
+              </div>
+            </SignedIn>
+            <SignedOut>
+              <a
+                href="/sign-in"
+                onClick={() => setOpen(false)}
+                className="h-12 flex items-center px-3 text-base text-bb-text-primary rounded-md hover:bg-bb-surface transition-colors"
+              >
+                Sign in
+              </a>
+            </SignedOut>
+          </div>
         </div>
       )}
     </nav>

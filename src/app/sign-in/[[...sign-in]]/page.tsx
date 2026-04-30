@@ -11,25 +11,25 @@ export default function SignInPage() {
 
   if (!hasClerk) {
     return (
-      <div className="min-h-screen flex flex-col bg-black">
+      <div className="min-h-screen flex flex-col bg-bb-bg-primary text-bb-text-primary">
         <Nav />
-        <main className="flex-1 flex items-center justify-center">
-          <div className="text-center max-w-md mx-auto p-8">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center mx-auto mb-4">
-              <span className="text-white text-xl font-black">B</span>
+        <main className="flex-1 flex items-center justify-center px-5">
+          <div className="text-center max-w-md mx-auto p-6 md:p-8 border border-bb-border rounded-xl bg-bb-bg-secondary">
+            <div className="w-10 h-10 rounded-lg bg-bb-accent-glow border border-bb-accent/40 flex items-center justify-center mx-auto mb-4">
+              <span className="text-bb-accent text-lg font-semibold">B</span>
             </div>
-            <h1 className="text-2xl font-bold mb-2">Auth not configured</h1>
-            <p className="text-sm text-neutral-400 mb-6">
+            <h1 className="text-xl font-semibold tracking-tight mb-2">Auth not configured</h1>
+            <p className="text-sm text-bb-text-secondary mb-6 leading-relaxed">
               Clerk keys not found. Set{" "}
-              <code className="text-cyan-400">NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY</code>{" "}
-              and <code className="text-cyan-400">CLERK_SECRET_KEY</code> in{" "}
-              <code className="text-violet-400">.env.local</code>
+              <code className="text-bb-accent font-mono text-xs">NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY</code>{" "}
+              and <code className="text-bb-accent font-mono text-xs">CLERK_SECRET_KEY</code> in{" "}
+              <code className="text-bb-text-primary font-mono text-xs">.env.local</code>.
             </p>
             <a
               href="/dashboard"
-              className="text-sm px-6 py-3 rounded-xl bg-violet-600 text-white font-medium hover:bg-violet-500 transition-all"
+              className="inline-flex h-11 px-6 items-center justify-center rounded-md bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary font-medium text-sm transition-colors"
             >
-              Continue to Dashboard (dev mode) →
+              Continue to dashboard (dev mode)
             </a>
           </div>
         </main>
@@ -39,32 +39,45 @@ export default function SignInPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-black">
+    <div className="min-h-screen flex flex-col bg-bb-bg-primary text-bb-text-primary">
       <Nav />
-      <main className="flex-1 flex items-center justify-center">
-        <div className="w-full max-w-md mx-auto p-8">
+      <main className="flex-1 flex items-center justify-center px-5 py-10">
+        <div className="w-full max-w-md mx-auto">
           <div className="text-center mb-8">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-violet-600/20">
-              <span className="text-white text-xl font-black">B</span>
+            <div className="w-10 h-10 rounded-lg bg-bb-accent-glow border border-bb-accent/40 flex items-center justify-center mx-auto mb-4">
+              <span className="text-bb-accent text-lg font-semibold">B</span>
             </div>
-            <h1 className="text-2xl font-bold">Welcome back</h1>
-            <p className="text-sm text-neutral-400 mt-1">Sign in to your brain</p>
+            <h1 className="text-2xl font-semibold tracking-tight">Welcome back</h1>
+            <p className="text-sm text-bb-text-secondary mt-1">Sign in to your brain</p>
           </div>
           <SignIn
             fallbackRedirectUrl="/dashboard"
             appearance={{
+              variables: {
+                colorBackground: "#121212",
+                colorInputBackground: "#0a0a0a",
+                colorInputText: "#ededed",
+                colorText: "#ededed",
+                colorTextSecondary: "#b4b4b4",
+                colorPrimary: "#7dd3a8",
+                colorDanger: "#f87171",
+                borderRadius: "8px",
+                fontFamily: "ui-sans-serif, system-ui, sans-serif",
+              },
               elements: {
                 rootBox: "w-full",
-                card: "bg-neutral-950 border border-neutral-800 rounded-2xl shadow-none",
+                card: "bg-bb-bg-secondary border border-bb-border rounded-xl shadow-none",
                 headerTitle: "hidden",
                 headerSubtitle: "hidden",
                 socialButtonsBlockButton:
-                  "bg-neutral-900 border border-neutral-800 hover:bg-neutral-800 text-neutral-200 rounded-xl",
+                  "bg-bb-surface border border-bb-border hover:bg-bb-surface-hover text-bb-text-primary rounded-md normal-case",
                 formButtonPrimary:
-                  "bg-gradient-to-r from-violet-600 to-violet-700 hover:from-violet-500 hover:to-violet-600 rounded-xl",
+                  "bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary font-medium rounded-md normal-case shadow-none",
                 formFieldInput:
-                  "bg-neutral-900 border-neutral-800 rounded-lg text-neutral-200",
-                footerActionLink: "text-cyan-400 hover:text-emerald-400",
+                  "bg-bb-bg-primary border-bb-border rounded-md text-bb-text-primary focus:border-bb-accent",
+                footerActionLink: "text-bb-accent hover:text-bb-accent-strong",
+                dividerLine: "bg-bb-border",
+                dividerText: "text-bb-text-muted",
               },
             }}
           />
