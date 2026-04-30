@@ -29,6 +29,7 @@ export default function Nav() {
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           {/* Desktop text links */}
           <div className="hidden md:flex items-center gap-6 text-sm mr-2">
+            <a href="/demo" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Demo</a>
             <a href="/docs" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Docs</a>
             <a href="/pricing" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Pricing</a>
             <a href="/dashboard" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Dashboard</a>
@@ -75,6 +76,7 @@ export default function Nav() {
       {/* Mobile menu */}
       {open && (
         <div className="md:hidden mt-4 pt-4 border-t border-bb-border flex flex-col gap-3 text-sm">
+          <a href="/demo" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Demo</a>
           <a href="/docs" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Docs</a>
           <a href="/pricing" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Pricing</a>
           <a href="/dashboard" className="text-bb-text-muted hover:text-bb-text-secondary transition-colors">Dashboard</a>
