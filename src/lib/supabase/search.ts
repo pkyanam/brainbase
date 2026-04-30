@@ -7,6 +7,8 @@ export interface SearchResult {
   excerpt: string;
   score: number;
   source: "fts_and" | "fts_or" | "fts_chunk" | "timeline" | "trgm_title" | "trgm_content" | "keyword" | "vector";
+  /** Source label for the chunk (e.g., "compiled_truth"). Used by compiled truth boost + dedup. */
+  chunk_source?: string;
 }
 
 /** Minimum score to include in results */
@@ -117,13 +119,14 @@ export async function searchBrain(
     type: string,
     excerpt: string,
     score: number,
-    source: SearchResult["source"]
+    source: SearchResult["source"],
+    chunk_source?: string
   ) => {
     if (EXCLUDED_SLUGS.has(slug)) return;
     const existing = results.get(slug);
     if (!existing || score > existing.score) {
       if (score > bestScore) bestScore = score;
-      results.set(slug, { slug, title, type: type || "unknown", excerpt, score, source });
+      results.set(slug, { slug, title, type: type || "unknown", excerpt, score, source, chunk_source });
     }
   };
 
@@ -424,9 +427,10 @@ export async function vectorSearchBrain(
     title: string;
     type: string;
     chunk_text: string;
+    chunk_source: string;
     distance: number;
   }>(
-    `SELECT p.slug, p.title, p.type, c.chunk_text,
+    `SELECT p.slug, p.title, p.type, c.chunk_text, c.chunk_source,
             c.embedding <=> $2::vector as distance
      FROM content_chunks c
      JOIN pages p ON p.id = c.page_id
@@ -443,5 +447,6 @@ export async function vectorSearchBrain(
     excerpt: r.chunk_text.slice(0, 200) + (r.chunk_text.length > 200 ? "..." : ""),
     score: Math.max(0, 1 - r.distance),
     source: "vector" as const,
+    chunk_source: r.chunk_source || undefined,
   }));
 }
