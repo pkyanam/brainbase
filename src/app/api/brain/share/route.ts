@@ -59,10 +59,10 @@ export async function POST(req: NextRequest) {
   const invite = await queryOne<{
     id: string; email: string; role: string; expires_at: string;
   }>(
-    `INSERT INTO brain_invites (brain_id, inviter_user_id, email, token, token_hash, role)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO brain_invites (brain_id, inviter_user_id, email, token_hash, role)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING id, email, role, expires_at::text`,
-    [auth.brainId, auth.userId, email.toLowerCase(), rawToken, tokenHash, role]
+    [auth.brainId, auth.userId, email.toLowerCase(), tokenHash, role]
   );
 
   await logActivity({

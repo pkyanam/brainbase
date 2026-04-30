@@ -156,15 +156,14 @@ export async function ensureCollaborationSchema(): Promise<void> {
       )
     `);
 
-    // Brain invites — pending email invitations
+    // Brain invites — pending email invitations (token_hash only, no plain text)
     await query(`
       CREATE TABLE IF NOT EXISTS brain_invites (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         brain_id UUID NOT NULL REFERENCES brains(id) ON DELETE CASCADE,
         inviter_user_id TEXT NOT NULL,
         email TEXT NOT NULL,
-        token TEXT NOT NULL UNIQUE,
-        token_hash TEXT,
+        token_hash TEXT NOT NULL UNIQUE,
         role TEXT NOT NULL DEFAULT 'editor',
         accepted_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ DEFAULT NOW(),

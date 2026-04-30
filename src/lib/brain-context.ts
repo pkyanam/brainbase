@@ -1,5 +1,6 @@
 import { queryOne, queryMany } from "./supabase/client";
 import { ensureSchema, installBrainIdTriggers, ensureCollaborationSchema } from "./db-setup";
+import { encryptSupabaseKey, decryptSupabaseKey } from "./crypto";
 
 /**
  * Get or create the brain for a given Clerk user ID.
@@ -70,4 +71,50 @@ export async function canAccessBrain(userId: string, brainId: string): Promise<{
     [userId, brainId]
   );
   return row || null;
+}
+
+/**
+ * Store encrypted Supabase credentials for a brain.
+ * Encrypts the service key at rest using AES-256-GCM.
+ */
+export async function setBrainSupabaseCredentials(
+  brainId: string,
+  supabaseUrl: string,
+  supabaseKey: string
+): Promise<void> {
+  const enc = encryptSupabaseKey(supabaseKey);
+  await queryOne(
+    `UPDATE brains
+     SET supabase_url = $1,
+         encrypted_supabase_key = $2,
+         encrypted_supabase_key_iv = $3,
+         encrypted_supabase_key_tag = $4,
+         supabase_key = NULL
+     WHERE id = $5`,
+    [supabaseUrl, enc.encrypted_supabase_key, enc.encrypted_supabase_key_iv, enc.encrypted_supabase_key_tag, brainId]
+  );
+}
+
+/**
+ * Retrieve decrypted Supabase credentials for a brain.
+ * Returns null if no credentials are stored.
+ */
+export async function getBrainSupabaseCredentials(
+  brainId: string
+): Promise<{ url: string; key: string } | null> {
+  const row = await queryOne<{
+    supabase_url: string;
+    encrypted_supabase_key: string;
+    encrypted_supabase_key_iv: string;
+    encrypted_supabase_key_tag: string;
+  }>(
+    `SELECT supabase_url, encrypted_supabase_key, encrypted_supabase_key_iv, encrypted_supabase_key_tag
+     FROM brains WHERE id = $1`,
+    [brainId]
+  );
+  if (!row?.supabase_url || !row?.encrypted_supabase_key) return null;
+  return {
+    url: row.supabase_url,
+    key: decryptSupabaseKey(row),
+  };
 }

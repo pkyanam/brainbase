@@ -8,7 +8,7 @@
  * - Ciphertext, IV, and auth tag are stored in DB
  * - Key rotation: decrypt with old key, re-encrypt with new key
  */
-import crypto from "crypto";
+import * as crypto from "crypto";
 
 const ALGORITHM = "aes-256-gcm";
 const KEY = process.env.BRAINBASE_ENCRYPTION_KEY;
