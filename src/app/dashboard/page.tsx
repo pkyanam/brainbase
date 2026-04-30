@@ -140,6 +140,10 @@ export default function Dashboard() {
     }
   }, [slackToken, slackTeamId]);
 
+  // Unwritten Rules
+  const [implicitRules, setImplicitRules] = useState<any[]>([]);
+  const [implicitRulesOpen, setImplicitRulesOpen] = useState(false);
+
   const handleTaskQuery = useCallback(async () => {
     if (!taskQuery.trim() || !currentBrainId) return;
     setTaskLoading(true);
@@ -207,6 +211,11 @@ export default function Dashboard() {
         setMembers(d.members || []);
         setInvites(d.invites || []);
       })
+      .catch(() => {});
+
+    fetch(`/api/brain/implicit-rules${q}`)
+      .then((r) => r.json())
+      .then((d) => setImplicitRules(d.rules || []))
       .catch(() => {});
 
     return () => { clearTimeout(timeout); controller.abort(); };
@@ -598,6 +607,47 @@ export default function Dashboard() {
                       </div>
                       <div className="text-bb-text-muted mt-0.5">
                         {new Date(a.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Unwritten Rules */}
+          <div className="shrink-0 max-h-48 flex flex-col border-b border-bb-border">
+            <button
+              onClick={() => setImplicitRulesOpen(!implicitRulesOpen)}
+              className="shrink-0 px-4 py-3 flex items-center justify-between text-xs font-medium uppercase tracking-wider text-bb-text-muted hover:text-bb-text-secondary transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                Unwritten Rules
+                {implicitRules.length > 0 && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-bb-accent/20 text-bb-accent text-[10px]">{implicitRules.length}</span>
+                )}
+              </span>
+              <span className="w-5 h-5 flex items-center justify-center">{implicitRulesOpen ? "−" : "+"}</span>
+            </button>
+            {implicitRulesOpen && (
+              <div className="overflow-y-auto px-4 pb-3 space-y-2">
+                {implicitRules.length === 0 ? (
+                  <div className="py-4 text-center">
+                    <p className="text-xs text-bb-text-muted">No unwritten rules detected yet.</p>
+                    <p className="text-[10px] text-bb-text-muted/60 mt-0.5">Add more timeline entries and decisions.</p>
+                  </div>
+                ) : (
+                  implicitRules.map((r, i) => (
+                    <div key={i} className="text-xs py-1.5 border-b border-bb-border/50 last:border-0">
+                      <p className="text-bb-text-secondary leading-relaxed">{r.observation}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[10px] text-bb-text-muted">{Math.round(r.confidence * 100)}% confidence</span>
+                        <button
+                          onClick={() => handleSelectNode(r.page_slug)}
+                          className="text-[10px] text-bb-accent hover:underline truncate max-w-[100px]"
+                        >
+                          {r.page_title}
+                        </button>
                       </div>
                     </div>
                   ))
