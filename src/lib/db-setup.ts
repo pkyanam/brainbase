@@ -100,6 +100,36 @@ export async function ensureSchema(): Promise<void> {
       END $$;
     `);
 
+    // Add written_by to pages (agent attribution)
+    await query(`
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'pages') THEN
+          ALTER TABLE pages ADD COLUMN IF NOT EXISTS written_by TEXT;
+        END IF;
+      END $$;
+    `);
+
+    // Add written_by to links
+    await query(`
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'links') THEN
+          ALTER TABLE links ADD COLUMN IF NOT EXISTS written_by TEXT;
+        END IF;
+      END $$;
+    `);
+
+    // Add written_by to timeline_entries
+    await query(`
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'timeline_entries') THEN
+          ALTER TABLE timeline_entries ADD COLUMN IF NOT EXISTS written_by TEXT;
+        END IF;
+      END $$;
+    `);
+
     console.log("[brainbase] Schema ensured (multi-tenant)");
   } catch (err) {
     console.error("[brainbase] Schema setup error:", err);

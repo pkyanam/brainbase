@@ -118,6 +118,7 @@ export interface PutPageInput {
     type?: string;
     content?: string;
     frontmatter?: Record<string, unknown>;
+    written_by?: string;
 }
 export interface PutPageResult {
     slug: string;
@@ -160,6 +161,7 @@ export declare class Brainbase {
     /** List all pages with optional type filter. */
     listPages(options?: {
         type?: string;
+        writtenBy?: string;
         limit?: number;
         offset?: number;
     }): Promise<PageListItem[] | null>;
@@ -176,7 +178,7 @@ export declare class Brainbase {
         slug: string;
     } | null>;
     /** Create a typed link between two pages. */
-    addLink(from: string, to: string, linkType?: string): Promise<{
+    addLink(from: string, to: string, linkType?: string, writtenBy?: string): Promise<{
         success: boolean;
         from: string;
         to: string;
@@ -192,6 +194,7 @@ export declare class Brainbase {
     addTimelineEntry(slug: string, date: string, summary: string, options?: {
         detail?: string;
         source?: string;
+        written_by?: string;
     }): Promise<{
         id: string;
     } | null>;

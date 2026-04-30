@@ -13,7 +13,7 @@ import { GlobalOptions } from "../types.js";
 
 /** Format a search result or page list item */
 export function formatPageLine(
-  item: { type: string; title: string; slug: string; score?: number },
+  item: { type: string; title: string; slug: string; score?: number; written_by?: string },
   opts: GlobalOptions
 ): string {
   if (opts.json) return "";
@@ -24,6 +24,9 @@ export function formatPageLine(
 
   if (item.score !== undefined) {
     metaParts.unshift(`${Math.round(item.score * 100)}%`);
+  }
+  if (item.written_by) {
+    metaParts.push(chalk.cyan(`by ${item.written_by}`));
   }
 
   return `${typeStr} ${titleStr} ${chalk.gray(`(${metaParts.join(", ")})`)}`;
@@ -66,6 +69,7 @@ export function formatPageDetail(page: {
   title: string;
   slug: string;
   content?: string;
+  written_by?: string;
   links?: {
     outgoing: { title: string; link_type: string }[];
     incoming: { title: string; link_type: string }[];
@@ -75,6 +79,10 @@ export function formatPageDetail(page: {
     `${chalk.magenta(`[${page.type}]`)} ${chalk.bold(page.title)}`,
     chalk.gray(page.slug),
   ];
+
+  if (page.written_by) {
+    lines.push(chalk.cyan(`Written by: ${page.written_by}`));
+  }
 
   if (page.links?.outgoing?.length) {
     lines.push("", chalk.bold("Links:"));
@@ -112,7 +120,7 @@ export function formatLinks(data: {
 
 /** Format timeline entries */
 export function formatTimeline(
-  entries: { date: string; summary: string; detail?: string; source?: string }[]
+  entries: { date: string; summary: string; detail?: string; source?: string; written_by?: string }[]
 ): string {
   if (entries.length === 0) return "No timeline entries.";
 
@@ -124,6 +132,7 @@ export function formatTimeline(
     lines.push("", `${chalk.bold(e.date)} — ${e.summary}`);
     if (e.detail) lines.push(`  ${e.detail}`);
     if (e.source) lines.push(chalk.gray(`  Source: ${e.source}`));
+    if (e.written_by) lines.push(chalk.cyan(`  By: ${e.written_by}`));
   }
 
   return lines.join("\n");

@@ -10,6 +10,7 @@ import { buildSdkConfig, requireApiKey } from "../utils/config.js";
 
 export interface AddLinkOptions extends GlobalOptions {
   type?: string;
+  writtenBy?: string;
 }
 
 export async function addLinkCommand(
@@ -24,7 +25,7 @@ export async function addLinkCommand(
     const sdkConfig = buildSdkConfig(config, { brainId: opts.brainId });
     const brain = new Brainbase(sdkConfig);
 
-    const result = await brain.addLink(from, to, opts.type);
+    const result = await brain.addLink(from, to, opts.type, opts.writtenBy);
 
     if (opts.json) {
       output(result, opts);

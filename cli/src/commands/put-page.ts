@@ -11,6 +11,7 @@ import { buildSdkConfig, requireApiKey } from "../utils/config.js";
 export interface PutPageOptions extends GlobalOptions {
   type?: string;
   content?: string;
+  writtenBy?: string;
 }
 
 export async function putPageCommand(
@@ -30,6 +31,7 @@ export async function putPageCommand(
       title,
       type: opts.type,
       content: opts.content,
+      written_by: opts.writtenBy,
     });
 
     if (opts.json) {

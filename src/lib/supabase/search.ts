@@ -11,9 +11,12 @@ export interface SearchResult {
 export async function searchBrain(
   brainId: string,
   query: string,
-  limit = 20
+  limit = 20,
+  writtenBy?: string
 ): Promise<SearchResult[]> {
   const sanitized = query.replace(/[^\w\s-]/g, "").trim();
+  const writtenByClause = writtenBy ? "AND p.written_by = $4" : "";
+  const writtenByParam = writtenBy ? [writtenBy] : [];
 
   try {
     const rows = await queryMany<{
@@ -26,9 +29,10 @@ export async function searchBrain(
               ts_rank(p.search_vector, plainto_tsquery('english', $2)) as rank
        FROM pages p
        WHERE p.brain_id = $1 AND p.search_vector @@ plainto_tsquery('english', $2)
+         ${writtenByClause}
        ORDER BY rank DESC
        LIMIT $3`,
-      [brainId, sanitized, limit]
+      [brainId, sanitized, limit, ...writtenByParam]
     );
 
     if (rows.length > 0) {
@@ -48,6 +52,8 @@ export async function searchBrain(
       `(p.title ILIKE $${i + 2} OR p.compiled_truth ILIKE $${i + 2})`
     );
     const params = terms.map(t => `%${t}%`);
+    const wbClause = writtenBy ? `AND p.written_by = $${terms.length + 3}` : "";
+    const wbParam = writtenBy ? [writtenBy] : [];
 
     const fallback = await queryMany<{
       slug: string; title: string; type: string; compiled_truth: string;
@@ -55,8 +61,9 @@ export async function searchBrain(
       `SELECT p.slug, p.title, p.type, p.compiled_truth
        FROM pages p
        WHERE p.brain_id = $1 AND (${ilikeClauses.join(" OR ")})
-       LIMIT $${terms.length + 2}`,
-      [brainId, ...params, limit]
+         ${wbClause}
+       LIMIT $${terms.length + 2 + (writtenBy ? 1 : 0)}`,
+      [brainId, ...params, ...wbParam, limit]
     );
 
     return fallback.map((p, i) => {

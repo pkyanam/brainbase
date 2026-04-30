@@ -10,6 +10,7 @@ export interface PutPageInput {
   type?: string;
   content?: string;
   frontmatter?: Record<string, unknown>;
+  written_by?: string;
 }
 
 export interface PutPageResult {
@@ -29,20 +30,22 @@ export async function putPage(brainId: string, input: PutPageInput): Promise<Put
     type: string;
     compiled_truth: string;
     frontmatter: Record<string, unknown>;
+    written_by: string | null;
     created_at: string;
     updated_at: string;
   }>(
-    `INSERT INTO pages (brain_id, slug, title, type, compiled_truth, frontmatter, search_vector)
-     VALUES ($1, $2, $3, COALESCE($4, 'unknown'), COALESCE($5, ''), COALESCE($6, '{}'::jsonb), to_tsvector('english', COALESCE($5, '')))
+    `INSERT INTO pages (brain_id, slug, title, type, compiled_truth, frontmatter, search_vector, written_by)
+     VALUES ($1, $2, $3, COALESCE($4, 'unknown'), COALESCE($5, ''), COALESCE($6, '{}'::jsonb), to_tsvector('english', COALESCE($5, '')), $7)
      ON CONFLICT (brain_id, slug) DO UPDATE SET
        title = EXCLUDED.title,
        type = EXCLUDED.type,
        compiled_truth = EXCLUDED.compiled_truth,
        frontmatter = EXCLUDED.frontmatter,
        search_vector = to_tsvector('english', COALESCE(EXCLUDED.compiled_truth, '')),
+       written_by = COALESCE(EXCLUDED.written_by, pages.written_by),
        updated_at = NOW()
-     RETURNING slug, title, type, compiled_truth, frontmatter, created_at::text, updated_at::text`,
-    [brainId, input.slug, input.title, input.type || null, input.content || null, JSON.stringify(input.frontmatter || {})]
+     RETURNING slug, title, type, compiled_truth, frontmatter, written_by, created_at::text, updated_at::text`,
+    [brainId, input.slug, input.title, input.type || null, input.content || null, JSON.stringify(input.frontmatter || {}), input.written_by || null]
   );
 
   if (!row) throw new Error("Failed to put page");
@@ -103,19 +106,21 @@ export async function addLink(
   brainId: string,
   fromSlug: string,
   toSlug: string,
-  linkType?: string
+  linkType?: string,
+  writtenBy?: string
 ): Promise<boolean> {
   const result = await queryOne<{ id: string }>(
-    `INSERT INTO links (brain_id, from_page_id, to_page_id, link_type)
+    `INSERT INTO links (brain_id, from_page_id, to_page_id, link_type, written_by)
      VALUES (
        $1,
        (SELECT id FROM pages WHERE brain_id = $1 AND slug = $2),
        (SELECT id FROM pages WHERE brain_id = $1 AND slug = $3),
-       COALESCE($4, 'related')
+       COALESCE($4, 'related'),
+       $5
      )
      ON CONFLICT DO NOTHING
      RETURNING id`,
-    [brainId, fromSlug, toSlug, linkType || null]
+    [brainId, fromSlug, toSlug, linkType || null, writtenBy || null]
   );
   return !!result;
 }
@@ -142,6 +147,7 @@ export interface TimelineEntryInput {
   summary: string;
   detail?: string;
   source?: string;
+  written_by?: string;
 }
 
 export async function addTimelineEntry(
@@ -149,14 +155,14 @@ export async function addTimelineEntry(
   input: TimelineEntryInput
 ): Promise<{ id: string }> {
   const row = await queryOne<{ id: string }>(
-    `INSERT INTO timeline_entries (brain_id, page_id, date, summary, detail, source)
+    `INSERT INTO timeline_entries (brain_id, page_id, date, summary, detail, source, written_by)
      VALUES (
        $1,
        (SELECT id FROM pages WHERE brain_id = $1 AND slug = $2),
-       $3, $4, $5, $6
+       $3, $4, $5, $6, $7
      )
      RETURNING id`,
-    [brainId, input.slug, input.date, input.summary, input.detail || null, input.source || null]
+    [brainId, input.slug, input.date, input.summary, input.detail || null, input.source || null, input.written_by || null]
   );
 
   if (!row) throw new Error("Failed to add timeline entry");
@@ -174,6 +180,7 @@ export async function listPages(brainId: string, options?: {
   type?: string;
   limit?: number;
   offset?: number;
+  writtenBy?: string;
 }): Promise<PageListItem[]> {
   const limit = options?.limit ?? 50;
   const offset = options?.offset ?? 0;
@@ -186,10 +193,12 @@ export async function listPages(brainId: string, options?: {
   }>(
     `SELECT slug, title, type, updated_at::text
      FROM pages
-     WHERE brain_id = $1 AND ($2::text IS NULL OR type = $2)
+     WHERE brain_id = $1
+       AND ($2::text IS NULL OR type = $2)
+       AND ($3::text IS NULL OR written_by = $3)
      ORDER BY updated_at DESC
-     LIMIT $3 OFFSET $4`,
-    [brainId, options?.type || null, limit, offset]
+     LIMIT $4 OFFSET $5`,
+    [brainId, options?.type || null, options?.writtenBy || null, limit, offset]
   );
 
   return rows;

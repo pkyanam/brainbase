@@ -117,6 +117,7 @@ program
   .command("list")
   .description("list all pages")
   .option("-t, --type <type>", "filter by page type")
+  .option("--written-by <agent>", "filter by author/agent")
   .option("-l, --limit <n>", "max results", parseInt, 50)
   .option("-o, --offset <n>", "skip N results", parseInt, 0)
   .action(async (options) => {
@@ -125,6 +126,7 @@ program
     await listCommand(config, {
       ...globalOpts,
       type: options.type,
+      writtenBy: options.writtenBy,
       limit: options.limit,
       offset: options.offset,
     });
@@ -165,6 +167,7 @@ program
   .option("-t, --type <type>", "page type (e.g. person, company, idea)")
   .option("-c, --content <content>", "page markdown content")
   .option("--stdin", "read content from stdin instead of --content flag")
+  .option("--written-by <agent>", "agent or user identifier (e.g. 'lara', 'jarvis')")
   .action(async (slug, title, options) => {
     const config = getConfig();
     const globalOpts = program.opts();
@@ -182,6 +185,7 @@ program
       ...globalOpts,
       type: options.type,
       content,
+      writtenBy: options.writtenBy,
     });
   });
 
@@ -197,12 +201,14 @@ program
   .command("add-link <from> <to>")
   .description("create a link between two pages")
   .option("-t, --type <type>", "link type (e.g. works_at, invested_in)")
+  .option("--written-by <agent>", "agent or user identifier")
   .action(async (from, to, options) => {
     const config = getConfig();
     const globalOpts = program.opts();
     await addLinkCommand(from, to, config, {
       ...globalOpts,
       type: options.type,
+      writtenBy: options.writtenBy,
     });
   });
 
@@ -219,6 +225,7 @@ program
   .description("add a timeline entry to a page")
   .option("-d, --detail <detail>", "detailed description")
   .option("-s, --source <source>", "source URL or citation")
+  .option("--written-by <agent>", "agent or user identifier")
   .action(async (slug, date, summary, options) => {
     const config = getConfig();
     const globalOpts = program.opts();
@@ -226,6 +233,7 @@ program
       ...globalOpts,
       detail: options.detail,
       source: options.source,
+      writtenBy: options.writtenBy,
     });
   });
 

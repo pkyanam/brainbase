@@ -6,6 +6,7 @@ export interface BrainPage {
   type: string;
   content: string;
   frontmatter: Record<string, unknown>;
+  written_by?: string;
   created_at: string;
   updated_at: string;
 }
@@ -22,15 +23,17 @@ export interface TimelineEntry {
   summary: string;
   detail?: string;
   source?: string;
+  written_by?: string;
 }
 
 export async function getPage(brainId: string, slug: string): Promise<BrainPage | null> {
   const row = await queryOne<{
     slug: string; title: string; type: string;
     compiled_truth: string; frontmatter: Record<string, unknown>;
+    written_by: string | null;
     created_at: string; updated_at: string;
   }>(
-    `SELECT slug, title, type, compiled_truth, frontmatter, created_at::text, updated_at::text
+    `SELECT slug, title, type, compiled_truth, frontmatter, written_by, created_at::text, updated_at::text
      FROM pages WHERE brain_id = $1 AND slug = $2`,
     [brainId, slug]
   );
@@ -43,6 +46,7 @@ export async function getPage(brainId: string, slug: string): Promise<BrainPage 
     type: row.type || "unknown",
     content: row.compiled_truth || "",
     frontmatter: row.frontmatter || {},
+    written_by: row.written_by || undefined,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -81,9 +85,9 @@ export async function getPageLinks(brainId: string, slug: string): Promise<{
 
 export async function getTimeline(brainId: string, slug: string): Promise<TimelineEntry[]> {
   const rows = await queryMany<{
-    date: string; summary: string; detail: string; source: string;
+    date: string; summary: string; detail: string; source: string; written_by: string | null;
   }>(
-    `SELECT te.date::text, te.summary, te.detail, te.source
+    `SELECT te.date::text, te.summary, te.detail, te.source, te.written_by
      FROM timeline_entries te
      JOIN pages p ON p.id = te.page_id
      WHERE te.brain_id = $1 AND p.slug = $2
@@ -97,5 +101,6 @@ export async function getTimeline(brainId: string, slug: string): Promise<Timeli
     summary: r.summary,
     detail: r.detail || undefined,
     source: r.source || undefined,
+    written_by: r.written_by || undefined,
   }));
 }

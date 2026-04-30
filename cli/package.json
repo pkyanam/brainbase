@@ -47,7 +47,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "brainbase-sdk": "^0.1.0",
+    "brainbase-sdk": "file:../sdk",
     "chalk": "^5.4.1",
     "commander": "^13.0.0"
   },

@@ -89,6 +89,7 @@ export interface PutPageInput {
   type?: string;
   content?: string;
   frontmatter?: Record<string, unknown>;
+  written_by?: string;
 }
 
 export interface PutPageResult {
@@ -226,7 +227,7 @@ export class Brainbase {
   }
 
   /** List all pages with optional type filter. */
-  async listPages(options?: { type?: string; limit?: number; offset?: number }): Promise<PageListItem[] | null> {
+  async listPages(options?: { type?: string; writtenBy?: string; limit?: number; offset?: number }): Promise<PageListItem[] | null> {
     const result = await this.request("list_pages", options || {});
     return result as PageListItem[] | null;
   }
@@ -251,6 +252,7 @@ export class Brainbase {
       type: input.type,
       content: input.content,
       frontmatter: input.frontmatter,
+      written_by: input.written_by,
     });
     return result as PutPageResult | null;
   }
@@ -262,8 +264,8 @@ export class Brainbase {
   }
 
   /** Create a typed link between two pages. */
-  async addLink(from: string, to: string, linkType?: string): Promise<{ success: boolean; from: string; to: string; link_type: string } | null> {
-    const result = await this.request("add_link", { from, to, link_type: linkType });
+  async addLink(from: string, to: string, linkType?: string, writtenBy?: string): Promise<{ success: boolean; from: string; to: string; link_type: string } | null> {
+    const result = await this.request("add_link", { from, to, link_type: linkType, written_by: writtenBy });
     return result as { success: boolean; from: string; to: string; link_type: string } | null;
   }
 
@@ -278,7 +280,7 @@ export class Brainbase {
     slug: string,
     date: string,
     summary: string,
-    options?: { detail?: string; source?: string }
+    options?: { detail?: string; source?: string; written_by?: string }
   ): Promise<{ id: string } | null> {
     const result = await this.request("add_timeline_entry", {
       slug,
@@ -286,6 +288,7 @@ export class Brainbase {
       summary,
       detail: options?.detail,
       source: options?.source,
+      written_by: options?.written_by,
     });
     return result as { id: string } | null;
   }

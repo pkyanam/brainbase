@@ -10,6 +10,7 @@ import { buildSdkConfig, requireApiKey } from "../utils/config.js";
 
 export interface ListOptions extends GlobalOptions {
   type?: string;
+  writtenBy?: string;
   limit?: number;
   offset?: number;
 }
@@ -26,6 +27,7 @@ export async function listCommand(
 
     const pages = await brain.listPages({
       type: opts.type,
+      writtenBy: opts.writtenBy,
       limit: opts.limit,
       offset: opts.offset,
     });

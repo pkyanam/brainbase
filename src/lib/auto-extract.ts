@@ -137,8 +137,8 @@ export async function runAutoExtract(
         // Auto-stub the target page
         const title = link.toSlug.split("/").pop()?.replace(/-/g, " ") || link.toSlug;
         await queryOne(
-          `INSERT INTO pages (brain_id, slug, title, type, compiled_truth, frontmatter, search_vector)
-           VALUES ($1, $2, $3, 'unknown', '', '{}'::jsonb, to_tsvector('english', ''))
+          `INSERT INTO pages (brain_id, slug, title, type, compiled_truth, frontmatter, search_vector, written_by)
+           VALUES ($1, $2, $3, 'unknown', '', '{}'::jsonb, to_tsvector('english', ''), 'system')
            ON CONFLICT (brain_id, slug) DO NOTHING`,
           [brainId, link.toSlug, title]
         );
@@ -146,12 +146,13 @@ export async function runAutoExtract(
 
       // Create the link
       const linkResult = await queryOne<{ id: string }>(
-        `INSERT INTO links (brain_id, from_page_id, to_page_id, link_type)
+        `INSERT INTO links (brain_id, from_page_id, to_page_id, link_type, written_by)
          VALUES (
            $1,
            (SELECT id FROM pages WHERE brain_id = $1 AND slug = $2),
            (SELECT id FROM pages WHERE brain_id = $1 AND slug = $3),
-           $4
+           $4,
+           'system'
          )
          ON CONFLICT DO NOTHING
          RETURNING id`,
@@ -168,11 +169,12 @@ export async function runAutoExtract(
   for (const d of dates) {
     try {
       const tlResult = await queryOne<{ id: string }>(
-        `INSERT INTO timeline_entries (brain_id, page_id, date, summary, detail)
+        `INSERT INTO timeline_entries (brain_id, page_id, date, summary, detail, written_by)
          VALUES (
            $1,
            (SELECT id FROM pages WHERE brain_id = $1 AND slug = $2),
-           $3, $4, $5
+           $3, $4, $5,
+           'system'
          )
          ON CONFLICT DO NOTHING
          RETURNING id`,

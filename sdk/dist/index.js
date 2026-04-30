@@ -140,6 +140,7 @@ class Brainbase {
             type: input.type,
             content: input.content,
             frontmatter: input.frontmatter,
+            written_by: input.written_by,
         });
         return result;
     }
@@ -149,8 +150,8 @@ class Brainbase {
         return result;
     }
     /** Create a typed link between two pages. */
-    async addLink(from, to, linkType) {
-        const result = await this.request("add_link", { from, to, link_type: linkType });
+    async addLink(from, to, linkType, writtenBy) {
+        const result = await this.request("add_link", { from, to, link_type: linkType, written_by: writtenBy });
         return result;
     }
     /** Remove a link between two pages. */
@@ -166,6 +167,7 @@ class Brainbase {
             summary,
             detail: options?.detail,
             source: options?.source,
+            written_by: options?.written_by,
         });
         return result;
     }

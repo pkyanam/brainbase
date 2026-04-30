@@ -11,6 +11,7 @@ import { buildSdkConfig, requireApiKey } from "../utils/config.js";
 export interface AddTimelineOptions extends GlobalOptions {
   detail?: string;
   source?: string;
+  writtenBy?: string;
 }
 
 export async function addTimelineCommand(
@@ -29,6 +30,7 @@ export async function addTimelineCommand(
     const result = await brain.addTimelineEntry(slug, date, summary, {
       detail: opts.detail,
       source: opts.source,
+      written_by: opts.writtenBy,
     });
 
     if (opts.json) {

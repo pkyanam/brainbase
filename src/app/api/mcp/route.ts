@@ -21,7 +21,7 @@ interface JsonRpcRequest {
 }
 
 const tools = [
-  { name: "search", description: "Search brain pages by keyword", inputSchema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] } },
+  { name: "search", description: "Search brain pages by keyword", inputSchema: { type: "object", properties: { query: { type: "string" }, limit: { type: "number" }, written_by: { type: "string", description: "filter by author/agent who wrote the page" } }, required: ["query"] } },
   { name: "query", description: "Natural language query of the brain", inputSchema: { type: "object", properties: { question: { type: "string" } }, required: ["question"] } },
   { name: "get_page", description: "Get a brain page by slug", inputSchema: { type: "object", properties: { slug: { type: "string" } }, required: ["slug"] } },
   { name: "get_links", description: "Get incoming and outgoing links for a page", inputSchema: { type: "object", properties: { slug: { type: "string" } }, required: ["slug"] } },
@@ -30,13 +30,13 @@ const tools = [
   { name: "get_health", description: "Get brain statistics and health score", inputSchema: { type: "object", properties: {} } },
   { name: "get_stats", description: "Get detailed brain statistics", inputSchema: { type: "object", properties: {} } },
   { name: "get_graph", description: "Get full graph data (nodes + edges)", inputSchema: { type: "object", properties: {} } },
-  { name: "list_pages", description: "List all brain pages with metadata", inputSchema: { type: "object", properties: { type: { type: "string" }, limit: { type: "number" }, offset: { type: "number" } } } },
+  { name: "list_pages", description: "List all brain pages with metadata", inputSchema: { type: "object", properties: { type: { type: "string" }, written_by: { type: "string", description: "filter by author/agent" }, limit: { type: "number" }, offset: { type: "number" } } } },
   { name: "traverse_graph", description: "Traverse the knowledge graph from a starting page", inputSchema: { type: "object", properties: { slug: { type: "string" }, depth: { type: "number" }, direction: { type: "string", enum: ["out", "in", "both"] } }, required: ["slug"] } },
-  { name: "put_page", description: "Create or update a brain page", inputSchema: { type: "object", properties: { slug: { type: "string" }, title: { type: "string" }, type: { type: "string" }, content: { type: "string" }, frontmatter: { type: "object" } }, required: ["slug", "title"] } },
+  { name: "put_page", description: "Create or update a brain page", inputSchema: { type: "object", properties: { slug: { type: "string" }, title: { type: "string" }, type: { type: "string" }, content: { type: "string" }, frontmatter: { type: "object" }, written_by: { type: "string", description: "Agent or user identifier (e.g. 'lara', 'jarvis', 'user')" } }, required: ["slug", "title"] } },
   { name: "delete_page", description: "Delete a brain page by slug", inputSchema: { type: "object", properties: { slug: { type: "string" } }, required: ["slug"] } },
-  { name: "add_link", description: "Create a typed link between two pages", inputSchema: { type: "object", properties: { from: { type: "string" }, to: { type: "string" }, link_type: { type: "string" } }, required: ["from", "to"] } },
+  { name: "add_link", description: "Create a typed link between two pages", inputSchema: { type: "object", properties: { from: { type: "string" }, to: { type: "string" }, link_type: { type: "string" }, written_by: { type: "string" } }, required: ["from", "to"] } },
   { name: "remove_link", description: "Remove a link between two pages", inputSchema: { type: "object", properties: { from: { type: "string" }, to: { type: "string" } }, required: ["from", "to"] } },
-  { name: "add_timeline_entry", description: "Add a timeline event to a page", inputSchema: { type: "object", properties: { slug: { type: "string" }, date: { type: "string" }, summary: { type: "string" }, detail: { type: "string" }, source: { type: "string" } }, required: ["slug", "date", "summary"] } },
+  { name: "add_timeline_entry", description: "Add a timeline event to a page", inputSchema: { type: "object", properties: { slug: { type: "string" }, date: { type: "string" }, summary: { type: "string" }, detail: { type: "string" }, source: { type: "string" }, written_by: { type: "string" } }, required: ["slug", "date", "summary"] } },
   { name: "upsert_trigger", description: "Create or update a trigger rule", inputSchema: { type: "object", properties: { id: { type: "string" }, name: { type: "string" }, description: { type: "string" }, conditions: { type: "object" }, actions: { type: "array" }, enabled: { type: "boolean" }, cooldown_minutes: { type: "number" } }, required: ["name", "conditions", "actions"] } },
   { name: "list_triggers", description: "List active trigger rules", inputSchema: { type: "object", properties: {} } },
   { name: "run_triggers", description: "Manually run triggers against a page", inputSchema: { type: "object", properties: { slug: { type: "string" }, title: { type: "string" }, type: { type: "string" }, content: { type: "string" } }, required: ["slug", "title"] } },
@@ -47,7 +47,7 @@ async function dispatch(brainId: string, method: string, params: Record<string, 
     case "search": {
       const q = params.query as string;
       if (!q) throw new Error("Missing 'query' parameter");
-      return await searchBrain(brainId, q);
+      return await searchBrain(brainId, q, (params.limit as number) ?? 20, (params.written_by as string) || undefined);
     }
     case "get_page": {
       const slug = params.slug as string;
@@ -87,6 +87,7 @@ async function dispatch(brainId: string, method: string, params: Record<string, 
     case "list_pages": {
       return await listPages(brainId, {
         type: params.type as string | undefined,
+        writtenBy: params.written_by as string | undefined,
         limit: params.limit as number | undefined,
         offset: params.offset as number | undefined,
       });
@@ -102,7 +103,7 @@ async function dispatch(brainId: string, method: string, params: Record<string, 
       if (!slug || !title) throw new Error("Missing 'slug' or 'title' parameter");
       const quota = await requireQuota(brainId, "page_write");
       if (quota) return quota;
-      return await putPage(brainId, { slug, title, type: params.type as string | undefined, content: params.content as string | undefined, frontmatter: params.frontmatter as Record<string, unknown> | undefined });
+      return await putPage(brainId, { slug, title, type: params.type as string | undefined, content: params.content as string | undefined, frontmatter: params.frontmatter as Record<string, unknown> | undefined, written_by: params.written_by as string | undefined });
     }
     case "delete_page": {
       const slug = params.slug as string;
@@ -118,7 +119,7 @@ async function dispatch(brainId: string, method: string, params: Record<string, 
       if (!from || !to) throw new Error("Missing 'from' or 'to' parameter");
       const quota = await requireQuota(brainId, "api_call");
       if (quota) return quota;
-      const created = await addLink(brainId, from, to, params.link_type as string | undefined);
+      const created = await addLink(brainId, from, to, params.link_type as string | undefined, params.written_by as string | undefined);
       return { success: created, from, to, link_type: params.link_type || "related" };
     }
     case "remove_link": {
@@ -137,7 +138,7 @@ async function dispatch(brainId: string, method: string, params: Record<string, 
       if (!slug || !date || !summary) throw new Error("Missing 'slug', 'date', or 'summary' parameter");
       const quota = await requireQuota(brainId, "api_call");
       if (quota) return quota;
-      return await addTimelineEntry(brainId, { slug, date, summary, detail: params.detail as string | undefined, source: params.source as string | undefined });
+      return await addTimelineEntry(brainId, { slug, date, summary, detail: params.detail as string | undefined, source: params.source as string | undefined, written_by: params.written_by as string | undefined });
     }
     case "upsert_trigger": {
       const name = params.name as string;
