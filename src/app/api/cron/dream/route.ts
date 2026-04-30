@@ -1,16 +1,21 @@
 /**
  * GET /api/cron/dream
  *
- * Vercel Cron Job endpoint — runs every 6 hours.
- * Processes all brains incrementally (small batches per brain).
+ * Vercel Cron Job endpoint — runs daily at midnight.
+ * Runs the autonomous dream cycle on all brains:
+ *   1. Extract links + timeline from updated pages
+ *   2. Extract frontmatter edges
+ *   3. Embed stale chunks (batch of 50 per brain)
+ *   4. Detect + auto-link orphans
+ *   5. Detect cross-page patterns
+ *   6. Entity tier auto-escalation
  *
- * Secured by CRON_SECRET env var. Vercel sends this as
- * Authorization: Bearer <CRON_SECRET>
+ * Secured by CRON_SECRET env var.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { queryMany } from "@/lib/supabase/client";
-import { submitJob } from "@/lib/minions/queue";
+import { runDreamCycle } from "@/lib/dream-cycle";
 
 export async function GET(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
@@ -34,36 +39,37 @@ export async function GET(req: NextRequest) {
        ORDER BY COUNT(*) DESC`
     );
 
-    const submitted: Array<{ brain_id: string; name: string; job_id: number }> = [];
+    const results: Array<{ brain_id: string; status: string; totals: Record<string, number> }> = [];
 
     for (const brain of brains.slice(0, 10)) {
-      // Submit extract job (finds new links + timeline entries)
-      const extract = await submitJob("extract", {
-        brain_id: brain.brain_id,
-        data: { full: false },
-      });
-      submitted.push({ brain_id: brain.brain_id, name: "extract", job_id: extract.id });
-
-      // Submit backlinks job (enforces reciprocal links)
-      const backlinks = await submitJob("backlinks", {
-        brain_id: brain.brain_id,
-        data: {},
-      });
-      submitted.push({ brain_id: brain.brain_id, name: "backlinks", job_id: backlinks.id });
-
-      // Submit embed job (for any un-embedded chunks)
-      const embed = await submitJob("embed", {
-        brain_id: brain.brain_id,
-        data: {},
-      });
-      submitted.push({ brain_id: brain.brain_id, name: "embed", job_id: embed.id });
+      try {
+        const report = await runDreamCycle(brain.brain_id, 200);
+        results.push({
+          brain_id: brain.brain_id,
+          status: report.status,
+          totals: report.totals,
+        });
+      } catch (err) {
+        console.error(`[brainbase] Dream cycle failed for ${brain.brain_id}:`, err);
+        results.push({
+          brain_id: brain.brain_id,
+          status: "failed",
+          totals: {},
+        });
+      }
     }
+
+    const totalEmbedded = results.reduce((sum, r) => sum + (r.totals.chunks_embedded || 0), 0);
+    const totalLinked = results.reduce((sum, r) => sum + (r.totals.links_created || 0), 0);
+    const totalOrphans = results.reduce((sum, r) => sum + (r.totals.orphans_found || 0), 0);
 
     return NextResponse.json({
       status: "ok",
-      brains_scheduled: brains.slice(0, 10).length,
-      jobs_submitted: submitted.length,
-      jobs: submitted,
+      brains_processed: results.length,
+      total_chunks_embedded: totalEmbedded,
+      total_links_created: totalLinked,
+      total_orphans_found: totalOrphans,
+      results,
     });
   } catch (err) {
     console.error("[brainbase] Cron dream error:", err);

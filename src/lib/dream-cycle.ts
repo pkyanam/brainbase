@@ -14,6 +14,7 @@
 import { queryMany, queryOne } from "./supabase/client";
 import { runAutoExtract, findOrphans } from "./auto-extract";
 import { embedStaleChunks } from "./embeddings";
+import { createSemanticLinks } from "./semantic-links";
 
 export interface DreamPhaseResult {
   phase: string;
@@ -121,7 +122,7 @@ async function runEmbedPhase(brainId: string): Promise<DreamPhaseResult> {
     // Actually embed a small batch (serverless-safe)
     let embedded = 0;
     try {
-      embedded = await embedStaleChunks(brainId, 20);
+      embedded = await embedStaleChunks(brainId, 50);
     } catch (embedErr) {
       return {
         phase: "embed",
@@ -148,16 +149,43 @@ async function runEmbedPhase(brainId: string): Promise<DreamPhaseResult> {
   }
 }
 
-// ── Phase 3: Orphan detection ────────────────────────────────────────────
+// ── Phase 3: Orphan detection + auto-linking ────────────────────────────
 
 async function runOrphansPhase(brainId: string): Promise<DreamPhaseResult> {
   try {
     const orphans = await findOrphans(brainId);
+
+    if (orphans.length === 0) {
+      return {
+        phase: "orphans",
+        status: "ok",
+        summary: "No orphan pages found",
+        details: { orphanCount: 0, autoLinked: 0 },
+      };
+    }
+
+    // Auto-link top orphans via semantic similarity
+    let autoLinked = 0;
+    const toProcess = orphans.slice(0, 10); // Limit for serverless timeout
+
+    for (const orphanSlug of toProcess) {
+      try {
+        const links = await createSemanticLinks(
+          brainId,
+          orphanSlug,
+          `Auto-linked orphan via semantic similarity`
+        );
+        autoLinked += links.length;
+      } catch (err) {
+        console.error(`[dream] Auto-link failed for ${orphanSlug}:`, err);
+      }
+    }
+
     return {
       phase: "orphans",
       status: orphans.length > 0 ? "warn" : "ok",
-      summary: `${orphans.length} orphan pages found`,
-      details: { orphanCount: orphans.length, orphans: orphans.slice(0, 20) },
+      summary: `${orphans.length} orphans found, ${autoLinked} auto-linked`,
+      details: { orphanCount: orphans.length, autoLinked, orphans: orphans.slice(0, 20) },
     };
   } catch (err) {
     return {

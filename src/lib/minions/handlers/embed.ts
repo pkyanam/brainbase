@@ -1,8 +1,10 @@
 import type { MinionHandler } from '../types';
 import { queryMany, query } from '../../supabase/client';
+import { generateEmbeddings } from '../../embeddings';
 
 /**
- * Embed handler — generates embeddings for un-embedded content chunks.
+ * Embed handler — generates OpenAI embeddings for un-embedded content chunks.
+ * Updates the embedding column directly on content_chunks (vector type).
  */
 export const embedHandler: MinionHandler = async (ctx) => {
   const brainId = ctx.brain_id;
@@ -13,27 +15,42 @@ export const embedHandler: MinionHandler = async (ctx) => {
 
   await ctx.log(`Embedding chunks for brain ${brainId}`);
 
-  const unembedded = await queryMany<{ chunk_id: string; chunk_text: string }>(
-    `SELECT cc.id::text as chunk_id, cc.chunk_text
-     FROM content_chunks cc
-     LEFT JOIN embeddings e ON e.chunk_id = cc.id::text
-     WHERE cc.brain_id = $1 AND e.id IS NULL
+  const unembedded = await queryMany<{ id: number; chunk_text: string }>(
+    `SELECT id, chunk_text
+     FROM content_chunks
+     WHERE brain_id = $1 AND embedding IS NULL
+     ORDER BY id
      LIMIT 50`,
     [brainId]
   );
 
-  await ctx.updateProgress({ total: unembedded.length, embedded: 0, message: 'Embedding...' });
+  if (unembedded.length === 0) {
+    return {
+      brain_id: brainId,
+      total_found: 0,
+      embedded: 0,
+      pending: 0,
+    };
+  }
+
+  await ctx.updateProgress({ total: unembedded.length, embedded: 0, message: 'Generating OpenAI embeddings...' });
+
+  const texts = unembedded.map(c => c.chunk_text);
+  const embeddings = await generateEmbeddings(texts);
+
+  if (!embeddings) {
+    throw new Error('OpenAI embedding generation failed — check OPENAI_API_KEY and API quota');
+  }
 
   let embedded = 0;
-  for (const chunk of unembedded) {
+  for (let i = 0; i < unembedded.length; i++) {
     if (ctx.isTimeRunningOut()) break;
+    const emb = embeddings[i];
+    if (!emb) continue;
 
-    // Phase 2 skeleton: real embedding via OpenAI
     await query(
-      `INSERT INTO embeddings (chunk_id, embedding, brain_id)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (chunk_id) DO NOTHING`,
-      [chunk.chunk_id, '[pending]', brainId]
+      `UPDATE content_chunks SET embedding = $1::vector WHERE id = $2`,
+      [JSON.stringify(emb), unembedded[i].id]
     );
     embedded++;
   }
