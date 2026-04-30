@@ -19,13 +19,19 @@ import { runDreamCycle } from "@/lib/dream-cycle";
 
 export async function GET(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
+  const hermesSecret = process.env.HERMES_CRON_SECRET;
   const authHeader = req.headers.get("authorization");
 
   // In dev, allow unauthenticated calls
   const isDev = process.env.NODE_ENV === "development";
   const bearer = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1];
 
-  if (!isDev && cronSecret && bearer !== cronSecret) {
+  // Accept either CRON_SECRET or HERMES_CRON_SECRET
+  const authorized = isDev ||
+    (cronSecret && bearer === cronSecret) ||
+    (hermesSecret && bearer === hermesSecret);
+
+  if (!authorized) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
