@@ -484,8 +484,8 @@ export default function DemoPage() {
               </div>
               <h3 className="font-semibold mb-2">Ingest</h3>
               <p className="text-sm text-bb-text-muted leading-relaxed">
-                Connect Slack (and soon Gmail, Notion, Linear). We extract entities,
-                links, and decisions automatically.
+                Connect Slack to extract entities, links, and decisions automatically.
+                Additional integrations are on the roadmap.
               </p>
             </div>
             <div className="p-6 rounded-2xl bg-bb-bg-secondary border border-bb-border">

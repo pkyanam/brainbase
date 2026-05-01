@@ -95,6 +95,7 @@ export default function Dashboard() {
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [showKey, setShowKey] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Mobile side panel
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
@@ -250,6 +251,18 @@ export default function Dashboard() {
       .catch(() => {});
   }, [isLoaded, user]);
 
+  // Cmd+K keyboard shortcut to focus search
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   const handleSearch = useCallback((q: string) => {
     setQuery(q);
     if (searchTimer.current) clearTimeout(searchTimer.current);
@@ -304,6 +317,7 @@ export default function Dashboard() {
         <div className="flex items-center gap-1 md:gap-2 text-xs min-w-0">
           {/* Desktop nav links */}
           <a href="/docs" className="hidden md:inline-flex h-8 px-3 items-center text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface rounded transition-colors">Docs</a>
+          <a href="/admin" className="hidden md:inline-flex h-8 px-3 items-center text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface rounded transition-colors">Admin</a>
           <a href="/settings" className="hidden md:inline-flex h-8 px-3 items-center text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface rounded transition-colors">Settings</a>
 
           {isLoaded && user ? (
@@ -328,6 +342,25 @@ export default function Dashboard() {
                 <span className={`w-1.5 h-1.5 rounded-full ${liveDot}`} title={liveStatus} />
                 <span className="text-[10px] uppercase tracking-wider text-bb-text-muted">{liveStatus}</span>
               </div>
+
+              {/* API Key quick copy */}
+              {apiKey && (
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(apiKey);
+                    setShowKey(true);
+                    setTimeout(() => setShowKey(false), 2000);
+                  }}
+                  className="hidden md:inline-flex items-center gap-1.5 h-8 px-2.5 rounded border border-bb-border bg-bb-surface text-bb-text-muted hover:text-bb-text-primary hover:border-bb-border-hover transition-colors"
+                  title="Copy API key prefix"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  <span className="font-mono text-[10px]">{apiKey}</span>
+                  {showKey && <span className="text-bb-accent text-[10px]">Copied</span>}
+                </button>
+              )}
 
               {/* Username */}
               <span
@@ -387,16 +420,18 @@ export default function Dashboard() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
               <input
+                ref={searchInputRef}
                 type="text"
                 value={query}
                 onChange={(e) => handleSearch(e.target.value)}
                 onFocus={() => setSearchFocused(true)}
                 onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
-                placeholder="Search pages, people, companies…"
-                className={`w-full h-11 pl-9 pr-3 bg-bb-surface border rounded-lg text-sm text-bb-text-primary placeholder:text-bb-text-muted outline-none transition-colors ${
+                placeholder="Search pages, people, companies…  (Cmd+K)"
+                className={`w-full h-11 pl-9 pr-16 bg-bb-surface border rounded-lg text-sm text-bb-text-primary placeholder:text-bb-text-muted outline-none transition-colors ${
                   searchFocused ? "border-bb-accent" : "border-bb-border hover:border-bb-border-strong"
                 }`}
               />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-bb-text-muted hidden md:block font-mono border border-bb-border rounded px-1.5 py-0.5">⌘K</span>
               <PageList
                 results={results}
                 onSelect={(slug) => {
@@ -464,7 +499,7 @@ export default function Dashboard() {
                   </svg>
                   Connect Slack
                 </button>
-                <span className="text-bb-text-muted">Gmail, Notion, Linear (soon)</span>
+                <span className="text-bb-text-muted">More integrations in development</span>
               </div>
               {showSlackForm && (
                 <div className="mt-2 p-3 rounded-lg bg-bb-surface border border-bb-border">

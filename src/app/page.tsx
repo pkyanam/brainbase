@@ -102,7 +102,7 @@ export default function Home() {
               {
                 step: "01",
                 title: "Ingest",
-                body: "Connect Slack (and soon Gmail, Notion, Linear). We extract entities, links, and decisions automatically.",
+                body: "Connect Slack to extract entities, links, and decisions automatically. Additional integrations are on the roadmap.",
               },
               {
                 step: "02",
