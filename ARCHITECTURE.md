@@ -1,4 +1,4 @@
-# Brainbase — Architecture (v0.4)
+# Brainbase — Architecture
 
 > **Current state:** April 30, 2026. This reflects what's actually deployed.
 
@@ -37,18 +37,18 @@ API Layer (Next.js)
 
 Data Layer
 └── Supabase Postgres
-    ├── pages (720 rows, 918 chunks)
-    ├── links (554 typed edges, from_page_id/to_page_id)
-    ├── content_chunks (918 rows, pgvector embeddings)
-    ├── timeline_entries (847 rows)
+    ├── pages
+    ├── links (typed edges, from_page_id/to_page_id)
+    ├── content_chunks (pgvector embeddings)
+    ├── timeline_entries
     └── minion_jobs (background job queue)
 
 Background Processing
 ├── Dream Cycle (daily Vercel cron + external triggers)
 │   ├── Extract: wikilinks + timeline from page content
 │   ├── Frontmatter: typed edges from YAML frontmatter
-│   ├── Embed: OpenAI embeddings for stale chunks (50/cycle)
-│   ├── Orphans: detect + auto-link via semantic similarity (10/cycle)
+│   ├── Embed: OpenAI embeddings for stale chunks
+│   ├── Orphans: detect + auto-link via semantic similarity
 │   ├── Patterns: cross-page co-occurrence detection
 │   └── Entity Tiers: auto-escalation based on link count
 └── Minions Queue (cron-driven batch ticks)
@@ -83,35 +83,12 @@ Hybrid search:
     7. ILIKE fallback (last resort)
 ```
 
-## Current Metrics (April 30, 2026)
-
-| Metric | Value |
-|--------|-------|
-| Pages | 720 |
-| Typed links | 554 |
-| Content chunks | 918 |
-| Timeline entries | 847 |
-| Orphans | 497 |
-| Brain score | 76/100 |
-
-## Search Eval (50-pair ground truth, v1.7)
-
-| Metric | Value |
-|--------|-------|
-| MRR | 0.83 |
-| P@3 | 0.49 |
-| P@10 | 0.41 |
-| R@10 | 0.85 |
-| Intent accuracy | 51% |
-| p50 latency | 619ms |
-| p95 latency | 1401ms |
-
 ## What We Learned
 
 - **CLI wrapper was a bottleneck.** Direct Supabase queries replaced GBrain CLI subprocess. 15s timeout → 500ms.
-- **D3.js 2D was wrong.** Three.js 3D with instanced rendering handles 720 nodes at 60fps.
+- **D3.js 2D was wrong.** Three.js 3D with instanced rendering handles large graphs at 60fps.
 - **PGLite is dead.** macOS 26.3 XProtect kills WASM. Supabase only.
 - **Fake scoring was everywhere.** Phase 1 replaced hardcoded ladders with real ts_rank_cd + pgvector similarity.
 - **Minions queue shipped incomplete.** The embed handler was a `'[pending]'` stub for weeks. Phase 3 fixed it.
 - **Dream cycle was aspirational.** Cron submitted jobs to a queue with no worker. Phase 3 wired it directly.
-- **Embed coverage is the search quality ceiling.** 37% → we're working on it.
+- **Embed coverage is the search quality ceiling.** Continuous improvement via dream cycle.

@@ -37,13 +37,6 @@ npm install brainbase-sdk
 | `src/lib/minions/` | Background job queue |
 | `src/app/api/mcp/route.ts` | MCP server (12 tools) |
 
-## Current State
-
-- 720 pages, 554 typed links, 918 chunks, 847 timeline entries
-- Brain score: 76/100
-- Search eval: MRR 0.83, P@3 0.49, R@10 0.85
-- Embed coverage: actively catching up via dream cycle
-
 ## Rules
 
 1. Read from the brain before external APIs

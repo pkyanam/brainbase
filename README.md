@@ -2,8 +2,6 @@
 
 **The memory layer for AI agents.** One API call, and every agent in your stack remembers everything.
 
-[![Brain Score](https://img.shields.io/badge/brain_score-76%2F100-brightgreen)](#)
-[![Search MRR](https://img.shields.io/badge/search_MRR-0.83-blue)](#)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ---
@@ -20,35 +18,13 @@ Every AI agent today starts every task from zero context. They don't know who yo
 
 ## Live Demo
 
-**[brainbase.belweave.ai](https://brainbase.belweave.ai)** — Preetham Kyanam's own brain, 720 pages, 554 typed links, 3D knowledge graph.
+**[brainbase.belweave.ai/demo](https://brainbase.belweave.ai/demo)** — interactive 3D knowledge graph built from a real personal brain. Search, explore, see the dream cycle in action.
 
-## Current State (April 30, 2026)
+## Search Pipeline
 
-| Metric | Value |
-|--------|-------|
-| Pages | 720 |
-| Typed links | 554 |
-| Content chunks | 918 |
-| Timeline entries | 847 |
-| Brain score | 76/100 |
-| Orphans | 497 (auto-linking at 60/day) |
+Hybrid search (Postgres FTS + pgvector) with reciprocal rank fusion, intent classifier, and type-aware re-ranking.
 
-## Search Quality
-
-We track retrieval quality with a 50-pair labeled ground truth and reproducible eval harness. MRR is our north star.
-
-| Metric | Value |
-|--------|-------|
-| **MRR** | 0.83 |
-| **P@3** | 0.49 |
-| **P@10** | 0.41 |
-| **R@10** | 0.85 |
-| Relational MRR | 0.78 |
-| Multi-entity MRR | 0.75 |
-| p50 latency | 619ms |
-| p95 latency | 1401ms |
-
-**Search pipeline:** 7-stage gated search (FTS AND → FTS OR + synonyms → chunk FTS → timeline FTS → pg_trgm → ILIKE fallback), reciprocal rank fusion with pgvector, compiled truth boost, backlink boost, intent classifier (temporal/entity/event/general), acronym expansion.
+**Pipeline:** 7-stage gated FTS → vector search → RRF fusion → compiled truth boost → backlink boost → intent-aware re-ranking → structured query handlers.
 
 ## Quick Start
 
@@ -70,7 +46,6 @@ const page = await brain.getPage("people/garry-tan");
 
 // Brain health
 const health = await brain.health();
-// → { page_count: 720, brain_score: 76, link_count: 554 }
 
 // Knowledge graph
 const graph = await brain.graph();
@@ -123,17 +98,17 @@ API (Next.js 16)
 └── Public: /b/<user>/api/status, /b/<user>/llms.txt
 
 Database (Supabase)
-├── pages (720)
-├── links (554 typed edges)
-├── content_chunks (pgvector, 918 chunks)
-├── timeline_entries (847)
+├── pages
+├── links (typed edges)
+├── content_chunks (pgvector)
+├── timeline_entries
 └── minion_jobs (background queue)
 
 Background (Dream Cycle)
-├── Extract: wikilinks + timeline from pages (200/cycle)
+├── Extract: wikilinks + timeline from pages
 ├── Frontmatter: typed edges from YAML
-├── Embed: OpenAI text-embedding-3-small (50/cycle)
-├── Orphans: auto-link via semantic similarity (10/cycle)
+├── Embed: OpenAI text-embedding-3-small
+├── Orphans: auto-link via semantic similarity
 ├── Patterns: cross-page co-occurrence detection
 └── Entity Tiers: auto-escalation
 ```
@@ -165,11 +140,11 @@ Required env vars in `.env.local`:
 
 ```bash
 SUPABASE_DATABASE_URL=postgresql://...
-OPENAI_API_KEY=sk-...
+OPENAI_API_KEY=***
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_...
-CLERK_SECRET_KEY=sk_...
-CRON_SECRET=...          # secures /api/cron/dream
-HERMES_CRON_SECRET=...   # alternative secret for external cron triggers
+CLERK_SECRET_KEY=***
+CRON_SECRET=***          # secures /api/cron/dream
+HERMES_CRON_SECRET=***   # alternative secret for external cron triggers
 ```
 
 ## Endpoints
@@ -185,17 +160,6 @@ HERMES_CRON_SECRET=...   # alternative secret for external cron triggers
 | `/api/brain/dream` | POST | Bearer | Manual dream trigger |
 | `/b/<user>/api/status` | GET | Public | Public brain stats |
 | `/b/<user>/llms.txt` | GET | Public | Agent-readable summary |
-
-## Multi-Agent Proof Point
-
-Brainbase already runs against Preetham's brain with 4 agents from different frameworks sharing the same graph:
-
-- **Lara** — conversational agent (Telegram + web)
-- **Arlan** — iMessage agent (Folk-based)
-- **Hermes** — task agent (Hermes CLI)
-- **Jerry** — utility agent
-
-Every agent reads the same brain. Every agent's work enriches it. No manual data entry.
 
 ## License
 
