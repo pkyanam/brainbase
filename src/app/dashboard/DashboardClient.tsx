@@ -99,6 +99,7 @@ export default function Dashboard() {
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
   const [newPageSlug, setNewPageSlug] = useState("");
   const [newPageTitle, setNewPageTitle] = useState("");
   const [newPageType, setNewPageType] = useState("note");
@@ -427,10 +428,29 @@ export default function Dashboard() {
         </div>
 
         <div className="flex items-center gap-1 md:gap-2 text-xs min-w-0">
-              {/* Desktop nav links */}
-              <a href="/docs" className="hidden md:inline-flex h-8 px-3 items-center text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface rounded transition-colors">Docs</a>
-              <a href="/admin" className="hidden md:inline-flex h-8 px-3 items-center text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface rounded transition-colors">Admin</a>
-              <a href="/settings" className="hidden md:inline-flex h-8 px-3 items-center text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface rounded transition-colors">Settings</a>
+              {/* More menu dropdown */}
+              <div className="hidden md:block relative">
+                <button
+                  onClick={() => setHeaderMenuOpen(!headerMenuOpen)}
+                  onBlur={() => setTimeout(() => setHeaderMenuOpen(false), 200)}
+                  className="inline-flex h-8 w-8 items-center justify-center text-bb-text-muted hover:text-bb-text-primary hover:bg-bb-surface rounded transition-colors"
+                  title="More"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                  </svg>
+                </button>
+                {headerMenuOpen && (
+                  <div className="absolute right-0 top-full mt-1 w-44 bg-bb-surface border border-bb-border rounded-lg shadow-lg py-1 z-50 animate-fade-in">
+                    <a href="/docs" className="block px-3 py-2 text-xs text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-bg-primary transition-colors">Docs</a>
+                    <a href="/admin" className="block px-3 py-2 text-xs text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-bg-primary transition-colors">Admin</a>
+                    <a href="/settings" className="block px-3 py-2 text-xs text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-bg-primary transition-colors">Settings</a>
+                    <div className="border-t border-bb-border mt-1 pt-1">
+                      <a href="/graph" className="block px-3 py-2 text-xs text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-bg-primary transition-colors">Graph</a>
+                    </div>
+                  </div>
+                )}
+              </div>
               <button
                 onClick={() => setShowHelpModal(true)}
                 className="hidden md:inline-flex h-8 w-8 items-center justify-center text-bb-text-muted hover:text-bb-text-primary hover:bg-bb-surface rounded transition-colors"
@@ -790,7 +810,24 @@ export default function Dashboard() {
 
           {/* Graph */}
           <div className="flex-1 min-h-[320px] md:min-h-0 px-4 md:px-6 py-3 md:pb-6">
-            <div className="h-full rounded-xl overflow-hidden border border-bb-border bg-bb-bg-secondary">
+            <div className="h-full rounded-xl overflow-hidden border border-bb-border bg-bb-bg-secondary relative group/graph">
+              {/* Graph header with title + full-graph link */}
+              <div className="absolute top-3 left-3 right-3 z-10 flex items-center justify-between pointer-events-none">
+                <span className="text-[10px] uppercase tracking-wider text-bb-text-muted font-medium bg-bb-bg-primary/80 backdrop-blur-sm rounded px-2 py-1 border border-bb-border/50">
+                  Knowledge Graph
+                </span>
+                <div className="opacity-0 group-hover/graph:opacity-100 transition-opacity pointer-events-auto">
+                  <a
+                    href="/graph"
+                    className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary text-xs font-medium transition-colors"
+                  >
+                    Full graph
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  </a>
+                </div>
+              </div>
               {graphError ? (
                 <GraphFallback
                   stats={stats}

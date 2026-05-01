@@ -1,10 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { SignedIn, SignedOut, UserButton } from "@/components/SafeClerk";
-
 import { useTheme } from "@/components/ThemeProvider";
+
+const links = [
+  { href: "/demo", label: "Demo" },
+  { href: "/docs", label: "Docs" },
+  { href: "/pricing", label: "Pricing" },
+  { href: "/dashboard", label: "Dashboard" },
+  { href: "/graph", label: "Graph" },
+];
 
 export default function Nav() {
   const [open, setOpen] = useState(false);
@@ -20,26 +27,10 @@ export default function Nav() {
     return () => { document.body.style.overflow = ""; };
   }, [open]);
 
-  const links = [
-    { href: "/demo", label: "Demo" },
-    { href: "/docs", label: "Docs" },
-    { href: "/pricing", label: "Pricing" },
-    { href: "/dashboard", label: "Dashboard" },
-  ];
-
-  const handleClose = () => setOpen(false);
+  const close = useCallback(() => setOpen(false), []);
 
   return (
     <>
-      {/* Hidden checkbox — CSS toggle so mobile menu works even without JS */}
-      <input
-        type="checkbox"
-        id="nav-toggle"
-        className="peer sr-only"
-        checked={open}
-        onChange={(e) => setOpen(e.target.checked)}
-      />
-
       <nav className="sticky top-0 z-40 bg-bb-bg-primary/85 backdrop-blur-sm border-b border-bb-border">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
           {/* Logo + wordmark */}
@@ -108,20 +99,17 @@ export default function Nav() {
               >
                 Sign in
               </a>
-              {/* Hide "Get started" when mobile menu is open */}
-              {!open && (
-                <a
-                  href="/sign-up"
-                  className="inline-flex items-center h-9 px-3.5 bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary text-sm font-medium rounded-md transition-colors"
-                >
-                  Get started
-                </a>
-              )}
+              <a
+                href="/sign-up"
+                className={`inline-flex items-center h-9 px-3.5 bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary text-sm font-medium rounded-md transition-colors ${open ? "hidden" : ""}`}
+              >
+                Get started
+              </a>
             </SignedOut>
 
-            {/* Hamburger — <label> targets hidden checkbox, works WITHOUT JavaScript */}
-            <label
-              htmlFor="nav-toggle"
+            {/* Hamburger */}
+            <button
+              onClick={() => setOpen(!open)}
               className="md:hidden inline-flex items-center justify-center w-11 h-11 rounded-md text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface transition-colors cursor-pointer"
               aria-label={open ? "Close menu" : "Open menu"}
             >
@@ -134,62 +122,70 @@ export default function Nav() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h16" />
                 </svg>
               )}
-            </label>
+            </button>
           </div>
         </div>
       </nav>
 
-      {/* Mobile menu drawer — always in DOM, CSS peer-checked: drives visibility (works without JS) */}
-      <div className="md:hidden hidden peer-checked:flex fixed inset-0 z-50 bg-bb-bg-primary flex-col">
-        {/* Menu header */}
-        <div className="flex items-center justify-between h-14 px-4 border-b border-bb-border shrink-0">
-          <span className="text-[15px] font-semibold text-bb-text-primary">Menu</span>
-          <label
-            htmlFor="nav-toggle"
-            className="inline-flex items-center justify-center w-11 h-11 rounded-md text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface transition-colors cursor-pointer"
+      {/* Mobile menu drawer — proper React-driven, conditionally rendered */}
+      {open && (
+        <div className="md:hidden fixed inset-0 z-50 flex flex-col">
+          {/* Backdrop */}
+          <button
             aria-label="Close menu"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </label>
-        </div>
-
-        {/* Menu links */}
-        <div className="flex-1 overflow-y-auto px-4 py-4">
-          {links.map((l) => (
-            <a
-              key={l.href}
-              href={l.href}
-              onClick={handleClose}
-              className="h-12 flex items-center px-3 text-base text-bb-text-primary rounded-md hover:bg-bb-surface transition-colors border-b border-bb-border last:border-0"
-            >
-              {l.label}
-            </a>
-          ))}
-          <SignedIn>
-            <a
-              href="/settings"
-              onClick={handleClose}
-              className="h-12 flex items-center px-3 text-base text-bb-text-primary rounded-md hover:bg-bb-surface transition-colors border-b border-bb-border"
-            >
-              Settings
-            </a>
-            <div className="px-3 pt-4">
-              <UserButton />
+            onClick={close}
+            className="absolute inset-0 bg-black/60"
+          />
+          {/* Drawer */}
+          <div className="relative ml-auto w-[85vw] max-w-sm h-full bg-bb-bg-primary border-l border-bb-border flex flex-col animate-slide-in-right">
+            <div className="flex items-center justify-between h-14 px-4 border-b border-bb-border shrink-0">
+              <span className="text-[15px] font-semibold text-bb-text-primary">Menu</span>
+              <button
+                onClick={close}
+                className="inline-flex items-center justify-center w-10 h-10 rounded-md text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface transition-colors"
+                aria-label="Close menu"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
-          </SignedIn>
-          <SignedOut>
-            <a
-              href="/sign-in"
-              onClick={handleClose}
-              className="h-12 flex items-center px-3 text-base text-bb-text-primary rounded-md hover:bg-bb-surface transition-colors"
-            >
-              Sign in
-            </a>
-          </SignedOut>
+            <div className="flex-1 overflow-y-auto px-4 py-4">
+              {links.map((l) => (
+                <a
+                  key={l.href}
+                  href={l.href}
+                  onClick={close}
+                  className="h-12 flex items-center px-3 text-base text-bb-text-primary rounded-md hover:bg-bb-surface transition-colors border-b border-bb-border last:border-0"
+                >
+                  {l.label}
+                </a>
+              ))}
+              <SignedIn>
+                <a
+                  href="/settings"
+                  onClick={close}
+                  className="h-12 flex items-center px-3 text-base text-bb-text-primary rounded-md hover:bg-bb-surface transition-colors border-b border-bb-border"
+                >
+                  Settings
+                </a>
+                <div className="px-3 pt-4">
+                  <UserButton />
+                </div>
+              </SignedIn>
+              <SignedOut>
+                <a
+                  href="/sign-in"
+                  onClick={close}
+                  className="h-12 flex items-center px-3 text-base text-bb-text-primary rounded-md hover:bg-bb-surface transition-colors"
+                >
+                  Sign in
+                </a>
+              </SignedOut>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }
