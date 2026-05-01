@@ -124,11 +124,6 @@ export async function POST(req: NextRequest) {
     const allResults = flattenResults(normed);
     const finalResults = dedupBySlug(allResults);
 
-    // Phase 2.0: Apply tweet boost AFTER dedup (post-flatten scores)
-    if (intent === "tweet") {
-      applyTweetBoost(finalResults as any);
-    }
-
     // Phase 2.0: Structured ordinal/date queries (runs in parallel with hybrid)
     if (intent === "tweet") {
       // Ordinal query: "first tweet", "2000th tweet", "my last tweet"
@@ -305,6 +300,13 @@ export async function POST(req: NextRequest) {
         }
       }
     }
+
+    // Phase 2.1: Apply tweet boost for ALL intents (not just "tweet").
+    // Tweet intent gets 2.5x, all other intents get 1.5x baseline.
+    // This ensures tweet-body queries like "PS5 linux loader" (classified as
+    // "general") still surface tweet pages instead of being buried.
+    // Must run AFTER structured queries so entity-mention results also get boosted.
+    applyTweetBoost(finalResults as any, intent);
 
     // B2 FIX v2: Force exact-match pages to score 100.0 (AFTER dedup)
     // This ensures exact matches are ALWAYS #1, period.

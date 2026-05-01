@@ -461,14 +461,16 @@ export function classifyIntent(query: string): QueryIntent {
     processed = possessiveStripped;
   }
 
+  // Phase 2.1: Tweet intent (checked FIRST — "tweets from 2014" is tweet, not temporal.
+  // "my last tweet" is tweet, not temporal. Must precede temporal to avoid date/year
+  // keywords stealing tweet-intent queries.)
+  for (const pattern of TWEET_PATTERNS) {
+    if (pattern.test(q) || pattern.test(processed)) return "tweet";
+  }
+
   // Temporal
   for (const pattern of TEMPORAL_PATTERNS) {
     if (pattern.test(q) || pattern.test(processed)) return "temporal";
-  }
-
-  // Phase 2.0: Tweet intent (checked BEFORE entity — "tweets about Apple" is tweet, not entity)
-  for (const pattern of TWEET_PATTERNS) {
-    if (pattern.test(q) || pattern.test(processed)) return "tweet";
   }
 
   // Entity patterns
@@ -555,25 +557,31 @@ export function detailForIntent(intent: QueryIntent): "low" | "medium" | "high" 
   }
 }
 
-// ─── Phase 2.0: Tweet-Aware Re-Ranker ─────────────────────────────
+// ─── Phase 2.1: Tweet-Aware Re-Ranker ─────────────────────────────
 /**
- * When query intent is "tweet", apply a score multiplier to type=tweet results.
- * Tweets have zero backlinks and short content, so they lose to dense entity pages
- * in the hybrid RRF pipeline. This boost gives them a fighting chance.
+ * When query intent is "tweet", apply a strong score multiplier to type=tweet results.
+ * For ALL other intents, apply a baseline boost so tweet-body queries (e.g.,
+ * "PS5 linux loader") that lack tweet keywords still surface tweet pages.
+ *
+ * Tweet intent: 2.5x multiplier
+ * All other intents: 1.5x baseline (tweets have zero backlinks, need help)
  *
  * Applied AFTER backlink boost but BEFORE forceExactMatchTop.
  */
-const TWEET_BOOST_MULTIPLIER = 2.5;
+const TWEET_BOOST_FULL = 2.5;
+const TWEET_BOOST_BASELINE = 1.5;
 
 export function applyTweetBoost(
   results: Array<{ slug: string; score: number; type: string; boost_factors?: BoostFactors }>,
+  intent?: string,
 ): void {
+  const multiplier = intent === "tweet" ? TWEET_BOOST_FULL : TWEET_BOOST_BASELINE;
   for (const r of results) {
     if (r.type === "tweet" && r.score < 0.95) {
-      r.score *= TWEET_BOOST_MULTIPLIER;
+      r.score *= multiplier;
       if (!r.boost_factors) r.boost_factors = { total: 1.0 };
-      (r.boost_factors as any).tweet_boost = TWEET_BOOST_MULTIPLIER;
-      r.boost_factors.total = (r.boost_factors.total || 1) * TWEET_BOOST_MULTIPLIER;
+      (r.boost_factors as any).tweet_boost = multiplier;
+      r.boost_factors.total = (r.boost_factors.total || 1) * multiplier;
     }
   }
 }
@@ -609,8 +617,10 @@ export function parseTweetOrdinal(query: string): OrdinalMatch | null {
     }
   }
 
-  // Numeric ordinals: "2000th tweet", "tweet 1000", "1000th tweet"
-  const numMatch = q.match(/(\d+)(?:st|nd|rd|th)?\s+tweet/i) || q.match(/tweet\s+(\d+)/i);
+  // Numeric ordinals: "2000th tweet", "tweet 1000", "1000th tweet", "tweet number 1"
+  const numMatch = q.match(/(\d+)(?:st|nd|rd|th)?\s+tweet/i)
+    || q.match(/tweet\s+number\s+(\d+)/i)
+    || q.match(/tweet\s+(\d+)/i);
   if (numMatch) {
     return { ordinal: parseInt(numMatch[1], 10), mode: "exact" };
   }
