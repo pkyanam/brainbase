@@ -393,13 +393,25 @@ export function dedupResults<T extends { slug: string; score: number; excerpt: s
 
 // ─── B3 FIX: Query Intent Classifier ──────────────────────────────
 
-export type QueryIntent = "temporal" | "entity" | "event" | "general";
+export type QueryIntent = "temporal" | "entity" | "event" | "tweet" | "general";
 
 const TEMPORAL_PATTERNS = [
   /\b(when|what year|what month|what day|what date|how old|how long ago|recent|latest|newest|last|past|this week|this month|this year|today|yesterday|tomorrow)\b/i,
   /\b(202[0-9]|20[12][0-9])\b/,
   /\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/i,
   /\b(since|until|before|after|during|between)\b/i,
+];
+
+// Phase 2.0: Tweet intent patterns — detect tweet-specific queries
+// BEFORE entity/event patterns to prevent misclassification.
+// "tweets about Apple" → tweet, not entity. "first tweet" → tweet, not general.
+const TWEET_PATTERNS = [
+  /\b(tweet|tweets|tweeted|retweet|retweeted|quote tweet|quote tweeted)\b/i,
+  /\b(post|posted|repost|x\.com|twitter)\b/i,
+  /\b(tweets? about|tweets? from|tweets? mentioning|tweets? on|tweets? regarding)\b/i,
+  /\b(my tweet|my tweets|my last tweet|my first tweet|first tweet|last tweet)\b/i,
+  /\b(how many tweets|tweet count|number of tweets)\b/i,
+  /\b(\d+(?:st|nd|rd|th)\s+tweet|tweet\s+\d+)\b/i,
 ];
 
 const ENTITY_PATTERNS = [
@@ -452,6 +464,11 @@ export function classifyIntent(query: string): QueryIntent {
   // Temporal
   for (const pattern of TEMPORAL_PATTERNS) {
     if (pattern.test(q) || pattern.test(processed)) return "temporal";
+  }
+
+  // Phase 2.0: Tweet intent (checked BEFORE entity — "tweets about Apple" is tweet, not entity)
+  for (const pattern of TWEET_PATTERNS) {
+    if (pattern.test(q) || pattern.test(processed)) return "tweet";
   }
 
   // Entity patterns
@@ -531,7 +548,124 @@ export function detailForIntent(intent: QueryIntent): "low" | "medium" | "high" 
       return "high";
     case "entity":
       return "low";
+    case "tweet":
+      return "high";  // tweet: high detail — return multiple tweets per page, enable timeline-style dedup
     default:
       return "medium";
   }
+}
+
+// ─── Phase 2.0: Tweet-Aware Re-Ranker ─────────────────────────────
+/**
+ * When query intent is "tweet", apply a score multiplier to type=tweet results.
+ * Tweets have zero backlinks and short content, so they lose to dense entity pages
+ * in the hybrid RRF pipeline. This boost gives them a fighting chance.
+ *
+ * Applied AFTER backlink boost but BEFORE forceExactMatchTop.
+ */
+const TWEET_BOOST_MULTIPLIER = 2.5;
+
+export function applyTweetBoost(
+  results: Array<{ slug: string; score: number; type: string; boost_factors?: BoostFactors }>,
+): void {
+  for (const r of results) {
+    if (r.type === "tweet" && r.score < 0.95) {
+      r.score *= TWEET_BOOST_MULTIPLIER;
+      if (!r.boost_factors) r.boost_factors = { total: 1.0 };
+      (r.boost_factors as any).tweet_boost = TWEET_BOOST_MULTIPLIER;
+      r.boost_factors.total = (r.boost_factors.total || 1) * TWEET_BOOST_MULTIPLIER;
+    }
+  }
+}
+
+// ─── Phase 2.0: Ordinal Parser ────────────────────────────────────
+/**
+ * Parse tweet ordinal queries like "first tweet", "last tweet", "2000th tweet".
+ * Returns { ordinal: number, mode: "exact" | "first" | "last" } or null.
+ */
+export interface OrdinalMatch {
+  ordinal: number;
+  mode: "exact" | "first" | "last";
+}
+
+const ORDINAL_WORDS: Record<string, number> = {
+  first: 1, second: 2, third: 3, fourth: 4, fifth: 5,
+  sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10,
+};
+
+export function parseTweetOrdinal(query: string): OrdinalMatch | null {
+  const q = query.toLowerCase().trim();
+
+  // "first tweet" / "my first tweet"
+  if (/\b(first|1st)\s+tweet\b/i.test(q)) return { ordinal: 1, mode: "first" };
+
+  // "last tweet" / "my last tweet" / "most recent tweet"
+  if (/\b(last|latest|most recent|newest)\s+tweet\b/i.test(q)) return { ordinal: -1, mode: "last" };
+
+  // Word ordinals: "second tweet", "fifth tweet", etc.
+  for (const [word, num] of Object.entries(ORDINAL_WORDS)) {
+    if (new RegExp(`\\b${word}\\s+tweet\\b`, "i").test(q)) {
+      return { ordinal: num, mode: "exact" };
+    }
+  }
+
+  // Numeric ordinals: "2000th tweet", "tweet 1000", "1000th tweet"
+  const numMatch = q.match(/(\d+)(?:st|nd|rd|th)?\s+tweet/i) || q.match(/tweet\s+(\d+)/i);
+  if (numMatch) {
+    return { ordinal: parseInt(numMatch[1], 10), mode: "exact" };
+  }
+
+  return null;
+}
+
+// ─── Phase 2.0: Date Parser for Tweet Queries ─────────────────────
+/**
+ * Parse date ranges from tweet queries: "tweets from 2014", "tweets from April 2020",
+ * "tweets from April 29 2026". Returns { year?, month?, day? } or null.
+ */
+export interface DateRangeMatch {
+  year?: number;
+  month?: number;  // 1-12
+  day?: number;    // 1-31
+}
+
+const MONTH_NAMES: Record<string, number> = {
+  january: 1, february: 2, march: 3, april: 4, may: 5, june: 6,
+  july: 7, august: 8, september: 9, october: 10, november: 11, december: 12,
+  jan: 1, feb: 2, mar: 3, apr: 4, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+};
+
+export function parseTweetDateRange(query: string): DateRangeMatch | null {
+  const q = query.toLowerCase().trim();
+  const result: DateRangeMatch = {};
+
+  // Year: "from 2014", "from 2020", "in 2014", "2014 tweets", "from April 2026"
+  const yearMatch = q.match(/\b(20\d{2})\b/);
+  if (yearMatch) result.year = parseInt(yearMatch[1], 10);
+
+  // Month name: "from April", "April 2020", "from April 29"
+  for (const [name, num] of Object.entries(MONTH_NAMES)) {
+    if (new RegExp(`\\b${name}\\b`, "i").test(q)) {
+      result.month = num;
+      break;
+    }
+  }
+
+  // Numeric month: "from 04/2020", "2020-04-29"
+  const numMonthMatch = q.match(/\b(\d{1,2})\/(\d{4})\b/) || q.match(/(\d{4})-(\d{2})/);
+  if (numMonthMatch) {
+    result.month = parseInt(numMonthMatch[1], 10);
+    if (!result.year) result.year = parseInt(numMonthMatch[2], 10);
+  }
+
+  // Day: "April 29", "29th", "April 29 2026"
+  const dayMatch = q.match(/\b(\d{1,2})(?:st|nd|rd|th)?\b/);
+  if (dayMatch) {
+    const day = parseInt(dayMatch[1], 10);
+    if (day >= 1 && day <= 31) result.day = day;
+  }
+
+  // Only return if we found at least a year or month
+  if (result.year || result.month) return result;
+  return null;
 }
