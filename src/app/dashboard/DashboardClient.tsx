@@ -138,6 +138,13 @@ export default function Dashboard() {
   const [slackLoading, setSlackLoading] = useState(false);
   const [slackResult, setSlackResult] = useState<any | null>(null);
 
+  // GitHub Integration
+  const [showGitHubForm, setShowGitHubForm] = useState(false);
+  const [githubToken, setGitHubToken] = useState("");
+  const [githubRepos, setGitHubRepos] = useState("");
+  const [githubLoading, setGitHubLoading] = useState(false);
+  const [githubResult, setGitHubResult] = useState<any | null>(null);
+
   const handleSlackConnect = useCallback(async () => {
     if (!slackToken || !slackTeamId) return;
     setSlackLoading(true);
@@ -156,6 +163,25 @@ export default function Dashboard() {
       setSlackLoading(false);
     }
   }, [slackToken, slackTeamId]);
+
+  const handleGitHubConnect = useCallback(async () => {
+    if (!githubToken) return;
+    setGitHubLoading(true);
+    setGitHubResult(null);
+    try {
+      const r = await fetch("/api/ingest/github", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: githubToken, repos: githubRepos || undefined }),
+      });
+      const data = await r.json();
+      setGitHubResult(data);
+    } catch {
+      setGitHubResult({ error: "Failed to connect GitHub" });
+    } finally {
+      setGitHubLoading(false);
+    }
+  }, [githubToken, githubRepos]);
 
   // Unwritten Rules
   const [implicitRules, setImplicitRules] = useState<any[]>([]);
@@ -575,6 +601,15 @@ export default function Dashboard() {
                   </svg>
                   Connect Slack
                 </button>
+                <button
+                  onClick={() => setShowGitHubForm(!showGitHubForm)}
+                  className="inline-flex items-center gap-1.5 h-9 px-3 bg-bb-surface border border-bb-border rounded-md text-bb-text-secondary hover:text-bb-text-primary hover:border-bb-border-strong transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z" />
+                  </svg>
+                  Connect GitHub
+                </button>
                 <span className="text-bb-text-muted">More integrations in development</span>
               </div>
               {showSlackForm && (
@@ -613,6 +648,48 @@ export default function Dashboard() {
                       ) : (
                         <span>
                           Fetched {slackResult.messages_fetched} messages, created {slackResult.pages_created} pages, {slackResult.decisions_detected} decisions.
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+              {showGitHubForm && (
+                <div className="mt-2 p-3 rounded-lg bg-bb-surface border border-bb-border">
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="password"
+                      value={githubToken}
+                      onChange={(e) => setGitHubToken(e.target.value)}
+                      placeholder="GitHub personal access token"
+                      className="flex-1 h-10 px-3 bg-bb-bg-primary border border-bb-border rounded-md text-xs text-bb-text-primary placeholder:text-bb-text-muted outline-none focus:border-bb-accent transition-colors"
+                    />
+                    <input
+                      type="text"
+                      value={githubRepos}
+                      onChange={(e) => setGitHubRepos(e.target.value)}
+                      placeholder="owner/repo, owner/repo2 (optional)"
+                      className="sm:w-64 h-10 px-3 bg-bb-bg-primary border border-bb-border rounded-md text-xs text-bb-text-primary placeholder:text-bb-text-muted outline-none focus:border-bb-accent transition-colors"
+                    />
+                    <button
+                      onClick={handleGitHubConnect}
+                      disabled={githubLoading || !githubToken}
+                      className="h-10 px-4 bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary text-xs font-medium rounded-md transition-colors disabled:opacity-50 inline-flex items-center justify-center"
+                    >
+                      {githubLoading ? (
+                        <span className="w-3.5 h-3.5 border-2 border-bb-bg-primary/30 border-t-bb-bg-primary rounded-full animate-spin" />
+                      ) : (
+                        "Ingest"
+                      )}
+                    </button>
+                  </div>
+                  {githubResult && (
+                    <div className="mt-2 text-[11px] text-bb-text-secondary">
+                      {githubResult.error ? (
+                        <span className="text-bb-danger">{githubResult.error}</span>
+                      ) : (
+                        <span>
+                          Fetched {githubResult.items_fetched} items, created {githubResult.pages_created} pages, {githubResult.links_created} links.
                         </span>
                       )}
                     </div>

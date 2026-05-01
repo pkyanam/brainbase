@@ -3,6 +3,9 @@ import { requireOwner } from "@/lib/auth-guard";
 import { getIngestor } from "@/lib/ingestors/types";
 import { putPage, addLink } from "@/lib/supabase/write";
 
+// Import for side-effect registration (Next.js tree-shakes otherwise)
+import "@/lib/ingestors/slack";
+
 interface IngestStats {
   messages_fetched: number;
   pages_created: number;
