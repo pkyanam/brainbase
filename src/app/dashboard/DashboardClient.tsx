@@ -481,6 +481,7 @@ export default function Dashboard() {
                     <a href="/settings" className="block px-3 py-2 text-xs text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-bg-primary transition-colors">Settings</a>
                     <div className="border-t border-bb-border mt-1 pt-1">
                       <a href="/graph" className="block px-3 py-2 text-xs text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-bg-primary transition-colors">Graph</a>
+                      <a href="/eval" className="block px-3 py-2 text-xs text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-bg-primary transition-colors">Eval</a>
                     </div>
                   </div>
                 )}

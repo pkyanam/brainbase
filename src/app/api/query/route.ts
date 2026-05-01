@@ -3,6 +3,7 @@ import { resolveApiAuth } from "@/lib/api-auth";
 import { searchBrain, vectorSearchBrain, expandQuery, SearchResult } from "@/lib/supabase/search";
 import { generateEmbeddings } from "@/lib/embeddings";
 import { queryMany } from "@/lib/supabase/client";
+import { captureEvalCandidate } from "@/lib/eval-pipeline";
 import {
   rrfFusion,
   dedupBySlug,
@@ -11,6 +12,7 @@ import {
   forceExactMatchTopFinal,
   normalizeScores,
   applyCompiledTruthBoost,
+  applySourceBoost,
   applyBacklinkBoost,
   applyTweetBoost,
   classifyIntent,
@@ -94,6 +96,9 @@ export async function POST(req: NextRequest) {
 
     // ── Phase 4: Compiled truth boost (1.15x)
     applyCompiledTruthBoost(normed);
+
+    // ── Phase 4.5: Source-aware ranking (originals 1.5×, concepts 1.3×, etc.)
+    applySourceBoost(normed);
 
     // ── Phase 5: Backlink boost ──────────────────────────────────
     const backlinks = await fetchBacklinks(
@@ -575,6 +580,17 @@ export async function POST(req: NextRequest) {
       handler_path: (r as any).handler_path || null,
       pin: (r as any).boost_factors?.exact_match >= 90 || r.score >= 90,
     }));
+
+    // ── Eval capture (fire-and-forget) ────────────────────────
+    const top5Slugs = final.slice(0, 5).map((r) => r.slug);
+    captureEvalCandidate({
+      brainId: auth.brainId,
+      tool: "query",
+      queryText: q,
+      resultCount: final.length,
+      topSlugs: top5Slugs,
+      meta: { intent, detail, limit },
+    }).catch((e) => console.error("[eval] Background capture error:", e));
 
     return NextResponse.json({
       q,

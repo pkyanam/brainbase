@@ -83,6 +83,7 @@ export interface BoostFactors {
   exact_match?: number;
   compiled_truth?: number;
   backlinks?: number;
+  source_type?: number;
   /** Total multiplier applied */
   total: number;
 }
@@ -232,6 +233,48 @@ export function applyCompiledTruthBoost(
       if (!entry.boost_factors) entry.boost_factors = { total: 1.0 };
       entry.boost_factors.compiled_truth = COMPILED_TRUTH_BOOST;
       entry.boost_factors.total = (entry.boost_factors.total || 1) * COMPILED_TRUTH_BOOST;
+    }
+  }
+}
+
+// ─── Source-Aware Ranking ──────────────────────────────────────
+/**
+ * Source-aware ranking boost (matching GBrain v0.25 source-boost.ts).
+ * Curated, high-signal page types get a multiplier over bulk imports.
+ *
+ * Boost factors:
+ *   - originals     1.5×  (primary sources, authored content)
+ *   - writing       1.4×  (long-form writing, essays)
+ *   - concept       1.3×  (structured knowledge)
+ *   - person        1.2×  (entity pages, identity anchors)
+ *   - meeting       1.1×  (decision records)
+ *   - tweet/blog    0.9×  (bulk/chronological, slightly discount)
+ */
+const SOURCE_BOOSTS: Record<string, number> = {
+  original: 1.5,
+  writing: 1.4,
+  concept: 1.3,
+  person: 1.2,
+  meeting: 1.1,
+  decision: 1.1,
+  tweet: 0.9,
+  blog: 0.9,
+};
+
+export function applySourceBoost(
+  fused: Map<string, { score: number; results: SearchResult[]; boost_factors?: BoostFactors }>
+): void {
+  for (const [, entry] of fused) {
+    // Use the type from the highest-scoring result in this entry
+    const bestResult = entry.results.reduce((a, b) => (a.score > b.score ? a : b), entry.results[0]);
+    const pageType = bestResult?.type?.toLowerCase() || "";
+    const multiplier = SOURCE_BOOSTS[pageType] || 1.0;
+
+    if (multiplier !== 1.0) {
+      entry.score *= multiplier;
+      if (!entry.boost_factors) entry.boost_factors = { total: 1.0 };
+      entry.boost_factors.source_type = Math.round(multiplier * 1000) / 1000;
+      entry.boost_factors.total = (entry.boost_factors.total || 1) * multiplier;
     }
   }
 }
