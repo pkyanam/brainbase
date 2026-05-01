@@ -79,12 +79,9 @@ export async function POST(req: NextRequest) {
     }
 
     // B1 FIX: Dedup vector results by slug BEFORE RRF.
-    // Vector search returns one row per chunk — multiple rows per page.
-    // Collapse to one per slug (max score) so RRF doesn't get flooded.
     const dedupedVector = dedupBySlug(vectorResults);
 
     // B2 FIX v2: Pin exact title/slug matches at rank 0 in each list
-    // so they get maximum RRF contribution from every list.
     const pinnedKeyword = pinExactMatches(keywordResults, q);
     const pinnedVector = pinExactMatches(dedupedVector, q);
 
@@ -94,7 +91,7 @@ export async function POST(req: NextRequest) {
     // ── Phase 3: Normalize scores 0-1 ────────────────────────────
     const normed = normalizeScores(fused);
 
-    // ── Phase 4: Compiled truth boost (1.15x, subtle — avoid artificial ceiling)
+    // ── Phase 4: Compiled truth boost (1.15x)
     applyCompiledTruthBoost(normed);
 
     // ── Phase 5: Backlink boost ──────────────────────────────────
@@ -104,30 +101,25 @@ export async function POST(req: NextRequest) {
     );
     applyBacklinkBoost(normed, backlinks);
 
-    // ── Phase 5.5: Tweet-aware re-ranking (Phase 2.0) ─────────────
-    // When intent is "tweet", apply score multiplier to type=tweet results
-    // BEFORE flattening so the boost propagates through final dedup.
-    // Also handle ordinal and date-range queries with direct DB lookups.
+    // ── Phase 5.5: Parse tweet-specific query signals ────────────
     let ordinalMatch: OrdinalMatch | null = null;
     let dateRange: DateRangeMatch | null = null;
 
     if (intent === "tweet") {
       ordinalMatch = parseTweetOrdinal(q);
       dateRange = parseTweetDateRange(q);
-
-      // Flatten first so we can apply tweet boost
+      console.log("[query] Tweet intent detected:", { q, ordinalMatch, dateRange });
     }
 
     // ── Phase 6: Flatten → FINAL dedup by slug ──────────────────
-    // B1 FIX v3: Single dedupBySlug at the end. No 4-layer dedup.
-    // One entry per slug, max score wins. Guarantees zero duplicates.
     const allResults = flattenResults(normed);
     const finalResults = dedupBySlug(allResults);
 
-    // Phase 2.0: Structured ordinal/date queries (runs in parallel with hybrid)
+    // ── Phase 6.5: Structured tweet handlers ─────────────────────
     if (intent === "tweet") {
-      // Ordinal query: "first tweet", "2000th tweet", "my last tweet"
+      // ── Ordinal handler: "first tweet", "2000th tweet", etc. ──
       if (ordinalMatch) {
+        console.log("[query] Ordinal handler running:", ordinalMatch);
         try {
           const ordinalResults = await queryMany<{
             slug: string; title: string; type: string; excerpt: string;
@@ -152,6 +144,7 @@ export async function POST(req: NextRequest) {
               ? [auth.brainId, ordinalMatch.ordinal]
               : [auth.brainId]
           );
+          console.log("[query] Ordinal results:", ordinalResults.length, "rows");
           for (const r of ordinalResults) {
             const existing = finalResults.find((fr) => fr.slug === r.slug);
             const pinScore = 100.0;
@@ -161,6 +154,7 @@ export async function POST(req: NextRequest) {
               if (!existing.boost_factors) existing.boost_factors = { total: 1.0 } as any;
               (existing.boost_factors as any).exact_match = pinScore;
               (existing.boost_factors as any).total = pinScore;
+              (existing as any).handler_path = "ordinal";
             } else {
               finalResults.push({
                 slug: r.slug,
@@ -173,13 +167,14 @@ export async function POST(req: NextRequest) {
                   exact_match: pinScore,
                   total: pinScore,
                 } as BoostFactors,
+                handler_path: "ordinal",
               } as any);
             }
           }
 
-          // Fallback: if exact ordinal lookup returned nothing, try content search.
-          // "2000th tweet" may not have ordinal=2000, but tweet content says "2000TH TWEET".
+          // Fallback: exact ordinal lookup empty → content search
           if (ordinalResults.length === 0 && ordinalMatch.mode === "exact") {
+            console.log("[query] Ordinal fallback running for:", ordinalMatch.ordinal);
             try {
               const fallbackResults = await queryMany<{
                 slug: string; title: string; type: string; excerpt: string;
@@ -194,12 +189,14 @@ export async function POST(req: NextRequest) {
                  LIMIT 5`,
                 [auth.brainId, `%${ordinalMatch.ordinal}%`]
               );
+              console.log("[query] Ordinal fallback results:", fallbackResults.length, "rows");
               for (const r of fallbackResults) {
                 const existing = finalResults.find((fr) => fr.slug === r.slug);
-                const fallbackScore = 95.0;  // Below exact ordinal pin but well above everything
+                const fallbackScore = 95.0;
                 if (existing) {
                   existing.score = Math.max(existing.score, fallbackScore);
                   existing.excerpt = r.excerpt || existing.excerpt;
+                  (existing as any).handler_path = "ordinal_fallback";
                 } else {
                   finalResults.push({
                     slug: r.slug,
@@ -209,6 +206,7 @@ export async function POST(req: NextRequest) {
                     source: "fts_and" as any,
                     title: r.title,
                     boost_factors: { total: fallbackScore } as BoostFactors,
+                    handler_path: "ordinal_fallback",
                   } as any);
                 }
               }
@@ -221,8 +219,9 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Date-range query: "tweets from 2014", "tweets from April 29 2026"
+      // ── Date-range handler: "tweets from 2014", etc. ──
       if (dateRange) {
+        console.log("[query] Date handler running:", dateRange);
         try {
           const conditions: string[] = ["p.brain_id = $1", "p.type = 'tweet'"];
           const params: any[] = [auth.brainId];
@@ -257,13 +256,15 @@ export async function POST(req: NextRequest) {
              LIMIT 20`,
             params
           );
+          console.log("[query] Date results:", dateResults.length, "rows, SQL:", conditions.join(" AND "));
 
           for (const r of dateResults) {
             const existing = finalResults.find((fr) => fr.slug === r.slug);
-            const dateScore = 0.95;  // High but below exact-match pin (100.0)
+            const dateScore = 2.0;  // Pinned high — date-filtered results ARE the answer for date queries
             if (existing) {
               existing.score = Math.max(existing.score, dateScore);
               existing.excerpt = r.excerpt || existing.excerpt;
+              (existing as any).handler_path = "date";
             } else {
               finalResults.push({
                 slug: r.slug,
@@ -272,9 +273,8 @@ export async function POST(req: NextRequest) {
                 type: r.type,
                 source: "fts_and" as any,
                 title: r.title,
-                boost_factors: {
-                  total: dateScore,
-                } as BoostFactors,
+                boost_factors: { total: dateScore } as BoostFactors,
+                handler_path: "date",
               } as any);
             }
           }
@@ -283,11 +283,11 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Entity-mention traversal: "tweets about Apple", "tweets mentioning Anthropic"
-      // Extract the entity name and search tweet content for mentions.
+      // ── Entity-mention handler: "tweets about X" ──
       const aboutMatch = q.match(/(?:tweets?\s+(?:about|on|mentioning|regarding)\s+)(.+)/i);
       if (aboutMatch && aboutMatch[1]) {
         const entityName = aboutMatch[1].trim();
+        console.log("[query] Entity-mention handler running for:", entityName);
         try {
           const mentionResults = await queryMany<{
             slug: string; title: string; type: string; excerpt: string;
@@ -302,12 +302,14 @@ export async function POST(req: NextRequest) {
              LIMIT 20`,
             [auth.brainId, `%${entityName}%`]
           );
+          console.log("[query] Entity-mention results:", mentionResults.length, "rows for:", entityName);
           for (const r of mentionResults) {
             const existing = finalResults.find((fr) => fr.slug === r.slug);
-            const mentionScore = 0.88;  // Strong but below date-range (0.95) and exact (100.0)
+            const mentionScore = 1.5;  // Pinned high — entity-matched tweets ARE the answer
             if (existing) {
               existing.score = Math.max(existing.score, mentionScore);
               existing.excerpt = r.excerpt || existing.excerpt;
+              (existing as any).handler_path = "entity_mention";
             } else {
               finalResults.push({
                 slug: r.slug,
@@ -316,9 +318,8 @@ export async function POST(req: NextRequest) {
                 type: r.type,
                 source: "fts_and" as any,
                 title: r.title,
-                boost_factors: {
-                  total: mentionScore,
-                } as BoostFactors,
+                boost_factors: { total: mentionScore } as BoostFactors,
+                handler_path: "entity_mention",
               } as any);
             }
           }
@@ -327,8 +328,9 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Count query: "how many tweets", "tweet count", "number of tweets"
+      // ── Count handler: "how many tweets" ──
       if (/\b(how many tweets|tweet count|number of tweets|count of tweets|total tweets)\b/i.test(q)) {
+        console.log("[query] Count handler running");
         try {
           const countRows = await queryMany<{ count: string }>(
             `SELECT COUNT(*)::text as count FROM pages
@@ -337,6 +339,7 @@ export async function POST(req: NextRequest) {
           );
           if (countRows.length > 0) {
             const tweetCount = parseInt(countRows[0].count, 10);
+            console.log("[query] Tweet count:", tweetCount);
             finalResults.push({
               slug: "preetham-kyanam",
               score: 100.0,
@@ -348,6 +351,7 @@ export async function POST(req: NextRequest) {
                 exact_match: 100.0,
                 total: 100.0,
               } as BoostFactors,
+              handler_path: "count",
             } as any);
           }
         } catch (err) {
@@ -356,18 +360,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Phase 2.1: Apply tweet boost for ALL intents (not just "tweet").
-    // Tweet intent gets 2.5x, all other intents get 1.5x baseline.
-    // This ensures tweet-body queries like "PS5 linux loader" (classified as
-    // "general") still surface tweet pages instead of being buried.
-    // Must run AFTER structured queries so entity-mention results also get boosted.
+    // ── Phase 7: Tweet boost for ALL intents ─────────────────────
+    // Tweet intent: 2.5x. All other intents: 2.0x baseline.
+    // Must run AFTER structured queries so their results get boosted.
+    console.log("[query] Applying tweet boost, intent:", intent);
     applyTweetBoost(finalResults as any, intent);
 
-    // B2 FIX v2: Force exact-match pages to score 100.0 (AFTER dedup)
-    // This ensures exact matches are ALWAYS #1, period.
+    // ── Phase 8: Exact match pin + sort ──────────────────────────
     forceExactMatchTopFinal(finalResults, q);
 
-    // ── Phase 7: Sort + slice ────────────────────────────────────
     finalResults.sort((a, b) => b.score - a.score);
     const final = finalResults.slice(0, limit).map((r) => ({
       slug: r.slug,
@@ -378,6 +379,7 @@ export async function POST(req: NextRequest) {
       source: r.source,
       chunk_source: (r as any).chunk_source || null,
       boost_factors: (r as any).boost_factors || null,
+      handler_path: (r as any).handler_path || null,
     }));
 
     return NextResponse.json({
@@ -395,7 +397,6 @@ export async function POST(req: NextRequest) {
 
 /**
  * Flatten fused map into result array for dedup.
- * B4 FIX: carries boost_factors through from fused map entries.
  */
 function flattenResults(
   fused: Map<

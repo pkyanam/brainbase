@@ -564,7 +564,7 @@ export function detailForIntent(intent: QueryIntent): "low" | "medium" | "high" 
  * "PS5 linux loader") that lack tweet keywords still surface tweet pages.
  *
  * Tweet intent: 2.5x multiplier
- * All other intents: 1.5x baseline (tweets have zero backlinks, need help)
+ * All other intents: 2.0x baseline (tweets have zero backlinks, need significant help)
  *
  * Applied AFTER backlink boost but BEFORE forceExactMatchTop.
  */
