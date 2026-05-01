@@ -143,6 +143,74 @@ export async function ensureSchema(): Promise<void> {
       END $$;
     `);
 
+    // ── Eval tables (BrainBench-Real) ────────
+    await query(`
+      CREATE TABLE IF NOT EXISTS eval_candidates (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        brain_id UUID NOT NULL,
+        tool TEXT NOT NULL,
+        query_text TEXT NOT NULL,
+        result_count INTEGER,
+        top_slugs TEXT[],
+        meta JSONB,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await query(`CREATE INDEX IF NOT EXISTS idx_eval_candidates_brain_tool ON eval_candidates(brain_id, tool, created_at)`);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS eval_runs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        brain_id UUID NOT NULL,
+        status TEXT NOT NULL DEFAULT 'running',
+        total_queries INTEGER DEFAULT 0,
+        avg_mrr DOUBLE PRECISION,
+        avg_p3 DOUBLE PRECISION,
+        avg_p5 DOUBLE PRECISION,
+        avg_latency_ms DOUBLE PRECISION,
+        passed INTEGER DEFAULT 0,
+        failed INTEGER DEFAULT 0,
+        baseline_id UUID REFERENCES eval_runs(id) ON DELETE SET NULL,
+        meta JSONB,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        completed_at TIMESTAMPTZ
+      )
+    `);
+
+    await query(`CREATE INDEX IF NOT EXISTS idx_eval_runs_brain ON eval_runs(brain_id, created_at DESC)`);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS eval_results (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        run_id UUID NOT NULL REFERENCES eval_runs(id) ON DELETE CASCADE,
+        query_text TEXT NOT NULL,
+        returned_slugs TEXT[],
+        expected_slugs TEXT[],
+        mrr DOUBLE PRECISION,
+        p3 DOUBLE PRECISION,
+        p5 DOUBLE PRECISION,
+        latency_ms DOUBLE PRECISION,
+        passed BOOLEAN,
+        raw_meta JSONB,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await query(`CREATE INDEX IF NOT EXISTS idx_eval_results_run ON eval_results(run_id, passed)`);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS eval_capture_failures (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        brain_id UUID NOT NULL,
+        tool TEXT,
+        query_text TEXT,
+        reason TEXT NOT NULL,
+        error_message TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
     console.log("[brainbase] Schema ensured (multi-tenant)");
   } catch (err) {
     console.error("[brainbase] Schema setup error:", err);
