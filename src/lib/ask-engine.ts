@@ -132,7 +132,7 @@ async function runHybridSearch(
     return finalResults.slice(0, limit).map((r) => ({
       slug: r.slug,
       title: r.title,
-      type: r.type,
+      type: r.type || "page",
       excerpt: r.excerpt,
       score: Math.round(r.score * 100) / 100,
       boost_factors: (r as any).boost_factors || null,
@@ -235,7 +235,7 @@ async function generateAnswer(
           { role: "user", content: userPrompt },
         ],
         temperature: 0.3,
-        max_tokens: 600,
+        max_completion_tokens: 600,
       }),
     });
 
