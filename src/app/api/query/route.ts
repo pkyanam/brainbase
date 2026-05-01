@@ -153,20 +153,67 @@ export async function POST(req: NextRequest) {
               : [auth.brainId]
           );
           for (const r of ordinalResults) {
-            const exists = finalResults.find((fr) => fr.slug === r.slug);
-            if (!exists) {
+            const existing = finalResults.find((fr) => fr.slug === r.slug);
+            const pinScore = 100.0;
+            if (existing) {
+              existing.score = Math.max(existing.score, pinScore);
+              existing.excerpt = r.excerpt || existing.excerpt;
+              if (!existing.boost_factors) existing.boost_factors = { total: 1.0 } as any;
+              (existing.boost_factors as any).exact_match = pinScore;
+              (existing.boost_factors as any).total = pinScore;
+            } else {
               finalResults.push({
                 slug: r.slug,
-                score: 100.0,  // Pin at top — this IS the answer
+                score: pinScore,
                 excerpt: r.excerpt || "",
                 type: r.type,
                 source: "fts_and" as any,
                 title: r.title,
                 boost_factors: {
-                  exact_match: 100.0,
-                  total: 100.0,
+                  exact_match: pinScore,
+                  total: pinScore,
                 } as BoostFactors,
               } as any);
+            }
+          }
+
+          // Fallback: if exact ordinal lookup returned nothing, try content search.
+          // "2000th tweet" may not have ordinal=2000, but tweet content says "2000TH TWEET".
+          if (ordinalResults.length === 0 && ordinalMatch.mode === "exact") {
+            try {
+              const fallbackResults = await queryMany<{
+                slug: string; title: string; type: string; excerpt: string;
+              }>(
+                `SELECT p.slug, p.title, p.type,
+                        COALESCE(p.compiled_truth, '') as excerpt
+                 FROM pages p
+                 WHERE p.brain_id = $1
+                   AND p.type = 'tweet'
+                   AND (p.compiled_truth ILIKE $2 OR p.title ILIKE $2)
+                 ORDER BY (frontmatter->>'ordinal')::int ASC
+                 LIMIT 5`,
+                [auth.brainId, `%${ordinalMatch.ordinal}%`]
+              );
+              for (const r of fallbackResults) {
+                const existing = finalResults.find((fr) => fr.slug === r.slug);
+                const fallbackScore = 95.0;  // Below exact ordinal pin but well above everything
+                if (existing) {
+                  existing.score = Math.max(existing.score, fallbackScore);
+                  existing.excerpt = r.excerpt || existing.excerpt;
+                } else {
+                  finalResults.push({
+                    slug: r.slug,
+                    score: fallbackScore,
+                    excerpt: r.excerpt || "",
+                    type: r.type,
+                    source: "fts_and" as any,
+                    title: r.title,
+                    boost_factors: { total: fallbackScore } as BoostFactors,
+                  } as any);
+                }
+              }
+            } catch (err) {
+              console.error("[query] Ordinal fallback lookup error:", err);
             }
           }
         } catch (err) {
@@ -212,17 +259,21 @@ export async function POST(req: NextRequest) {
           );
 
           for (const r of dateResults) {
-            const exists = finalResults.find((fr) => fr.slug === r.slug);
-            if (!exists) {
+            const existing = finalResults.find((fr) => fr.slug === r.slug);
+            const dateScore = 0.95;  // High but below exact-match pin (100.0)
+            if (existing) {
+              existing.score = Math.max(existing.score, dateScore);
+              existing.excerpt = r.excerpt || existing.excerpt;
+            } else {
               finalResults.push({
                 slug: r.slug,
-                score: 0.95,  // High but below exact-match pin (100.0)
+                score: dateScore,
                 excerpt: r.excerpt || "",
                 type: r.type,
                 source: "fts_and" as any,
                 title: r.title,
                 boost_factors: {
-                  total: 0.95,
+                  total: dateScore,
                 } as BoostFactors,
               } as any);
             }
@@ -252,17 +303,21 @@ export async function POST(req: NextRequest) {
             [auth.brainId, `%${entityName}%`]
           );
           for (const r of mentionResults) {
-            const exists = finalResults.find((fr) => fr.slug === r.slug);
-            if (!exists) {
+            const existing = finalResults.find((fr) => fr.slug === r.slug);
+            const mentionScore = 0.88;  // Strong but below date-range (0.95) and exact (100.0)
+            if (existing) {
+              existing.score = Math.max(existing.score, mentionScore);
+              existing.excerpt = r.excerpt || existing.excerpt;
+            } else {
               finalResults.push({
                 slug: r.slug,
-                score: 0.88,  // Strong but below date-range (0.95) and exact (100.0)
+                score: mentionScore,
                 excerpt: r.excerpt || "",
                 type: r.type,
                 source: "fts_and" as any,
                 title: r.title,
                 boost_factors: {
-                  total: 0.88,
+                  total: mentionScore,
                 } as BoostFactors,
               } as any);
             }

@@ -569,7 +569,7 @@ export function detailForIntent(intent: QueryIntent): "low" | "medium" | "high" 
  * Applied AFTER backlink boost but BEFORE forceExactMatchTop.
  */
 const TWEET_BOOST_FULL = 2.5;
-const TWEET_BOOST_BASELINE = 1.5;
+const TWEET_BOOST_BASELINE = 2.0;
 
 export function applyTweetBoost(
   results: Array<{ slug: string; score: number; type: string; boost_factors?: BoostFactors }>,
