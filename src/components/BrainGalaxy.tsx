@@ -2,91 +2,415 @@
 
 import { useRef, useMemo, useCallback, useEffect, useState } from "react";
 import { Canvas, useThree, useFrame } from "@react-three/fiber";
-import { OrbitControls, Stars, Text, Billboard } from "@react-three/drei";
+import { OrbitControls, Text, Billboard } from "@react-three/drei";
 import * as THREE from "three";
 import type { GraphNode } from "@/lib/supabase/graph";
 
-/*
-  Graph colors — harmonized earth-tone palette
-  that complements the charcoal + mint-green brand.
-*/
-const TYPE_COLORS: Record<string, string> = {
-  person: "#e8927c",   // warm coral
-  company: "#7dd3a8",  // mint (brand accent)
-  project: "#e8c97c",  // soft amber
-  concept: "#d4a5a5",  // soft rose
-  idea: "#b8a9d9",     // lavender
-  place: "#8ec5e8",    // sky
-  software: "#6ec5b8", // teal
-  email: "#f0c674",    // yellow-gold
+/* ── Color palette ── */
+const TYPE_COLORS: Record<string, THREE.Color> = {
+  person: new THREE.Color("#e8927c"),
+  company: new THREE.Color("#3ecf8e"),
+  project: new THREE.Color("#e8c97c"),
+  concept: new THREE.Color("#d4a5a5"),
+  idea: new THREE.Color("#b8a9d9"),
+  place: new THREE.Color("#8ec5e8"),
+  software: new THREE.Color("#6ec5b8"),
+  email: new THREE.Color("#f0c674"),
 };
-const FALLBACK_COLOR = "#7dd3a8";
-const EDGE_COLOR = "#4a7e5c"; // brighter mint-green for visibility
+const FALLBACK = new THREE.Color("#3ecf8e");
+const EDGE_COLOR = "#2a4a30";
 
-function computeLayout(
-  nodes: GraphNode[],
-  edges: { source: string; target: string; type: string }[]
-) {
-  const positions = new Map<string, THREE.Vector3>();
-  for (const n of nodes) {
-    const phi = Math.acos(2 * Math.random() - 1);
-    const theta = 2 * Math.PI * Math.random();
-    const r = 4 + Math.random() * 3;
-    positions.set(n.id, new THREE.Vector3(r * Math.sin(phi) * Math.cos(theta), r * Math.sin(phi) * Math.sin(theta), r * Math.cos(phi)));
-  }
-  for (let iter = 0; iter < 12; iter++) {
-    const forces = new Map<string, THREE.Vector3>();
-    for (const n of nodes) forces.set(n.id, new THREE.Vector3());
-    for (let i = 0; i < nodes.length; i++) {
-      for (let j = i + 1; j < nodes.length; j++) {
-        const a = positions.get(nodes[i].id)!, b = positions.get(nodes[j].id)!;
-        const dir = new THREE.Vector3().subVectors(a, b);
-        const d = dir.length() + 0.1;
-        dir.normalize().multiplyScalar(0.02 / (d * d));
-        forces.get(nodes[i].id)!.add(dir); forces.get(nodes[j].id)!.sub(dir);
-      }
-    }
-    for (const e of edges) {
-      const a = positions.get(e.source), b = positions.get(e.target);
-      if (!a || !b) continue;
-      const dir = new THREE.Vector3().subVectors(b, a);
-      dir.normalize().multiplyScalar(0.003 * dir.length());
-      forces.get(e.source)!.add(dir); forces.get(e.target)!.sub(dir);
-    }
-    for (const n of nodes) { const p = positions.get(n.id)!; p.add(forces.get(n.id)!.multiplyScalar(0.7)); p.clampLength(2, 12); }
-  }
-  return positions;
+/* ── Barnes-Hut force-directed layout ── */
+interface BHNode {
+  cx: number; cy: number; cz: number; mass: number;
+  minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number;
+  children: BHNode[]; pointIndex: number | null;
 }
 
-function NodeLabels({
-  nodes,
-  positions,
+function buildBarnesHut(points: Float32Array, masses: Float32Array): BHNode {
+  // Find bounds
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  const n = points.length / 3;
+  for (let i = 0; i < n; i++) {
+    const x = points[i * 3], y = points[i * 3 + 1], z = points[i * 3 + 2];
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+    if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+  }
+  // Pad
+  const pad = 0.1;
+  minX -= pad; maxX += pad; minY -= pad; maxY += pad; minZ -= pad; maxZ += pad;
+
+  const root: BHNode = {
+    cx: 0, cy: 0, cz: 0, mass: 0,
+    minX, maxX, minY, maxY, minZ, maxZ,
+    children: [], pointIndex: null,
+  };
+
+  for (let i = 0; i < n; i++) {
+    insertBH(root, i, points, masses);
+  }
+  computeCenters(root);
+  return root;
+}
+
+function insertBH(node: BHNode, idx: number, points: Float32Array, masses: Float32Array) {
+  const x = points[idx * 3], y = points[idx * 3 + 1], z = points[idx * 3 + 2];
+
+  if (node.children.length === 0 && node.pointIndex === null) {
+    node.pointIndex = idx;
+    return;
+  }
+
+  if (node.children.length === 0 && node.pointIndex !== null) {
+    // Split: move existing point to child
+    const oldIdx = node.pointIndex;
+    node.pointIndex = null;
+    const ox = points[oldIdx * 3], oy = points[oldIdx * 3 + 1], oz = points[oldIdx * 3 + 2];
+    const child = getChild(node, ox, oy, oz);
+    insertBH(child, oldIdx, points, masses);
+  }
+
+  const child = getChild(node, x, y, z);
+  insertBH(child, idx, points, masses);
+}
+
+function getChild(node: BHNode, x: number, y: number, z: number): BHNode {
+  const midX = (node.minX + node.maxX) / 2;
+  const midY = (node.minY + node.maxY) / 2;
+  const midZ = (node.minZ + node.maxZ) / 2;
+  const ix = x > midX ? 1 : 0;
+  const iy = y > midY ? 1 : 0;
+  const iz = z > midZ ? 1 : 0;
+  const idx = ix * 4 + iy * 2 + iz;
+
+  if (!node.children[idx]) {
+    node.children[idx] = {
+      cx: 0, cy: 0, cz: 0, mass: 0,
+      minX: ix === 0 ? node.minX : midX, maxX: ix === 0 ? midX : node.maxX,
+      minY: iy === 0 ? node.minY : midY, maxY: iy === 0 ? midY : node.maxY,
+      minZ: iz === 0 ? node.minZ : midZ, maxZ: iz === 0 ? midZ : node.maxZ,
+      children: [], pointIndex: null,
+    };
+  }
+  return node.children[idx];
+}
+
+function computeCenters(node: BHNode) {
+  if (node.children.length === 0 && node.pointIndex !== null) {
+    node.mass = 1;
+    return;
+  }
+  node.mass = 0;
+  node.cx = 0; node.cy = 0; node.cz = 0;
+  for (const child of node.children) {
+    if (!child) continue;
+    computeCenters(child);
+    node.mass += child.mass;
+    node.cx += child.cx * child.mass;
+    node.cy += child.cy * child.mass;
+    node.cz += child.cz * child.mass;
+  }
+  if (node.mass > 0) {
+    node.cx /= node.mass;
+    node.cy /= node.mass;
+    node.cz /= node.mass;
+  }
+}
+
+function barnesHutForce(
+  points: Float32Array, velocities: Float32Array,
+  root: BHNode, theta: number, repulsion: number,
+) {
+  const n = points.length / 3;
+  for (let i = 0; i < n; i++) {
+    applyBH(points, velocities, i, root, theta, repulsion);
+  }
+}
+
+function applyBH(
+  points: Float32Array, velocities: Float32Array,
+  idx: number, node: BHNode, theta: number, repulsion: number,
+) {
+  if (node.mass === 0) return;
+  const px = points[idx * 3], py = points[idx * 3 + 1], pz = points[idx * 3 + 2];
+  const dx = node.cx - px, dy = node.cy - py, dz = node.cz - pz;
+  const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) + 0.01;
+  const width = node.maxX - node.minX;
+
+  if (node.children.length === 0 || width / dist < theta) {
+    const f = (repulsion * node.mass) / (dist * dist);
+    velocities[idx * 3] -= (dx / dist) * f;
+    velocities[idx * 3 + 1] -= (dy / dist) * f;
+    velocities[idx * 3 + 2] -= (dz / dist) * f;
+  } else {
+    for (const child of node.children) {
+      if (child) applyBH(points, velocities, idx, child, theta, repulsion);
+    }
+  }
+}
+
+function computeLayoutBHV2(
+  nodes: GraphNode[],
+  edges: { source: string; target: string; type: string }[],
+): Float32Array {
+  const n = nodes.length;
+  const points = new Float32Array(n * 3);
+  const velocities = new Float32Array(n * 3);
+  const masses = new Float32Array(n).fill(1);
+  const idToIdx = new Map<string, number>();
+
+  for (let i = 0; i < n; i++) {
+    const phi = Math.acos(2 * Math.random() - 1);
+    const theta = 2 * Math.PI * Math.random();
+    const r = 3 + Math.random() * 5;
+    points[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+    points[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+    points[i * 3 + 2] = r * Math.cos(phi);
+    idToIdx.set(nodes[i].id, i);
+  }
+
+  const edgePairs: [number, number][] = [];
+  for (const e of edges) {
+    const si = idToIdx.get(e.source), ti = idToIdx.get(e.target);
+    if (si !== undefined && ti !== undefined) edgePairs.push([si, ti]);
+  }
+
+  const repulsion = 8;
+  const attraction = 0.005;
+  const damping = 0.7;
+  const theta = 0.8;
+
+  for (let iter = 0; iter < 20; iter++) {
+    const bh = buildBarnesHut(points, masses);
+    barnesHutForce(points, velocities, bh, theta, repulsion);
+
+    // Edge attraction
+    for (const [si, ti] of edgePairs) {
+      const dx = points[ti * 3] - points[si * 3];
+      const dy = points[ti * 3 + 1] - points[si * 3 + 1];
+      const dz = points[ti * 3 + 2] - points[si * 3 + 2];
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) + 0.01;
+      const f = attraction * dist;
+      velocities[si * 3] += (dx / dist) * f;
+      velocities[si * 3 + 1] += (dy / dist) * f;
+      velocities[si * 3 + 2] += (dz / dist) * f;
+      velocities[ti * 3] -= (dx / dist) * f;
+      velocities[ti * 3 + 1] -= (dy / dist) * f;
+      velocities[ti * 3 + 2] -= (dz / dist) * f;
+    }
+
+    // Apply velocities with damping
+    for (let i = 0; i < n; i++) {
+      velocities[i * 3] *= damping;
+      velocities[i * 3 + 1] *= damping;
+      velocities[i * 3 + 2] *= damping;
+      points[i * 3] += velocities[i * 3];
+      points[i * 3 + 1] += velocities[i * 3 + 1];
+      points[i * 3 + 2] += velocities[i * 3 + 2];
+      // Clamp
+      const l = Math.sqrt(points[i * 3] ** 2 + points[i * 3 + 1] ** 2 + points[i * 3 + 2] ** 2);
+      if (l > 25) {
+        const s = 25 / l;
+        points[i * 3] *= s; points[i * 3 + 1] *= s; points[i * 3 + 2] *= s;
+      }
+    }
+  }
+
+  return points;
+}
+
+/* ── Instanced node cloud ── */
+function NodeCloud({
+  nodes, positions, onSelectNode, selectedId, hoveredId, setHoveredId,
 }: {
   nodes: GraphNode[];
-  positions: Map<string, THREE.Vector3>;
+  positions: Float32Array;
+  onSelectNode: (s: string) => void;
+  selectedId: string | null;
+  hoveredId: string | null;
+  setHoveredId: (id: string | null) => void;
 }) {
-  // Only label the top 25 most connected nodes to keep perf sane
-  const labeled = useMemo(() => {
-    return nodes
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const { raycaster, camera, pointer, size } = useThree();
+
+  const n = nodes.length;
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+  const color = useMemo(() => new THREE.Color(), []);
+  const baseMatrix = useMemo(() => new THREE.Matrix4(), []);
+
+  const slugToIdx = useMemo(() => {
+    const m = new Map<string, number>();
+    for (let i = 0; i < n; i++) m.set(nodes[i].id, i);
+    return m;
+  }, [nodes, n]);
+
+  // Update instance matrices and colors
+  useEffect(() => {
+    if (!meshRef.current) return;
+    for (let i = 0; i < n; i++) {
+      dummy.position.set(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
+      const linkCount = nodes[i].linkCount || 0;
+      const scale = 0.02 + Math.min(linkCount / 20, 0.08);
+      dummy.scale.setScalar(scale);
+      dummy.updateMatrix();
+      meshRef.current.setMatrixAt(i, dummy.matrix);
+
+      const c = TYPE_COLORS[nodes[i].type] || FALLBACK;
+      const isHovered = nodes[i].id === hoveredId;
+      const isSelected = nodes[i].id === selectedId;
+      const dimmed = selectedId && !isSelected && !isHovered;
+      color.copy(c);
+      if (dimmed) color.multiplyScalar(0.25);
+      else if (isHovered) color.multiplyScalar(1.4);
+      meshRef.current.setColorAt(i, color);
+    }
+    meshRef.current.instanceMatrix.needsUpdate = true;
+    if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true;
+  }, [positions, nodes, hoveredId, selectedId, dummy, color, n]);
+
+  // Raycasting for hover
+  useFrame(() => {
+    if (!meshRef.current) return;
+    raycaster.setFromCamera(pointer, camera);
+    const intersects = raycaster.intersectObject(meshRef.current);
+    if (intersects.length > 0) {
+      const idx = intersects[0].instanceId;
+      if (idx !== undefined && idx < n) {
+        setHoveredId(nodes[idx].id);
+        return;
+      }
+    }
+    setHoveredId(null);
+  });
+
+  const handleClick = useCallback(() => {
+    if (!meshRef.current) return;
+    raycaster.setFromCamera(pointer, camera);
+    const intersects = raycaster.intersectObject(meshRef.current);
+    if (intersects.length > 0 && intersects[0].instanceId !== undefined) {
+      const idx = intersects[0].instanceId;
+      if (idx < n) onSelectNode(nodes[idx].id);
+    }
+  }, [raycaster, pointer, camera, n, nodes, onSelectNode]);
+
+  return (
+    <instancedMesh
+      ref={meshRef}
+      args={[undefined, undefined, n]}
+      onClick={handleClick}
+    >
+      <sphereGeometry args={[1, 8, 6]} />
+      <meshBasicMaterial />
+    </instancedMesh>
+  );
+}
+
+/* ── Edge lines ── */
+function Edges({
+  nodes, edges, positions,
+}: {
+  nodes: GraphNode[];
+  edges: { source: string; target: string; type: string }[];
+  positions: Float32Array;
+}) {
+  const geo = useMemo(() => {
+    const idToIdx = new Map<string, number>();
+    for (let i = 0; i < nodes.length; i++) idToIdx.set(nodes[i].id, i);
+
+    const verts: number[] = [];
+    for (const e of edges) {
+      const si = idToIdx.get(e.source), ti = idToIdx.get(e.target);
+      if (si === undefined || ti === undefined) continue;
+      verts.push(
+        positions[si * 3], positions[si * 3 + 1], positions[si * 3 + 2],
+        positions[ti * 3], positions[ti * 3 + 1], positions[ti * 3 + 2],
+      );
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(verts, 3));
+    return g;
+  }, [nodes, edges, positions]);
+
+  return (
+    <lineSegments geometry={geo}>
+      <lineBasicMaterial color={EDGE_COLOR} transparent opacity={0.15} />
+    </lineSegments>
+  );
+}
+
+/* ── Selected highlight ring ── */
+function SelectedRing({
+  positions, nodeIdx, nodes,
+}: {
+  positions: Float32Array;
+  nodeIdx: number | null;
+  nodes: GraphNode[];
+}) {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const target = useRef(new THREE.Vector3());
+
+  useFrame(() => {
+    if (!meshRef.current || nodeIdx === null) {
+      if (meshRef.current) meshRef.current.visible = false;
+      return;
+    }
+    meshRef.current.visible = true;
+    const px = positions[nodeIdx * 3], py = positions[nodeIdx * 3 + 1], pz = positions[nodeIdx * 3 + 2];
+    target.current.set(px, py, pz);
+    meshRef.current.position.copy(target.current);
+    const linkCount = nodes[nodeIdx]?.linkCount || 0;
+    const base = 0.02 + Math.min(linkCount / 20, 0.08);
+    const scale = base * 2 + Math.sin(Date.now() * 0.003) * base * 0.3;
+    meshRef.current.scale.setScalar(scale);
+  });
+
+  if (nodeIdx === null) return null;
+
+  return (
+    <mesh ref={meshRef}>
+      <ringGeometry args={[0.9, 1.0, 32]} />
+      <meshBasicMaterial color="#3ecf8e" transparent opacity={0.6} side={THREE.DoubleSide} />
+    </mesh>
+  );
+}
+
+/* ── Node labels (billboard, zoom-sensitive) ── */
+function NodeLabels({
+  nodes, positions, camera, selectedId,
+}: {
+  nodes: GraphNode[];
+  positions: Float32Array;
+  camera: THREE.Camera;
+  selectedId: string | null;
+}) {
+  const visible = useMemo(() => {
+    // Show labels for top 50 connected nodes + selected node
+    const top = nodes
+      .map((n, i) => ({ ...n, idx: i }))
       .filter((n) => n.linkCount >= 3)
       .sort((a, b) => b.linkCount - a.linkCount)
-      .slice(0, 25);
-  }, [nodes]);
+      .slice(0, 50);
+    const set = new Set(top.map((n) => n.id));
+    if (selectedId) set.add(selectedId);
+    return Array.from(set).map((id) => {
+      const node = nodes.find((n) => n.id === id);
+      return node ? { id: node.id, label: node.label, idx: nodes.indexOf(node) } : null;
+    }).filter(Boolean) as { id: string; label: string; idx: number }[];
+  }, [nodes, selectedId]);
 
   return (
     <>
-      {labeled.map((n) => {
-        const pos = positions.get(n.id);
-        if (!pos) return null;
-        const label = n.label.length > 22 ? n.label.slice(0, 20) + "…" : n.label;
+      {visible.map((v) => {
+        const label = v.label.length > 28 ? v.label.slice(0, 26) + "…" : v.label;
         return (
-          <Billboard key={n.id} position={[pos.x, pos.y + 0.45, pos.z]}>
+          <Billboard key={v.id} position={[positions[v.idx * 3], positions[v.idx * 3 + 1] + 0.25, positions[v.idx * 3 + 2]]}>
             <Text
-              fontSize={0.22}
+              fontSize={0.18}
               color="#c8c8c8"
               anchorX="center"
               anchorY="bottom"
-              outlineWidth={0.02}
+              outlineWidth={0.015}
               outlineColor="#0a0a0a"
             >
               {label}
@@ -98,210 +422,106 @@ function NodeLabels({
   );
 }
 
-function HighlightRing({
-  positions,
-  selectedId,
-  hoveredId,
-}: {
-  positions: Map<string, THREE.Vector3>;
-  selectedId: string | null;
-  hoveredId: string | null;
-}) {
-  const meshRef = useRef<THREE.Mesh>(null);
-
-  const target = useMemo(() => {
-    const id = hoveredId || selectedId;
-    if (!id) return null;
-    return positions.get(id);
-  }, [hoveredId, selectedId, positions]);
-
-  useFrame(() => {
-    if (!meshRef.current || !target) {
-      if (meshRef.current) meshRef.current.visible = false;
-      return;
-    }
-    meshRef.current.visible = true;
-    meshRef.current.position.copy(target);
-    const scale = 1 + Math.sin(Date.now() * 0.003) * 0.15;
-    meshRef.current.scale.setScalar(scale);
-  });
-
-  if (!target) return null;
-
-  return (
-    <mesh ref={meshRef} position={[target.x, target.y, target.z]}>
-      <ringGeometry args={[0.35, 0.45, 32]} />
-      <meshBasicMaterial color="#7dd3a8" transparent opacity={0.6} side={THREE.DoubleSide} />
-    </mesh>
-  );
-}
-
+/* ── Scene ── */
 function Scene({
   nodes, edges, onSelectNode, selectedId,
 }: {
-  nodes: GraphNode[]; edges: { source: string; target: string; type: string }[];
+  nodes: GraphNode[];
+  edges: { source: string; target: string; type: string }[];
   onSelectNode: (s: string) => void;
   selectedId: string | null;
 }) {
-  const { gl, raycaster, camera, pointer } = useThree();
-  const slugMap = useRef<Map<number, string>>(new Map());
+  const { camera } = useThree();
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
-  const capped = useMemo(() => nodes.sort((a, b) => b.linkCount - a.linkCount).slice(0, 150), [nodes]);
+  // Cap edges for rendering perf (keep all nodes, limit edges)
   const cappedEdges = useMemo(() => {
-    const ids = new Set(capped.map(n => n.id));
-    return edges.filter(e => ids.has(e.source) && ids.has(e.target)).slice(0, 200);
-  }, [edges, capped]);
+    if (edges.length <= 500) return edges;
+    // Keep edges connected to top-linked nodes
+    const topIds = new Set(
+      nodes
+        .sort((a, b) => b.linkCount - a.linkCount)
+        .slice(0, 200)
+        .map((n) => n.id),
+    );
+    return edges.filter((e) => topIds.has(e.source) || topIds.has(e.target)).slice(0, 500);
+  }, [nodes, edges]);
 
-  const positions = useMemo(() => computeLayout(capped, cappedEdges), [capped, cappedEdges]);
+  const positions = useMemo(
+    () => computeLayoutBHV2(nodes, cappedEdges),
+    [nodes, cappedEdges],
+  );
 
-  const { pointPositions, pointColors, pointSizes } = useMemo(() => {
-    const verts: number[] = [], colors: number[] = [], sizes: number[] = [];
-    slugMap.current = new Map();
-    let idx = 0;
-    for (const n of capped) {
-      const pos = positions.get(n.id);
-      if (!pos) continue;
-      verts.push(pos.x, pos.y, pos.z);
-      const hex = TYPE_COLORS[n.type] || FALLBACK_COLOR;
-      const c = new THREE.Color(hex);
-      colors.push(c.r, c.g, c.b);
-      // Size based on link count — bigger = more connected
-      const size = Math.max(0.25, Math.min(0.55, 0.25 + Math.sqrt(n.linkCount) * 0.06));
-      sizes.push(size);
-      slugMap.current.set(idx, n.id);
-      idx++;
-    }
-    return { pointPositions: new Float32Array(verts), pointColors: new Float32Array(colors), pointSizes: new Float32Array(sizes) };
-  }, [capped, positions]);
-
-  const edgeVerts = useMemo(() => {
-    const verts: number[] = [];
-    for (const e of cappedEdges) {
-      const a = positions.get(e.source), b = positions.get(e.target);
-      if (a && b) { verts.push(a.x, a.y, a.z, b.x, b.y, b.z); }
-    }
-    return new Float32Array(verts);
-  }, [cappedEdges, positions]);
-
-  const pointGeo = useMemo(() => new THREE.BufferGeometry(), []);
-  const edgeGeo = useMemo(() => new THREE.BufferGeometry(), []);
-
-  useEffect(() => {
-    pointGeo.setAttribute("position", new THREE.Float32BufferAttribute(pointPositions, 3));
-    pointGeo.setAttribute("color", new THREE.Float32BufferAttribute(pointColors, 3));
-    pointGeo.setAttribute("size", new THREE.Float32BufferAttribute(pointSizes, 1));
-    edgeGeo.setAttribute("position", new THREE.Float32BufferAttribute(edgeVerts, 3));
-  }, [pointPositions, pointColors, pointSizes, edgeVerts, pointGeo, edgeGeo]);
-
-  const pointRef = useRef<THREE.Points>(null);
-
-  const handlePointerMove = useCallback(() => {
-    if (!pointRef.current) return;
-    raycaster.setFromCamera(pointer, camera);
-    const intersects = raycaster.intersectObject(pointRef.current);
-    if (intersects.length > 0) {
-      const idx = intersects[0].index;
-      if (idx !== undefined) {
-        const slug = slugMap.current.get(idx);
-        if (slug) {
-          setHoveredId(slug);
-          gl.domElement.style.cursor = "pointer";
-          return;
-        }
-      }
-    }
-    setHoveredId(null);
-    gl.domElement.style.cursor = "grab";
-  }, [gl, raycaster, camera, pointer]);
-
-  const handlePointerUp = useCallback(() => {
-    if (!pointRef.current) return;
-    raycaster.setFromCamera(pointer, camera);
-    const intersects = raycaster.intersectObject(pointRef.current);
-    if (intersects.length > 0) {
-      const idx = intersects[0].index;
-      if (idx !== undefined) {
-        const slug = slugMap.current.get(idx);
-        if (slug) onSelectNode(slug);
-      }
-    }
-  }, [gl, raycaster, camera, pointer, onSelectNode]);
-
-  useEffect(() => {
-    const canvas = gl.domElement;
-    canvas.addEventListener("pointerup", handlePointerUp);
-    canvas.addEventListener("pointermove", handlePointerMove);
-    return () => {
-      canvas.removeEventListener("pointerup", handlePointerUp);
-      canvas.removeEventListener("pointermove", handlePointerMove);
-    };
-  }, [gl, handlePointerUp, handlePointerMove]);
-
-  useEffect(() => {
-    const canvas = gl.domElement;
-    const onLost = (e: Event) => { e.preventDefault(); };
-    canvas.addEventListener("webglcontextlost", onLost);
-    return () => canvas.removeEventListener("webglcontextlost", onLost);
-  }, [gl]);
+  const selectedIdx = selectedId ? nodes.findIndex((n) => n.id === selectedId) : -1;
 
   return (
     <>
-      <fog attach="fog" args={["#0a0a0a", 8, 22]} />
-      <ambientLight intensity={0.5} />
-      <Stars radius={50} depth={40} count={800} factor={3} fade speed={0.5} />
-
-      <lineSegments geometry={edgeGeo}>
-        <lineBasicMaterial color={EDGE_COLOR} transparent opacity={0.5} />
-      </lineSegments>
-
-      <points ref={pointRef} geometry={pointGeo}>
-        <pointsMaterial
-          size={0.35}
-          vertexColors
-          sizeAttenuation
-          transparent
-          opacity={0.95}
-        />
-      </points>
-
-      <NodeLabels nodes={capped} positions={positions} />
-      <HighlightRing positions={positions} selectedId={selectedId} hoveredId={hoveredId} />
-
-      <OrbitControls
-        enableDamping
-        dampingFactor={0.06}
-        minDistance={3}
-        maxDistance={16}
-        autoRotate
-        autoRotateSpeed={0.15}
+      <Edges nodes={nodes} edges={cappedEdges} positions={positions} />
+      <NodeCloud
+        nodes={nodes}
+        positions={positions}
+        onSelectNode={onSelectNode}
+        selectedId={selectedId}
+        hoveredId={hoveredId}
+        setHoveredId={setHoveredId}
       />
+      <SelectedRing positions={positions} nodeIdx={selectedIdx >= 0 ? selectedIdx : null} nodes={nodes} />
+      <NodeLabels nodes={nodes} positions={positions} camera={camera} selectedId={selectedId} />
     </>
   );
 }
 
+/* ── State indicator ── */
+function NodeCount({ nodes }: { nodes: GraphNode[] }) {
+  return (
+    <div className="absolute bottom-4 left-4 text-[10px] text-bb-text-muted tabular-nums bg-bb-bg-primary/80 backdrop-blur-sm rounded px-2 py-1 border border-bb-border/50 pointer-events-none">
+      {nodes.length} nodes • drag to orbit • scroll to zoom
+    </div>
+  );
+}
+
+/* ── Public component ── */
 export default function BrainGalaxy({
-  nodes, edges, onSelectNode,
+  nodes,
+  edges,
+  onSelectNode,
 }: {
-  nodes: GraphNode[]; edges: { source: string; target: string; type: string }[];
-  onSelectNode: (s: string) => void;
+  nodes: GraphNode[];
+  edges: { source: string; target: string; type: string }[];
+  onSelectNode: (slug: string) => void;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const handleSelect = useCallback((slug: string) => {
-    setSelectedId(slug);
-    onSelectNode(slug);
-  }, [onSelectNode]);
+  const handleSelect = useCallback(
+    (slug: string) => {
+      setSelectedId(slug);
+      onSelectNode(slug);
+    },
+    [onSelectNode],
+  );
 
   return (
-    <Canvas
-      camera={{ position: [0, 2, 9], fov: 50 }}
-      style={{ background: "#0a0a0a" }}
-      dpr={[1, 1.5]}
-      gl={{ antialias: true, powerPreference: "low-power", failIfMajorPerformanceCaveat: false, preserveDrawingBuffer: false }}
-      performance={{ min: 0.3 }}
-    >
-      <Scene nodes={nodes} edges={edges} onSelectNode={handleSelect} selectedId={selectedId} />
-    </Canvas>
+    <div className="w-full h-full relative">
+      <Canvas
+        camera={{ position: [0, 0, 12], fov: 50 }}
+        gl={{ antialias: true, alpha: true }}
+        style={{ background: "#0a0a0a" }}
+      >
+        <ambientLight intensity={0.4} />
+        <Scene
+          nodes={nodes}
+          edges={edges}
+          onSelectNode={handleSelect}
+          selectedId={selectedId}
+        />
+        <OrbitControls
+          enableDamping
+          dampingFactor={0.08}
+          minDistance={1}
+          maxDistance={40}
+        />
+      </Canvas>
+      <NodeCount nodes={nodes} />
+    </div>
   );
 }

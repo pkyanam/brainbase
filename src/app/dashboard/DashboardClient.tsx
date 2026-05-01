@@ -2,28 +2,14 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Image from "next/image";
-import nextDynamic from "next/dynamic";
 import { useUser, SignOutButton } from "@clerk/nextjs";
 import { useTheme } from "@/components/ThemeProvider";
-import type { GraphNode } from "@/lib/supabase/graph";
 import DreamStatusCard from "@/components/DreamStatusCard";
 import StatsBar from "@/components/dashboard/StatsBar";
 import PageList from "@/components/dashboard/PageList";
 import ActivityFeed from "@/components/dashboard/ActivityFeed";
 import MembersCard from "@/components/dashboard/MembersCard";
 import PageSidebar from "@/components/dashboard/PageSidebar";
-
-const BrainGalaxy = nextDynamic(() => import("@/components/BrainGalaxy"), {
-  ssr: false,
-  loading: () => (
-    <div className="h-full flex items-center justify-center">
-      <div className="text-center space-y-3">
-        <div className="w-6 h-6 border-2 border-bb-border border-t-bb-accent rounded-full animate-spin mx-auto" />
-        <p className="text-xs text-bb-text-muted">Loading 3D graph</p>
-      </div>
-    </div>
-  ),
-});
 
 interface BrainStats {
   page_count: number;
@@ -90,8 +76,6 @@ export default function Dashboard() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [selectedPage, setSelectedPage] = useState<PageDetail | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [graphData, setGraphData] = useState<{ nodes: GraphNode[]; edges: { source: string; target: string; type: string }[] } | null>(null);
-  const [graphError, setGraphError] = useState(false);
   const [statsError, setStatsError] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
   const [apiKey, setApiKey] = useState<string | null>(null);
@@ -301,13 +285,6 @@ export default function Dashboard() {
       .then((d) => { setStats(d); setStatsError(false); })
       .catch(() => setStatsError(true));
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-    fetch(`/api/brain/graph${q}`, { signal: controller.signal })
-      .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
-      .then((d) => { clearTimeout(timeout); setGraphData(d); setGraphError(false); })
-      .catch(() => { clearTimeout(timeout); setGraphError(true); });
-
     fetch(`/api/brain/activity${q}`)
       .then((r) => r.json())
       .then((d) => setActivities(d.activities || []))
@@ -326,7 +303,7 @@ export default function Dashboard() {
       .then((d) => setImplicitRules(d.rules || []))
       .catch(() => {});
 
-    return () => { clearTimeout(timeout); controller.abort(); };
+    return () => {};
   }, [currentBrainId]);
 
   // SSE live updates
@@ -402,7 +379,6 @@ export default function Dashboard() {
     setCurrentBrainId(brainId);
     setSelectedPage(null);
     setSidebarOpen(false);
-    setGraphData(null);
   };
 
   const pageTypes = stats?.pages_by_type || {};
@@ -803,65 +779,38 @@ export default function Dashboard() {
 
           {/* Dream status */}
           {isLoaded && user && (
-            <div className="shrink-0 px-4 md:px-6 pt-3">
+            <div className="shrink-0 px-4 md:px-6 pt-3 pb-3">
               <DreamStatusCard brainId={currentBrainId} />
             </div>
           )}
 
-          {/* Graph */}
-          <div className="flex-1 min-h-[320px] md:min-h-0 px-4 md:px-6 py-3 md:pb-6">
-            <div className="h-full rounded-xl overflow-hidden border border-bb-border bg-bb-bg-secondary relative group/graph">
-              {/* Graph header with title + full-graph link */}
-              <div className="absolute top-3 left-3 right-3 z-10 flex items-center justify-between pointer-events-none">
-                <span className="text-[10px] uppercase tracking-wider text-bb-text-muted font-medium bg-bb-bg-primary/80 backdrop-blur-sm rounded px-2 py-1 border border-bb-border/50">
-                  Knowledge Graph
-                </span>
-                <div className="opacity-0 group-hover/graph:opacity-100 transition-opacity pointer-events-auto">
-                  <a
-                    href="/graph"
-                    className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary text-xs font-medium transition-colors"
-                  >
-                    Full graph
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
-                  </a>
+          {/* View Graph card */}
+          <div className="shrink-0 px-4 md:px-6 pb-3">
+            <a
+              href="/graph"
+              className="block rounded-xl border border-bb-border bg-gradient-to-br from-bb-surface to-bb-bg-tertiary hover:border-bb-accent/40 transition-all group/graph-card overflow-hidden"
+            >
+              <div className="flex items-center gap-4 p-4">
+                <div className="shrink-0 w-12 h-12 rounded-lg bg-bb-accent/10 border border-bb-accent/20 flex items-center justify-center group-hover/graph-card:bg-bb-accent/20 transition-colors">
+                  <svg className="w-6 h-6 text-bb-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M7 3v4a1 1 0 001 1h4m6 4h2a2 2 0 012 2v6a2 2 0 01-2 2h-4a2 2 0 01-2-2v-2M5 21a2 2 0 01-2-2v-4a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2H5zM11 7a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2h-4a2 2 0 01-2-2V7z" />
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-semibold text-bb-text-primary group-hover/graph-card:text-bb-accent transition-colors">
+                    Knowledge Graph
+                  </h3>
+                  <p className="text-xs text-bb-text-secondary mt-0.5">
+                    Explore {stats?.page_count ?? "—"} pages and {stats?.link_count ?? "—"} connections in 3D
+                  </p>
+                </div>
+                <div className="shrink-0 text-bb-accent">
+                  <svg className="w-5 h-5 group-hover/graph-card:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                  </svg>
                 </div>
               </div>
-              {graphError ? (
-                <GraphFallback
-                  stats={stats}
-                  onSelect={handleSelectNode}
-                />
-              ) : !graphData ? (
-                <div className="h-full flex items-center justify-center">
-                  <div className="text-center space-y-2">
-                    <div className="w-6 h-6 border-2 border-bb-border border-t-bb-accent rounded-full animate-spin mx-auto" />
-                    <p className="text-sm text-bb-text-muted">Loading graph</p>
-                  </div>
-                </div>
-              ) : graphData.nodes.length === 0 ? (
-                <div className="h-full flex items-center justify-center p-6">
-                  <div className="text-center max-w-sm">
-                    <div className="mx-auto mb-4 w-12 h-12 rounded-xl bg-bb-surface border border-bb-border flex items-center justify-center">
-                      <svg className="w-6 h-6 text-bb-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                      </svg>
-                    </div>
-                    <p className="text-bb-text-primary text-sm font-medium mb-1">No graph data yet</p>
-                    <p className="text-bb-text-muted text-xs leading-relaxed">
-                      Import contacts or connect Slack to build your brain.
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <BrainGalaxy
-                  nodes={graphData.nodes}
-                  edges={graphData.edges}
-                  onSelectNode={handleSelectNode}
-                />
-              )}
-            </div>
+            </a>
           </div>
         </div>
 
@@ -1128,54 +1077,6 @@ export default function Dashboard() {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-// Graph fallback: flat list of most-connected pages
-function GraphFallback({
-  stats,
-  onSelect,
-}: {
-  stats: BrainStats | null;
-  onSelect: (slug: string) => void;
-}) {
-  const connected = stats?.most_connected || [];
-  return (
-    <div className="h-full overflow-y-auto p-4 md:p-6">
-      <div className="max-w-lg mx-auto">
-        <div className="text-center mb-6">
-          <div className="mx-auto mb-3 w-12 h-12 rounded-xl bg-bb-surface border border-bb-border flex items-center justify-center">
-            <svg className="w-6 h-6 text-bb-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <p className="text-sm text-bb-text-primary font-medium mb-1">3D graph unavailable</p>
-          <p className="text-xs text-bb-text-muted leading-relaxed">
-            Showing most connected pages. Use the CLI or MCP endpoint to query directly.
-          </p>
-          <code className="inline-block mt-3 px-2.5 py-1.5 text-[11px] text-bb-accent font-mono bg-bb-surface border border-bb-border rounded">
-            brainbase query &quot;anything&quot;
-          </code>
-        </div>
-        {connected.length > 0 && (
-          <ul className="space-y-px border border-bb-border rounded-lg bg-bb-bg-primary overflow-hidden">
-            {connected.map((p) => (
-              <li key={p.slug}>
-                <button
-                  onClick={() => onSelect(p.slug)}
-                  className="w-full text-left px-4 py-3 hover:bg-bb-surface transition-colors flex items-center justify-between gap-3 border-b border-bb-border last:border-0"
-                >
-                  <span className="text-sm text-bb-text-primary truncate">{p.title}</span>
-                  <span className="text-xs text-bb-text-muted tabular-nums shrink-0">
-                    {p.link_count} links
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
     </div>
   );
 }
