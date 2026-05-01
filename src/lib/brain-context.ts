@@ -104,13 +104,32 @@ export async function deleteBrain(brainId: string, userId: string): Promise<bool
   const access = await canAccessBrain(userId, brainId);
   if (!access?.is_owner) return false;
 
-  // Delete in dependency order
-  await queryOne(`DELETE FROM pages WHERE brain_id = $1`, [brainId]);
-  await queryOne(`DELETE FROM brain_members WHERE brain_id = $1`, [brainId]);
-  await queryOne(`DELETE FROM brain_invites WHERE brain_id = $1`, [brainId]);
-  await queryOne(`DELETE FROM api_keys WHERE brain_id = $1`, [brainId]);
-  await queryOne(`DELETE FROM activities WHERE brain_id = $1`, [brainId]);
-  await queryOne(`DELETE FROM brains WHERE id = $1 AND owner_user_id = $2`, [brainId, userId]);
+  // Delete in dependency order — resilient to missing tables
+  const deletes = [
+    `DELETE FROM pages WHERE brain_id = $1`,
+    `DELETE FROM brain_members WHERE brain_id = $1`,
+    `DELETE FROM brain_invites WHERE brain_id = $1`,
+    `DELETE FROM api_keys WHERE brain_id = $1`,
+    `DELETE FROM activities WHERE brain_id = $1`,
+    `DELETE FROM page_versions WHERE brain_id = $1`,
+    `DELETE FROM timeline_entries WHERE brain_id = $1`,
+    `DELETE FROM links WHERE brain_id = $1`,
+    `DELETE FROM content_chunks WHERE brain_id = $1`,
+    `DELETE FROM brains WHERE id = $1 AND owner_user_id = $2`,
+  ];
+
+  for (const sql of deletes) {
+    try {
+      await queryOne(sql, sql.includes('$2') ? [brainId, userId] : [brainId]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Only ignore "relation does not exist" errors; rethrow anything else
+      if (!msg.includes('does not exist')) {
+        throw err;
+      }
+    }
+  }
+
   return true;
 }
 export async function getBrainSupabaseCredentials(

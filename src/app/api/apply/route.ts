@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/supabase/client";
-import { ensureCollaborationSchema } from "@/lib/db-setup";
+import { ensureApplicationsTable } from "@/lib/db-setup";
 
 export async function POST(req: NextRequest) {
   try {
-    await ensureCollaborationSchema();
+    await ensureApplicationsTable();
     const body = await req.json();
     const { name, email, company, team_size, message } = body;
 
@@ -24,9 +24,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (err) {
     console.error("[brainbase] Application submission error:", err);
-    const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { error: "Failed to submit application", detail: message },
+      { error: "Failed to submit application" },
       { status: 500 }
     );
   }

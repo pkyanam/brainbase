@@ -153,70 +153,94 @@ export async function ensureSchema(): Promise<void> {
  * v0.3 — Collaboration schema: brain members, invites, page versions, activities
  */
 export async function ensureCollaborationSchema(): Promise<void> {
+  // Ensure each table/index independently so one failure doesn't block the rest
+  const ensureTable = async (label: string, sql: string) => {
+    try {
+      await query(sql);
+    } catch (err) {
+      console.error(`[brainbase] Schema ensure failed for ${label}:`, err);
+    }
+  };
+
+  await ensureTable("brain_members", `
+    CREATE TABLE IF NOT EXISTS brain_members (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      brain_id UUID NOT NULL REFERENCES brains(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'editor',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(brain_id, user_id)
+    )
+  `);
+
+  await ensureTable("brain_invites", `
+    CREATE TABLE IF NOT EXISTS brain_invites (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      brain_id UUID NOT NULL REFERENCES brains(id) ON DELETE CASCADE,
+      inviter_user_id TEXT NOT NULL,
+      email TEXT NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      role TEXT NOT NULL DEFAULT 'editor',
+      accepted_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      expires_at TIMESTAMPTZ DEFAULT NOW() + INTERVAL '7 days'
+    )
+  `);
+
+  await ensureTable("page_versions", `
+    CREATE TABLE IF NOT EXISTS page_versions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      brain_id UUID NOT NULL,
+      page_slug TEXT NOT NULL,
+      title TEXT NOT NULL,
+      type TEXT,
+      content TEXT,
+      frontmatter JSONB,
+      created_by TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await ensureTable("idx_page_versions", `
+    CREATE INDEX IF NOT EXISTS idx_page_versions ON page_versions(brain_id, page_slug, created_at DESC)
+  `);
+
+  await ensureTable("activities", `
+    CREATE TABLE IF NOT EXISTS activities (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      brain_id UUID NOT NULL,
+      actor_user_id TEXT,
+      action TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      entity_slug TEXT,
+      metadata JSONB,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await ensureTable("idx_activities", `
+    CREATE INDEX IF NOT EXISTS idx_activities ON activities(brain_id, created_at DESC)
+  `);
+
+  await ensureTable("applications", `
+    CREATE TABLE IF NOT EXISTS applications (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      company TEXT,
+      team_size TEXT,
+      message TEXT,
+      source TEXT DEFAULT 'landing_page',
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  console.log("[brainbase] Collaboration schema ensured");
+}
+
+/**
+ * Ensure just the applications table exists (for /apply and /admin routes).
+ */
+export async function ensureApplicationsTable(): Promise<void> {
   try {
-    // Brain members — many-to-many users ↔ brains
-    await query(`
-      CREATE TABLE IF NOT EXISTS brain_members (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        brain_id UUID NOT NULL REFERENCES brains(id) ON DELETE CASCADE,
-        user_id TEXT NOT NULL,
-        role TEXT NOT NULL DEFAULT 'editor',
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        UNIQUE(brain_id, user_id)
-      )
-    `);
-
-    // Brain invites — pending email invitations (token_hash only, no plain text)
-    await query(`
-      CREATE TABLE IF NOT EXISTS brain_invites (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        brain_id UUID NOT NULL REFERENCES brains(id) ON DELETE CASCADE,
-        inviter_user_id TEXT NOT NULL,
-        email TEXT NOT NULL,
-        token_hash TEXT NOT NULL UNIQUE,
-        role TEXT NOT NULL DEFAULT 'editor',
-        accepted_at TIMESTAMPTZ,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        expires_at TIMESTAMPTZ DEFAULT NOW() + INTERVAL '7 days'
-      )
-    `);
-
-    // Page versions — snapshot history
-    await query(`
-      CREATE TABLE IF NOT EXISTS page_versions (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        brain_id UUID NOT NULL,
-        page_slug TEXT NOT NULL,
-        title TEXT NOT NULL,
-        type TEXT,
-        content TEXT,
-        frontmatter JSONB,
-        created_by TEXT,
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
-    await query(`
-      CREATE INDEX IF NOT EXISTS idx_page_versions ON page_versions(brain_id, page_slug, created_at DESC)
-    `);
-
-    // Activity log
-    await query(`
-      CREATE TABLE IF NOT EXISTS activities (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        brain_id UUID NOT NULL,
-        actor_user_id TEXT,
-        action TEXT NOT NULL,
-        entity_type TEXT NOT NULL,
-        entity_slug TEXT,
-        metadata JSONB,
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
-    await query(`
-      CREATE INDEX IF NOT EXISTS idx_activities ON activities(brain_id, created_at DESC)
-    `);
-
-    // Design partner applications
     await query(`
       CREATE TABLE IF NOT EXISTS applications (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -229,10 +253,9 @@ export async function ensureCollaborationSchema(): Promise<void> {
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
-
-    console.log("[brainbase] Collaboration schema ensured");
   } catch (err) {
-    console.error("[brainbase] Collaboration schema error:", err);
+    console.error("[brainbase] Failed to ensure applications table:", err);
+    throw err;
   }
 }
 
