@@ -7,6 +7,7 @@ import {
   rrfFusion,
   dedupBySlug,
   pinExactMatches,
+  forceExactMatchTop,
   forceExactMatchTopFinal,
   normalizeScores,
   applyCompiledTruthBoost,
@@ -101,7 +102,12 @@ export async function POST(req: NextRequest) {
     );
     applyBacklinkBoost(normed, backlinks);
 
-    // ── Phase 5.5: Parse tweet-specific query signals ────────────
+    // ── Phase 5.5: B2 FIX v3 — force exact matches to 100.0 BEFORE flattening.
+    // Safety net: if pinExactMatches + RRF somehow lost the exact match,
+    // this ensures it is in the fused map at max score.
+    forceExactMatchTop(normed, q);
+
+    // ── Phase 5.6: Parse tweet-specific query signals ────────────
     let ordinalMatch: OrdinalMatch | null = null;
     let dateRange: DateRangeMatch | null = null;
 
@@ -292,21 +298,27 @@ export async function POST(req: NextRequest) {
           let mentionResults: Array<{ slug: string; title: string; type: string; excerpt: string }> = [];
           let mentionScore = 1.5;  // Pass 1: exact match → highest tier
 
-          // Pass 1: exact entity name ILIKE
+          // Pass 1: exact entity name ILIKE + backlink tiebreaker
           mentionResults = await queryMany<{
             slug: string; title: string; type: string; excerpt: string;
           }>(
             `SELECT p.slug, p.title, p.type,
                     COALESCE(p.compiled_truth, '') as excerpt
              FROM pages p
+             LEFT JOIN (
+               SELECT to_page_id as pid, COUNT(*) as cnt
+               FROM links WHERE brain_id = $1 GROUP BY to_page_id
+             ) lc ON lc.pid = p.id
              WHERE p.brain_id = $1 AND p.type = 'tweet'
                AND (p.compiled_truth ILIKE $2 OR p.title ILIKE $2)
-             ORDER BY p.updated_at DESC LIMIT 20`,
+             ORDER BY COALESCE(lc.cnt, 0) DESC,
+                      ts_rank_cd(to_tsvector('english', COALESCE(p.compiled_truth, '')), plainto_tsquery('english', $2)) DESC
+             LIMIT 20`,
             [auth.brainId, `%${entityName}%`]
           );
           console.log("[query] Entity-mention pass 1 (exact):", mentionResults.length, "rows");
 
-          // Pass 2: split into AND-search → mid tier
+          // Pass 2: split into AND-search → mid tier + backlink tiebreaker
           if (mentionResults.length === 0 && entityName.includes(" ")) {
             mentionScore = 1.3;
             const words = entityName.split(/\s+/).filter(w => w.length > 1);
@@ -319,16 +331,22 @@ export async function POST(req: NextRequest) {
               }>(
                 `SELECT p.slug, p.title, p.type, COALESCE(p.compiled_truth, '') as excerpt
                  FROM pages p
+                 LEFT JOIN (
+                   SELECT to_page_id as pid, COUNT(*) as cnt
+                   FROM links WHERE brain_id = $1 GROUP BY to_page_id
+                 ) lc ON lc.pid = p.id
                  WHERE p.brain_id = $1 AND p.type = 'tweet'
                    AND (${ilikeClauses.join(" AND ")})
-                 ORDER BY p.updated_at DESC LIMIT 20`,
-                [auth.brainId, ...words.map(w => `%${w}%`)]
+                 ORDER BY COALESCE(lc.cnt, 0) DESC,
+                          ts_rank_cd(to_tsvector('english', COALESCE(p.compiled_truth, '')), plainto_tsquery('english', $${words.length + 2})) DESC
+                 LIMIT 20`,
+                [auth.brainId, ...words.map(w => `%${w}%`), entityName]
               );
               console.log("[query] Entity-mention pass 2 (AND):", mentionResults.length, "rows");
             }
           }
 
-          // Pass 3: no spaces → lowest tier
+          // Pass 3: no spaces → lowest tier + backlink tiebreaker
           if (mentionResults.length === 0 && entityName.includes(" ")) {
             mentionScore = 1.1;
             const noSpace = entityName.replace(/\s+/g, "");
@@ -337,9 +355,15 @@ export async function POST(req: NextRequest) {
             }>(
               `SELECT p.slug, p.title, p.type, COALESCE(p.compiled_truth, '') as excerpt
                FROM pages p
+               LEFT JOIN (
+                 SELECT to_page_id as pid, COUNT(*) as cnt
+                 FROM links WHERE brain_id = $1 GROUP BY to_page_id
+               ) lc ON lc.pid = p.id
                WHERE p.brain_id = $1 AND p.type = 'tweet'
                  AND (p.compiled_truth ILIKE $2 OR p.title ILIKE $2)
-               ORDER BY p.updated_at DESC LIMIT 20`,
+               ORDER BY COALESCE(lc.cnt, 0) DESC,
+                        ts_rank_cd(to_tsvector('english', COALESCE(p.compiled_truth, '')), plainto_tsquery('english', $2)) DESC
+               LIMIT 20`,
               [auth.brainId, `%${noSpace}%`]
             );
             console.log("[query] Entity-mention pass 3 (no-space):", mentionResults.length, "rows");
@@ -402,7 +426,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── Phase 7: Tweet-content retrieval fallback ──────────────
+    // ── Phase 7: Tweet-content retrieval fallback ────────────
     // MUST run BEFORE tweet boost so fallback rows get the multiplier.
     // For non-tweet-intent queries where hybrid returns few/no tweets,
     // search tweet content directly and inject with tiered scoring.
@@ -483,6 +507,40 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ── Phase 7.5: Multi-entity fallback ────────────────
+    // If results are empty and query looks like "X and Y" or "X or Y",
+    // split into individual entity searches and merge.
+    if (finalResults.length === 0) {
+      const multiMatch = q.match(/^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:and|or)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)$/i);
+      if (multiMatch) {
+        const entity1 = multiMatch[1].trim();
+        const entity2 = multiMatch[2].trim();
+        console.log("[query] Multi-entity fallback:", entity1, "|", entity2);
+        try {
+          const [r1, r2] = await Promise.all([
+            searchBrain(auth.brainId, entity1, 5),
+            searchBrain(auth.brainId, entity2, 5),
+          ]);
+          for (const r of [...r1, ...r2]) {
+            if (!finalResults.find(fr => fr.slug === r.slug)) {
+              finalResults.push({
+                slug: r.slug,
+                score: r.score,
+                excerpt: r.excerpt,
+                type: r.type,
+                source: r.source,
+                title: r.title,
+                boost_factors: { total: r.score } as BoostFactors,
+                handler_path: "multi_entity",
+              } as any);
+            }
+          }
+        } catch (err) {
+          console.error("[query] Multi-entity fallback error:", err);
+        }
+      }
+    }
+
     // ── Phase 8: Tweet boost for ALL intents ─────────────────────
     // MUST run AFTER fallback so tweet_fallback rows get the multiplier.
     // Tweet intent: 2.5x. All other intents: 2.0x baseline.
@@ -503,6 +561,7 @@ export async function POST(req: NextRequest) {
       chunk_source: (r as any).chunk_source || null,
       boost_factors: (r as any).boost_factors || null,
       handler_path: (r as any).handler_path || null,
+      pin: (r as any).boost_factors?.exact_match >= 90 || r.score >= 90,
     }));
 
     return NextResponse.json({
