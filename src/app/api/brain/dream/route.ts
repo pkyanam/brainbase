@@ -1,9 +1,9 @@
 /**
  * POST /api/brain/dream
- * Run the autonomous dream cycle on a brain (incremental batch).
+ * Run the autonomous dream cycle on a brain.
  *
  * Query params: ?brain_id=<id>
- * Body: { batch_size?: number } (default 20, max 50)
+ * Body: { process_all?: boolean } — process all pages (not just a batch)
  *
  * Auth: API key (Bearer) or Clerk session.
  */
@@ -16,17 +16,17 @@ export async function POST(req: NextRequest) {
   const auth = await requireBrainAccess(req);
   if (auth instanceof Response) return auth;
 
-  let body: { batch_size?: number } = {};
+  let body: { process_all?: boolean } = {};
   try {
     body = await req.json();
   } catch {
     // no body is fine
   }
 
-  const batchSize = Math.min(50, Math.max(1, body.batch_size || 20));
+  const processAll = body.process_all === true;
 
   try {
-    const report = await runDreamCycle(auth.brainId, batchSize);
+    const report = await runDreamCycle(auth.brainId, processAll);
     return NextResponse.json(report, { status: 200 });
   } catch (err) {
     console.error("[brainbase] Dream cycle error:", err);

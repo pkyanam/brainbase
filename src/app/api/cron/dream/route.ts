@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
 
     for (const brain of brains.slice(0, 10)) {
       try {
-        const report = await runDreamCycle(brain.brain_id, 200);
+        const report = await runDreamCycle(brain.brain_id, false);
         results.push({
           brain_id: brain.brain_id,
           status: report.status,

@@ -39,16 +39,16 @@ export interface DreamReport {
   };
 }
 
-// ── Phase 1: Extract links + timeline from recently-updated pages ────────
+// ── Phase 1: Extract links + timeline from pages ────────
 
-async function runExtractPhase(brainId: string, batchSize = 200): Promise<DreamPhaseResult> {
+async function runExtractPhase(brainId: string, processAll: boolean): Promise<DreamPhaseResult> {
   const start = Date.now();
   let pagesExtracted = 0;
   let linksCreated = 0;
   let timelineCreated = 0;
 
   try {
-    // Find pages updated in the last 7 days that haven't been auto-extracted recently
+    const limitClause = processAll ? "" : "LIMIT 200";
     const pages = await queryMany<{
       slug: string;
       type: string;
@@ -57,11 +57,10 @@ async function runExtractPhase(brainId: string, batchSize = 200): Promise<DreamP
       `SELECT slug, type, compiled_truth
        FROM pages
        WHERE brain_id = $1
-         AND updated_at > NOW() - INTERVAL '7 days'
          AND (last_extracted_at IS NULL OR last_extracted_at < updated_at)
        ORDER BY updated_at DESC
-       LIMIT $2`,
-      [brainId, batchSize]
+       ${limitClause}`,
+      [brainId]
     );
 
     for (const page of pages) {
@@ -99,7 +98,7 @@ async function runExtractPhase(brainId: string, batchSize = 200): Promise<DreamP
 
 // ── Phase 2: Embed stale chunks ────────────────────────────────────────────
 
-async function runEmbedPhase(brainId: string): Promise<DreamPhaseResult> {
+async function runEmbedPhase(brainId: string, processAll: boolean): Promise<DreamPhaseResult> {
   const start = Date.now();
 
   try {
@@ -119,10 +118,10 @@ async function runEmbedPhase(brainId: string): Promise<DreamPhaseResult> {
       };
     }
 
-    // Actually embed a small batch (serverless-safe)
+    const embedLimit = processAll ? staleCount + 1 : 50;
     let embedded = 0;
     try {
-      embedded = await embedStaleChunks(brainId, 50);
+      embedded = await embedStaleChunks(brainId, embedLimit);
     } catch (embedErr) {
       return {
         phase: "embed",
@@ -151,7 +150,7 @@ async function runEmbedPhase(brainId: string): Promise<DreamPhaseResult> {
 
 // ── Phase 3: Orphan detection + auto-linking ────────────────────────────
 
-async function runOrphansPhase(brainId: string): Promise<DreamPhaseResult> {
+async function runOrphansPhase(brainId: string, processAll: boolean): Promise<DreamPhaseResult> {
   try {
     const orphans = await findOrphans(brainId);
 
@@ -164,9 +163,9 @@ async function runOrphansPhase(brainId: string): Promise<DreamPhaseResult> {
       };
     }
 
-    // Auto-link top orphans via semantic similarity
+    // Auto-link orphans via semantic similarity
     let autoLinked = 0;
-    const toProcess = orphans.slice(0, 10); // Limit for serverless timeout
+    const toProcess = processAll ? orphans : orphans.slice(0, 10);
 
     for (const orphanSlug of toProcess) {
       try {
@@ -205,10 +204,11 @@ interface DetectedPattern {
   confidence: number;
 }
 
-async function runPatternsPhase(brainId: string): Promise<DreamPhaseResult> {
+async function runPatternsPhase(brainId: string, processAll: boolean): Promise<DreamPhaseResult> {
   try {
     // Simple deterministic pattern detection:
     // Find pages that share unusual co-occurring terms
+    const limitClause = processAll ? "" : "LIMIT 100";
     const rows = await queryMany<{
       slug: string;
       compiled_truth: string;
@@ -220,7 +220,7 @@ async function runPatternsPhase(brainId: string): Promise<DreamPhaseResult> {
          AND updated_at > NOW() - INTERVAL '30 days'
          AND type IN ('person', 'company', 'concept')
        ORDER BY updated_at DESC
-       LIMIT 100`,
+       ${limitClause}`,
       [brainId]
     );
 
@@ -289,9 +289,10 @@ function extractPeopleMentions(content: string): string[] {
 
 // ── Phase 5: Entity tier auto-escalation ────────────────────────────────
 
-async function runEntityTiersPhase(brainId: string): Promise<DreamPhaseResult> {
+async function runEntityTiersPhase(brainId: string, processAll: boolean): Promise<DreamPhaseResult> {
   try {
     // Count mentions per entity (pages that link TO this entity)
+    const limitClause = processAll ? "" : "LIMIT 50";
     const rows = await queryMany<{
       slug: string;
       title: string;
@@ -311,7 +312,7 @@ async function runEntityTiersPhase(brainId: string): Promise<DreamPhaseResult> {
        WHERE p.brain_id = $1
          AND p.type IN ('person', 'company')
        ORDER BY mention_count DESC
-       LIMIT 50`,
+       ${limitClause}`,
       [brainId]
     );
 
@@ -365,9 +366,10 @@ interface FrontmatterEdge {
   linkType: string;
 }
 
-async function runFrontmatterPhase(brainId: string): Promise<DreamPhaseResult> {
+async function runFrontmatterPhase(brainId: string, processAll: boolean): Promise<DreamPhaseResult> {
   try {
     // Find pages with frontmatter containing relationship arrays
+    const limitClause = processAll ? "" : "LIMIT 100";
     const rows = await queryMany<{
       slug: string;
       title: string;
@@ -385,7 +387,7 @@ async function runFrontmatterPhase(brainId: string): Promise<DreamPhaseResult> {
            OR frontmatter ? 'advisors'
            OR frontmatter ? 'companies'
          )
-       LIMIT 100`,
+       ${limitClause}`,
       [brainId]
     );
 
@@ -502,16 +504,16 @@ async function runFrontmatterPhase(brainId: string): Promise<DreamPhaseResult> {
 
 // ── Main dream cycle ────────────────────────────────────────────────
 
-export async function runDreamCycle(brainId: string, batchSize = 200): Promise<DreamReport> {
+export async function runDreamCycle(brainId: string, processAll = false): Promise<DreamReport> {
   const start = Date.now();
   const phases: DreamPhaseResult[] = [];
 
-  phases.push(await runExtractPhase(brainId, batchSize));
-  phases.push(await runFrontmatterPhase(brainId));
-  phases.push(await runEmbedPhase(brainId));
-  phases.push(await runOrphansPhase(brainId));
-  phases.push(await runPatternsPhase(brainId));
-  phases.push(await runEntityTiersPhase(brainId));
+  phases.push(await runExtractPhase(brainId, processAll));
+  phases.push(await runFrontmatterPhase(brainId, processAll));
+  phases.push(await runEmbedPhase(brainId, processAll));
+  phases.push(await runOrphansPhase(brainId, processAll));
+  phases.push(await runPatternsPhase(brainId, processAll));
+  phases.push(await runEntityTiersPhase(brainId, processAll));
 
   const totals = {
     pages_extracted: (phases[0].details.pagesExtracted as number) || 0,

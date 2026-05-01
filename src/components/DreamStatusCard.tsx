@@ -46,12 +46,12 @@ export default function DreamStatusCard({ brainId }: { brainId: string | null })
       const r = await fetch(`/api/brain/dream?brain_id=${brainId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ batch_size: 20 }),
+        body: JSON.stringify({ process_all: true }),
       });
       const data = await r.json();
       if (!data.error) {
         // Refresh stats after a short delay
-        setTimeout(fetchStatus, 500);
+        setTimeout(fetchStatus, 1000);
       }
     } catch {
       // ignore
@@ -122,7 +122,7 @@ export default function DreamStatusCard({ brainId }: { brainId: string | null })
       )}
 
       <div className="mt-2 text-[10px] text-bb-text-muted/60">
-        Runs automatically every day. Click "Run Now" to process a batch of 20 pages immediately.
+        Runs automatically every day. Click "Run Now" to process all pages at once.
       </div>
     </div>
   );
