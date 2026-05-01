@@ -577,7 +577,9 @@ export function applyTweetBoost(
 ): void {
   const multiplier = intent === "tweet" ? TWEET_BOOST_FULL : TWEET_BOOST_BASELINE;
   for (const r of results) {
-    if (r.type === "tweet" && r.score < 0.95) {
+    // Skip only ultra-high pinned results (ordinal at 100.0, ordinal fallback at 95.0).
+    // Date (2.0), entity_mention (1.5), and hybrid RRF (~0.3-0.8) all get boosted.
+    if (r.type === "tweet" && r.score < 90) {
       r.score *= multiplier;
       if (!r.boost_factors) r.boost_factors = { total: 1.0 };
       (r.boost_factors as any).tweet_boost = multiplier;

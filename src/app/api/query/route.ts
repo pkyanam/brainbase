@@ -283,8 +283,8 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // ── Entity-mention handler: "tweets about X" ──
-      const aboutMatch = q.match(/(?:tweets?\s+(?:about|on|mentioning|regarding)\s+)(.+)/i);
+      // ── Entity-mention handler: "tweets about X", "tweets mentioning X" ──
+      const aboutMatch = q.match(/(?:tweets?\s+(?:about|on|mentioning|regarding|re|involving|referencing)\s+)(.+)/i);
       if (aboutMatch && aboutMatch[1]) {
         const entityName = aboutMatch[1].trim();
         console.log("[query] Entity-mention handler running for:", entityName);
@@ -303,6 +303,9 @@ export async function POST(req: NextRequest) {
             [auth.brainId, `%${entityName}%`]
           );
           console.log("[query] Entity-mention results:", mentionResults.length, "rows for:", entityName);
+          if (mentionResults.length === 0) {
+            console.log("[query] Entity-mention ZERO results — no tweets mention:", entityName);
+          }
           for (const r of mentionResults) {
             const existing = finalResults.find((fr) => fr.slug === r.slug);
             const mentionScore = 1.5;  // Pinned high — entity-matched tweets ARE the answer
