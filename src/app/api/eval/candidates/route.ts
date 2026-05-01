@@ -3,7 +3,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { resolveAuth } from "@/lib/auth-guard";
-import { getEvalCandidates } from "@/lib/eval-pipeline";
+import { query } from "@/lib/supabase/client";
 
 export async function GET(req: NextRequest) {
   try {
@@ -15,7 +15,47 @@ export async function GET(req: NextRequest) {
     const limit = parseInt(url.searchParams.get("limit") || "50");
     const tool = url.searchParams.get("tool") || undefined;
 
-    const candidates = await getEvalCandidates(auth.brainId, { since, limit, tool });
+    // ── Force-create eval_candidates table inline ──
+    try {
+      await query(`
+        CREATE TABLE IF NOT EXISTS eval_candidates (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          brain_id UUID NOT NULL,
+          tool TEXT NOT NULL,
+          query_text TEXT NOT NULL,
+          result_count INTEGER,
+          top_slugs TEXT[],
+          meta JSONB,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await query(`CREATE INDEX IF NOT EXISTS idx_eval_candidates_brain_tool ON eval_candidates(brain_id, tool, created_at)`);
+    } catch (e) {
+      console.error("[eval/candidates] Inline schema ensure failed:", e);
+    }
+
+    const conditions: string[] = ["brain_id = $1"];
+    const params: any[] = [auth.brainId];
+    let paramIdx = 2;
+
+    if (tool) {
+      conditions.push(`tool = $${paramIdx++}`);
+      params.push(tool);
+    }
+    if (since) {
+      conditions.push(`created_at >= $${paramIdx++}`);
+      params.push(since);
+    }
+
+    const { rows: candidates } = await query(
+      `SELECT id, brain_id, tool, query_text, result_count, top_slugs, meta, created_at::text
+       FROM eval_candidates
+       WHERE ${conditions.join(" AND ")}
+       ORDER BY created_at DESC
+       LIMIT $${paramIdx}`,
+      [...params, Math.min(limit, 1000)]
+    );
+
     return NextResponse.json({ candidates });
   } catch (err) {
     console.error("[eval/candidates] Error:", err);
