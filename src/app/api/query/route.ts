@@ -289,7 +289,10 @@ export async function POST(req: NextRequest) {
         const entityName = aboutMatch[1].trim();
         console.log("[query] Entity-mention handler running for:", entityName);
         try {
-          const mentionResults = await queryMany<{
+          let mentionResults: Array<{ slug: string; title: string; type: string; excerpt: string }> = [];
+
+          // Try 1: exact entity name ILIKE
+          mentionResults = await queryMany<{
             slug: string; title: string; type: string; excerpt: string;
           }>(
             `SELECT p.slug, p.title, p.type,
@@ -302,13 +305,59 @@ export async function POST(req: NextRequest) {
              LIMIT 20`,
             [auth.brainId, `%${entityName}%`]
           );
-          console.log("[query] Entity-mention results:", mentionResults.length, "rows for:", entityName);
-          if (mentionResults.length === 0) {
-            console.log("[query] Entity-mention ZERO results — no tweets mention:", entityName);
+          console.log("[query] Entity-mention pass 1 (exact):", mentionResults.length, "rows for:", entityName);
+
+          // Try 2: if 0 results and multi-word, split into words and AND-search
+          if (mentionResults.length === 0 && entityName.includes(" ")) {
+            const words = entityName.split(/\s+/).filter(w => w.length > 1);
+            if (words.length >= 2) {
+              const ilikeClauses = words.map((_, i) =>
+                `(p.compiled_truth ILIKE $${i + 2} OR p.title ILIKE $${i + 2})`
+              );
+              const wordParams = words.map(w => `%${w}%`);
+              mentionResults = await queryMany<{
+                slug: string; title: string; type: string; excerpt: string;
+              }>(
+                `SELECT p.slug, p.title, p.type,
+                        COALESCE(p.compiled_truth, '') as excerpt
+                 FROM pages p
+                 WHERE p.brain_id = $1
+                   AND p.type = 'tweet'
+                   AND (${ilikeClauses.join(" AND ")})
+                 ORDER BY p.updated_at DESC
+                 LIMIT 20`,
+                [auth.brainId, ...wordParams]
+              );
+              console.log("[query] Entity-mention pass 2 (AND words):", mentionResults.length, "rows for words:", words);
+            }
           }
+
+          // Try 3: if still 0, try without spaces (e.g., "GarryTan" for "Garry Tan")
+          if (mentionResults.length === 0 && entityName.includes(" ")) {
+            const noSpace = entityName.replace(/\s+/g, "");
+            mentionResults = await queryMany<{
+              slug: string; title: string; type: string; excerpt: string;
+            }>(
+              `SELECT p.slug, p.title, p.type,
+                      COALESCE(p.compiled_truth, '') as excerpt
+               FROM pages p
+               WHERE p.brain_id = $1
+                 AND p.type = 'tweet'
+                 AND (p.compiled_truth ILIKE $2 OR p.title ILIKE $2)
+               ORDER BY p.updated_at DESC
+               LIMIT 20`,
+              [auth.brainId, `%${noSpace}%`]
+            );
+            console.log("[query] Entity-mention pass 3 (no space):", mentionResults.length, "rows for:", noSpace);
+          }
+
+          if (mentionResults.length === 0) {
+            console.log("[query] Entity-mention ALL PASSES returned zero for:", entityName);
+          }
+
           for (const r of mentionResults) {
             const existing = finalResults.find((fr) => fr.slug === r.slug);
-            const mentionScore = 1.5;  // Pinned high — entity-matched tweets ARE the answer
+            const mentionScore = 1.5;
             if (existing) {
               existing.score = Math.max(existing.score, mentionScore);
               existing.excerpt = r.excerpt || existing.excerpt;
@@ -365,9 +414,60 @@ export async function POST(req: NextRequest) {
 
     // ── Phase 7: Tweet boost for ALL intents ─────────────────────
     // Tweet intent: 2.5x. All other intents: 2.0x baseline.
-    // Must run AFTER structured queries so their results get boosted.
     console.log("[query] Applying tweet boost, intent:", intent);
     applyTweetBoost(finalResults as any, intent);
+
+    // ── Phase 7.5: Tweet-content retrieval fallback ──────────────
+    // For non-tweet-intent queries ("PS5 linux loader"), the hybrid search
+    // often returns zero tweet-type results. Run a direct tweet-content
+    // ILIKE search and inject results so the baseline boost has something
+    // to work with.
+    if (intent !== "tweet") {
+      const tweetResults = finalResults.filter(r => r.type === "tweet");
+      if (tweetResults.length < 3) {
+        console.log("[query] Tweet-content fallback: only", tweetResults.length, "tweets in results, running ILIKE");
+        try {
+          const terms = q.split(/\s+/).filter(t => t.length > 2);
+          if (terms.length > 0) {
+            const ilikeClauses = terms.map((_, i) =>
+              `(p.compiled_truth ILIKE $${i + 2} OR p.title ILIKE $${i + 2})`
+            );
+            const termParams = terms.map(t => `%${t}%`);
+            const fallbackResults = await queryMany<{
+              slug: string; title: string; type: string; excerpt: string;
+            }>(
+              `SELECT p.slug, p.title, p.type,
+                      COALESCE(p.compiled_truth, '') as excerpt
+               FROM pages p
+               WHERE p.brain_id = $1
+                 AND p.type = 'tweet'
+                 AND (${ilikeClauses.join(" AND ")})
+               ORDER BY p.updated_at DESC
+               LIMIT 10`,
+              [auth.brainId, ...termParams]
+            );
+            console.log("[query] Tweet-content fallback results:", fallbackResults.length, "rows");
+            for (const r of fallbackResults) {
+              const existing = finalResults.find((fr) => fr.slug === r.slug);
+              if (!existing) {
+                finalResults.push({
+                  slug: r.slug,
+                  score: 0.5,  // Moderate — below structured handlers, above noise
+                  excerpt: r.excerpt || "",
+                  type: r.type,
+                  source: "fts_and" as any,
+                  title: r.title,
+                  boost_factors: { total: 0.5 } as BoostFactors,
+                  handler_path: "tweet_fallback",
+                } as any);
+              }
+            }
+          }
+        } catch (err) {
+          console.error("[query] Tweet-content fallback error:", err);
+        }
+      }
+    }
 
     // ── Phase 8: Exact match pin + sort ──────────────────────────
     forceExactMatchTopFinal(finalResults, q);
