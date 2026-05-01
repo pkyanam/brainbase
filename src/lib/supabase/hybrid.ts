@@ -397,7 +397,9 @@ export type QueryIntent = "temporal" | "entity" | "event" | "tweet" | "general";
 
 const TEMPORAL_PATTERNS = [
   /\b(when|what year|what month|what day|what date|how old|how long ago|recent|latest|newest|last|past|this week|this month|this year|today|yesterday|tomorrow)\b/i,
-  /\b(202[0-9]|20[12][0-9])\b/,
+  // Removed bare year pattern — "happy new year 2014" is not a temporal query.
+  // Years only trigger temporal with context words: "from 2014", "since 2020", "in 2015".
+  /\b(from|since|in|during|throughout)\s+(20\d{2})\b/i,
   /\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/i,
   /\b(since|until|before|after|during|between)\b/i,
 ];
@@ -518,13 +520,29 @@ export function classifyIntent(query: string): QueryIntent {
     const hasPersonWord = words.some(w => personWords.has(w.toLowerCase()));
     if (hasPersonWord) return "entity";
 
-    // Any capitalized word that's not a particle → entity
-    const hasProperNoun = words.some((w, i) => {
-      if (i > 0 && particles.has(w.toLowerCase())) return false;
-      // Must start with uppercase and be at least 2 chars (catches "YC")
-      return /^[A-Z]/.test(w) && w.length >= 2;
-    });
-    if (hasProperNoun) return "entity";
+    // B3 FIX v2: Require at least 2 capitalized content words to trigger entity.
+    // Single-capital-word queries like "PS5 linux loader" (PS5 is capital, rest lowercase)
+    // or "13 Pro Max apple" (Pro/Max are capital) are more likely product/topic descriptions
+    // than proper names. Real names like "Matthew Kovalenko" or "Garry Tan" have 2+ capitals.
+    //
+    // Count capitalized content words (exclude particles and short words < 2 chars)
+    const contentWords = words.filter(w => w.length >= 2 && !particles.has(w.toLowerCase()));
+    const capitalizedWords = contentWords.filter(w => /^[A-Z]/.test(w));
+    const capRatio = contentWords.length > 0 ? capitalizedWords.length / contentWords.length : 0;
+
+    // Entity if: 2+ capitalized words AND >40% of content words are capitalized
+    // This catches "Matthew Kovalenko" (2/2=100%) and "Tyler van Burk" (2/2 after particle filter)
+    // but rejects "PS5 linux loader" (1/3=33%) and "13 Pro Max apple" (2/4=50%, borderline but
+    // "13" isn't content, "apple" is lowercase — actually 2/3=67% which is borderline.
+    // Let's use: 2+ capitalized AND >50% ratio)
+    if (capitalizedWords.length >= 2 && capRatio > 0.5) return "entity";
+
+    // Single capitalized word: name-like (capital + lowercase, 3+ chars) or acronym (all caps, 2+)
+    if (capitalizedWords.length === 1) {
+      const w = capitalizedWords[0];
+      if (/^[A-Z][a-z]{2,}$/.test(w)) return "entity";  // "Matthew", "Garry"
+      if (/^[A-Z]{2,}$/.test(w)) return "entity";        // "YC", "AWS", "AI"
+    }
   }
 
   // Single capitalized word ≥3 chars that looks like a name
