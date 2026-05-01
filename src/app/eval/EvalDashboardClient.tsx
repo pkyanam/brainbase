@@ -79,12 +79,23 @@ export default function EvalDashboard() {
     setLoading(true);
     setError(null);
     fetch("/api/eval/list")
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
-      .then((d) => {
-        setEvals(d.evals || []);
+      .then(async (r) => {
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          throw new Error(body.detail || body.error || `HTTP ${r.status}`);
+        }
+        // Map API response { runs } to frontend { evals } format
+        const mapped = (body.runs || []).map((run: any) => ({
+          id: run.id,
+          query: `Eval #${run.total_queries || 0} queries`,
+          mrr: run.avg_mrr ?? 0,
+          p_at_3: run.avg_p3 ?? 0,
+          p_at_5: run.avg_p5 ?? 0,
+          latency_ms: run.avg_latency_ms ?? 0,
+          date: run.created_at ?? "",
+          status: run.status === "completed" ? "pass" : run.status === "failed" ? "fail" : "pass",
+        }));
+        setEvals(mapped);
         setLoading(false);
       })
       .catch((err) => {
