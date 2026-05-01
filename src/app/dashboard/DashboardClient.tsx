@@ -126,10 +126,16 @@ export default function Dashboard() {
   const [liveStatus, setLiveStatus] = useState<"connecting" | "live" | "offline">("offline");
   const sseRef = useRef<EventSource | null>(null);
 
-  // Ask Your Brain — Skills Generator
-  const [taskQuery, setTaskQuery] = useState("");
-  const [taskLoading, setTaskLoading] = useState(false);
-  const [taskResult, setTaskResult] = useState<any | null>(null);
+  // Ask Your Brain — Natural Language Q&A
+  const [askQuery, setAskQuery] = useState("");
+  const [askLoading, setAskLoading] = useState(false);
+  const [askResult, setAskResult] = useState<{
+    answer: string;
+    sources: { slug: string; title: string; type: string; excerpt: string; relevance: number }[];
+    confidence: number;
+    intent: string;
+    searchedAt: string;
+  } | null>(null);
 
   // Slack Integration
   const [showSlackForm, setShowSlackForm] = useState(false);
@@ -187,28 +193,28 @@ export default function Dashboard() {
   const [implicitRules, setImplicitRules] = useState<any[]>([]);
   const [implicitRulesOpen, setImplicitRulesOpen] = useState(false);
 
-  const handleTaskQuery = useCallback(async () => {
-    if (!taskQuery.trim() || !currentBrainId) return;
-    setTaskLoading(true);
-    setTaskResult(null);
+  const handleAsk = useCallback(async () => {
+    if (!askQuery.trim() || !currentBrainId) return;
+    setAskLoading(true);
+    setAskResult(null);
     try {
-      const r = await fetch("/api/skills", {
+      const r = await fetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task: taskQuery.trim() }),
+        body: JSON.stringify({ q: askQuery.trim() }),
       });
       const data = await r.json();
       if (!data.error) {
-        setTaskResult(data);
+        setAskResult(data);
       } else {
-        setTaskResult({ error: data.error });
+        setAskResult({ answer: data.error, sources: [], confidence: 0, intent: "", searchedAt: "" });
       }
     } catch {
-      setTaskResult({ error: "Failed to generate skills file" });
+      setAskResult({ answer: "Failed to get answer from your brain.", sources: [], confidence: 0, intent: "", searchedAt: "" });
     } finally {
-      setTaskLoading(false);
+      setAskLoading(false);
     }
-  }, [taskQuery, currentBrainId]);
+  }, [askQuery, currentBrainId]);
 
   const handleCreatePage = useCallback(async () => {
     if (!newPageSlug.trim() || !newPageTitle.trim() || !currentBrainId) return;
@@ -551,35 +557,65 @@ export default function Dashboard() {
               <div className="flex flex-col sm:flex-row gap-2">
                 <input
                   type="text"
-                  value={taskQuery}
-                  onChange={(e) => setTaskQuery(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter" && taskQuery.trim()) handleTaskQuery(); }}
-                  placeholder="Ask your brain, e.g. 'How do pricing exceptions work?'"
+                  value={askQuery}
+                  onChange={(e) => setAskQuery(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && askQuery.trim()) handleAsk(); }}
+                  placeholder="Ask your brain anything..."
                   className="flex-1 h-11 px-3 bg-bb-surface border border-bb-border rounded-lg text-sm text-bb-text-primary placeholder:text-bb-text-muted outline-none hover:border-bb-border-strong focus:border-bb-accent transition-colors"
                 />
                 <button
-                  onClick={handleTaskQuery}
-                  disabled={!taskQuery.trim() || taskLoading}
+                  onClick={handleAsk}
+                  disabled={!askQuery.trim() || askLoading}
                   className="h-11 px-4 bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2 shrink-0"
                 >
-                  {taskLoading ? (
+                  {askLoading ? (
                     <span className="w-4 h-4 border-2 border-bb-bg-primary/30 border-t-bb-bg-primary rounded-full animate-spin" />
                   ) : (
-                    "Generate"
+                    "Ask"
                   )}
                 </button>
               </div>
-              {taskResult && (
+              {askResult && (
                 <div className="mt-2 rounded-lg bg-bb-surface border border-bb-border overflow-hidden">
                   <div className="flex items-center justify-between px-3 py-2 border-b border-bb-border">
-                    <span className="text-xs font-medium text-bb-accent">Skills file</span>
+                    <span className="text-xs font-medium text-bb-accent">Answer</span>
                     <span className="text-[10px] text-bb-text-muted tabular-nums">
-                      confidence {Math.round((taskResult.confidence || 0) * 100)}%
+                      confidence {Math.round((askResult.confidence || 0) * 100)}%
                     </span>
                   </div>
-                  <pre className="text-[11px] text-bb-text-secondary overflow-x-auto leading-relaxed p-3 max-h-48 font-mono">
-                    <code>{JSON.stringify(taskResult, null, 2)}</code>
-                  </pre>
+                  <div className="p-3 text-sm text-bb-text-primary leading-relaxed whitespace-pre-wrap">
+                    {askResult.answer}
+                  </div>
+                  {askResult.sources && askResult.sources.length > 0 && (
+                    <div className="px-3 pb-3">
+                      <div className="text-[10px] text-bb-text-muted uppercase tracking-wider font-medium mb-1.5">
+                        Sources
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        {askResult.sources.map((s) => (
+                          <button
+                            key={s.slug}
+                            onClick={() => {
+                              handleSelectNode(s.slug);
+                              setAskQuery("");
+                              setAskResult(null);
+                            }}
+                            className="flex items-center gap-2 text-left px-2 py-1.5 rounded bg-bb-bg-primary hover:bg-bb-border/50 transition-colors"
+                          >
+                            <span className="text-[10px] uppercase tracking-wider text-bb-text-muted shrink-0">
+                              {s.type}
+                            </span>
+                            <span className="text-xs text-bb-text-secondary truncate">
+                              {s.title}
+                            </span>
+                            <span className="text-[10px] text-bb-text-muted ml-auto tabular-nums">
+                              {Math.round(s.relevance * 100)}%
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
