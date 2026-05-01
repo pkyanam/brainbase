@@ -12,7 +12,7 @@ export default function Home() {
         <div className="relative max-w-5xl mx-auto px-5 md:px-6 pt-20 md:pt-28 pb-16 md:pb-24 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-bb-surface border border-bb-border text-xs text-bb-text-muted mb-8">
             <span className="w-1.5 h-1.5 rounded-full bg-bb-accent animate-pulse" />
-            Now accepting early access partners
+            One click to a working knowledge graph
           </div>
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-semibold tracking-tight mb-6 leading-[1.05]">
             Your company&apos;s brain,
@@ -28,16 +28,16 @@ export default function Home() {
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             <a
-              href="/apply"
+              href="/sign-up"
               className="w-full sm:w-auto h-11 px-6 inline-flex items-center justify-center bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary font-medium rounded-md transition-colors"
             >
-              Apply for early access
+              Get started free
             </a>
             <a
-              href="/docs"
+              href="/demo"
               className="w-full sm:w-auto h-11 px-6 inline-flex items-center justify-center border border-bb-border hover:border-bb-border-strong hover:bg-bb-surface text-bb-text-primary font-medium rounded-md transition-colors"
             >
-              Read docs
+              View demo
             </a>
           </div>
         </div>

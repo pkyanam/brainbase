@@ -146,6 +146,34 @@ export default function Dashboard() {
   const [githubLoading, setGitHubLoading] = useState(false);
   const [githubResult, setGitHubResult] = useState<any | null>(null);
 
+  // Seed brain
+  const [seeding, setSeeding] = useState(false);
+
+  const handleSeed = useCallback(async () => {
+    if (!currentBrainId) return;
+    setSeeding(true);
+    try {
+      const r = await fetch(`/api/brain/seed?brain_id=${currentBrainId}`, {
+        method: "POST",
+      });
+      const data = await r.json();
+      if (data.status === "ok") {
+        setToast({ message: `Seeded ${data.pages_created} pages and ${data.links_created} links!`, type: "success" });
+        // Refresh stats
+        setTimeout(() => {
+          fetch(`/api/brain/health?brain_id=${currentBrainId}`)
+            .then((r) => r.json())
+            .then((d) => setStats(d))
+            .catch(() => {});
+        }, 500);
+      }
+    } catch {
+      setToast({ message: "Failed to seed brain", type: "error" });
+    } finally {
+      setSeeding(false);
+    }
+  }, [currentBrainId]);
+
   const handleSlackConnect = useCallback(async () => {
     if (!slackToken || !slackTeamId) return;
     setSlackLoading(true);
@@ -572,6 +600,37 @@ export default function Dashboard() {
               { label: "Score", value: stats?.brain_score, suffix: "/100", tone: "muted" },
             ]}
           />
+
+          {/* Empty brain: seed button */}
+          {isLoaded && user && stats && stats.page_count === 0 && (
+            <div className="shrink-0 px-4 md:px-6 py-8">
+              <div className="max-w-md mx-auto text-center">
+                <div className="w-16 h-16 rounded-2xl bg-bb-accent/10 border border-bb-accent/20 flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-bb-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-semibold text-bb-text-primary mb-2">Your brain is empty</h3>
+                <p className="text-sm text-bb-text-secondary mb-6 leading-relaxed">
+                  Seed it with a demo company brain — 28 pages of people, companies, concepts, and decisions with 42 typed links between them. You'll see a real knowledge graph instantly.
+                </p>
+                <button
+                  onClick={handleSeed}
+                  disabled={seeding}
+                  className="inline-flex items-center gap-2 h-11 px-6 bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary font-medium rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {seeding ? (
+                    <>
+                      <span className="w-4 h-4 border-2 border-bb-bg-primary/30 border-t-bb-bg-primary rounded-full animate-spin" />
+                      Seeding...
+                    </>
+                  ) : (
+                    "Seed your brain"
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Search */}
           <div className="shrink-0 px-4 md:px-6 pt-3">
