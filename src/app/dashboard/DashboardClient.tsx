@@ -323,6 +323,22 @@ export default function Dashboard() {
     };
   }, [currentBrainId]);
 
+  // Handle ?page= query param (navigated from /graph)
+  useEffect(() => {
+    if (!currentBrainId) return;
+    const params = new URLSearchParams(window.location.search);
+    const pageSlug = params.get("page");
+    if (pageSlug) {
+      handleSelectNode(pageSlug);
+      // Clean the URL without reload
+      const url = new URL(window.location.href);
+      url.searchParams.delete("page");
+      window.history.replaceState({}, "", url.toString());
+    }
+    // Only run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentBrainId]);
+
   useEffect(() => {
     if (!isLoaded || !user) return;
     fetch("/api/keys")
