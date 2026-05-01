@@ -3,8 +3,10 @@
 import { SignIn } from "@clerk/nextjs";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
+import { useClerkAppearance } from "@/hooks/useClerkAppearance";
 
 export default function SignInPage() {
+  const { appearance } = useClerkAppearance();
   const hasClerk =
     process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY &&
     process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY !== "pk_test_***";
@@ -50,37 +52,7 @@ export default function SignInPage() {
             <h1 className="text-2xl font-semibold tracking-tight">Welcome back</h1>
             <p className="text-sm text-bb-text-secondary mt-1">Sign in to your brain</p>
           </div>
-          <SignIn
-            fallbackRedirectUrl="/dashboard"
-            appearance={{
-              variables: {
-                colorBackground: "#121212",
-                colorInputBackground: "#0a0a0a",
-                colorInputText: "#ededed",
-                colorText: "#ededed",
-                colorTextSecondary: "#b4b4b4",
-                colorPrimary: "#7dd3a8",
-                colorDanger: "#f87171",
-                borderRadius: "8px",
-                fontFamily: "ui-sans-serif, system-ui, sans-serif",
-              },
-              elements: {
-                rootBox: "w-full",
-                card: "bg-bb-bg-secondary border border-bb-border rounded-xl shadow-none",
-                headerTitle: "hidden",
-                headerSubtitle: "hidden",
-                socialButtonsBlockButton:
-                  "bg-bb-surface border border-bb-border hover:bg-bb-surface-hover text-bb-text-primary rounded-md normal-case",
-                formButtonPrimary:
-                  "bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary font-medium rounded-md normal-case shadow-none",
-                formFieldInput:
-                  "bg-bb-bg-primary border-bb-border rounded-md text-bb-text-primary focus:border-bb-accent",
-                footerActionLink: "text-bb-accent hover:text-bb-accent-strong",
-                dividerLine: "bg-bb-border",
-                dividerText: "text-bb-text-muted",
-              },
-            }}
-          />
+          <SignIn fallbackRedirectUrl="/dashboard" appearance={appearance} />
         </div>
       </main>
       <Footer />

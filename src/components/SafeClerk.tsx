@@ -1,6 +1,7 @@
 "use client";
 
 import { useUser, UserButton as ClerkUserButton } from "@clerk/nextjs";
+import { useClerkAppearance } from "@/hooks/useClerkAppearance";
 import type { ReactNode } from "react";
 
 const hasClerk = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY &&
@@ -20,7 +21,8 @@ export function SignedOut({ children }: { children: ReactNode }) {
   return !isSignedIn ? <>{children}</> : null;
 }
 
-export function UserButton(props: React.ComponentProps<typeof ClerkUserButton>) {
+export function UserButton() {
+  const { appearance } = useClerkAppearance();
   if (!hasClerk) return null;
-  return <ClerkUserButton {...props} />;
+  return <ClerkUserButton appearance={appearance} />;
 }
