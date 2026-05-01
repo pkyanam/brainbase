@@ -12,7 +12,7 @@ export default function Privacy() {
           <h2 className="text-lg font-semibold text-bb-text-primary mt-8">What We Collect</h2>
           <p>
             We collect your email address (via Clerk authentication), API usage metrics, and the content you choose
-            to store in your brain. We do not collect payment information directly — that is handled by Stripe.
+            to store in your brain. We do not collect payment information directly — billing is handled by our payment processor when you upgrade to a paid plan.
           </p>
           <h2 className="text-lg font-semibold text-bb-text-primary mt-8">How We Use It</h2>
           <p>

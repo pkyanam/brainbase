@@ -4,8 +4,7 @@ import { useState, useEffect } from "react";
 
 const ONBOARDING_MD = `# Agent Onboarding: Brainbase
 
-> **For:** New AI agent (Hermes-based)
-> **Owner:** Preetham Kyanam
+> **For:** Any MCP-compatible AI agent
 > **Brainbase URL:** \`https://brainbase.belweave.ai\`
 > **API Key:** \`BB_API_KEY_PLACEHOLDER\` ← **replace before use**
 
@@ -13,7 +12,7 @@ const ONBOARDING_MD = `# Agent Onboarding: Brainbase
 
 ## 1. What You Have Access To
 
-You are an autonomous agent with **persistent memory** via Brainbase — a knowledge graph + vector database that stores everything your owner learns, reads, and cares about.
+You are an autonomous agent with **persistent memory** via Brainbase — a knowledge graph + vector database that stores everything your team learns, reads, and decides.
 
 **Your job:** Read from the brain before answering. Write to the brain when you learn something new. Link related concepts so the graph stays connected.
 
@@ -24,7 +23,7 @@ You are an autonomous agent with **persistent memory** via Brainbase — a knowl
 All write operations (and MCP calls) require an API key:
 
 \`\`\`
-Authorization: Bearer <BB_AP...DER>
+Authorization: Bearer ***
 \`\`\`
 
 **Base URL:** \`https://brainbase.belweave.ai/api/mcp\`
@@ -75,7 +74,7 @@ Connect via JSON-RPC 2.0 to \`POST /api/mcp\`.
 
 ### Page Structure
 Every page has:
-- **slug** — unique ID (e.g., \`people/garry-tan\`, \`email/jarvis/2026-04-29/security-alert\`)
+- **slug** — unique ID (e.g., \`people/garry-tan\`, \`projects/brainbase\`)
 - **type** — \`person\`, \`company\`, \`project\`, \`concept\`, \`email\`, \`idea\`, etc.
 - **content** — markdown body
 - **links** — typed connections to other pages (\`related\`, \`works_at\`, \`invested_in\`, \`founded\`, etc.)
@@ -179,13 +178,13 @@ Every page has:
 
 | Type | Use For | Example Slug |
 |------|---------|--------------|
-| \`person\` | People your owner knows | \`people/jon-corpuz\` |
+| \`person\` | People your team knows | \`people/jane-doe\` |
 | \`company\` | Companies, orgs | \`companies/openai\` |
 | \`project\` | Code projects, initiatives | \`projects/brainbase\` |
 | \`concept\` | Ideas, frameworks, CVEs | \`concepts/rag-pipeline\` |
-| \`email\` | Ingested emails | \`email/jarvis/2026-04-29/subject\` |
+| \`email\` | Ingested emails | \`email/team/2026-04-29/subject\` |
 | \`idea\` | Raw thoughts, brainstorming | \`ideas/agent-email-integration\` |
-| \`place\` | Locations, venues | \`places/belmont-va\` |
+| \`place\` | Locations, venues | \`places/san-francisco\` |
 
 ---
 
@@ -196,12 +195,12 @@ Every page has:
 | \`401 Unauthorized\` | API key missing or invalid |
 | \`403 Forbidden\` | You don't have access to that brain |
 | \`404 Page not found\` | Slug doesn't exist — create it or check spelling |
-| Quota exceeded | Write operations are rate-limited; wait or ask owner |
+| Quota exceeded | Write operations are rate-limited; wait or contact your admin |
 | Graph empty | Brain has < 2 pages or no links — start adding content |
 
 ---
 
-## 9. Architecture Notes (For Debugging)
+## 9. Architecture Notes
 
 - **Database:** Supabase Postgres with pgvector
 - **Search:** Hybrid full-text + semantic (embeddings)
@@ -211,20 +210,7 @@ Every page has:
 
 ---
 
-## 10. Owner Preferences (Learned)
-
-- **Product honesty matters.** Don't claim features work if they don't.
-- **Agent-first architecture.** You operate in your own session, not inside the web app.
-- **Privacy.** Owner's data goes to OWNER'S brain only. Never wire personal integrations into the product.
-- **Scout-level UI.** Clean, minimal, no AI slop.
-- **DeepSeek-V4-Pro** is the primary model. GPT-5.5 is fallback (quota-limited).
-- **Budget conscious.** Minimize unnecessary API calls.
-
----
-
-**Last updated:** 2026-04-29
-**Questions?** Ask Preetham or check the brain for \`brainbase\` docs.
-`;
+**Last updated:** 2026-05-01`;
 
 const MCP_SETUP = (baseUrl: string) => `# MCP Setup — Copy/Paste
 

@@ -22,12 +22,27 @@ export default function AdminClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [offset, setOffset] = useState(0);
+  const [isOwner, setIsOwner] = useState<boolean | null>(null);
   const limit = 50;
 
   useEffect(() => {
-    if (!isLoaded || !user) return;
-    loadApps();
-  }, [isLoaded, user, offset]);
+    if (!isLoaded) return;
+    // Check owner status
+    fetch("/api/admin/applications?limit=1")
+      .then((r) => {
+        setIsOwner(r.status !== 403);
+        if (r.ok) loadApps();
+        else setLoading(false);
+      })
+      .catch(() => {
+        setIsOwner(false);
+        setLoading(false);
+      });
+  }, [isLoaded]);
+
+  useEffect(() => {
+    if (isOwner) loadApps();
+  }, [offset, isOwner]);
 
   async function loadApps() {
     setLoading(true);
@@ -66,6 +81,14 @@ export default function AdminClient() {
       <div className="min-h-screen bg-bb-bg-primary flex items-center justify-center text-bb-text-secondary text-sm">
         <a href="/sign-in" className="text-bb-accent hover:underline">Sign in</a>
         <span className="ml-1">to access admin.</span>
+      </div>
+    );
+  }
+
+  if (isOwner === false) {
+    return (
+      <div className="min-h-screen bg-bb-bg-primary flex items-center justify-center text-bb-text-secondary text-sm">
+        <span className="text-bb-danger font-medium">Admin access restricted.</span>
       </div>
     );
   }

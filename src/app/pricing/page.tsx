@@ -32,7 +32,7 @@ const plans = [
       "Team sharing",
       "Advanced analytics",
     ],
-    cta: "Start free trial",
+    cta: "Get started free",
     href: "/sign-up",
     primary: true,
   },
