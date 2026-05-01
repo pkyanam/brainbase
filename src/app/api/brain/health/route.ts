@@ -15,14 +15,19 @@ export async function GET(req: NextRequest) {
       runDoctorChecks(auth.brainId),
     ]);
 
+    // Return flat structure for backward compatibility with DashboardClient,
+    // plus the new doctor report and brain score breakdown.
     return NextResponse.json({
-      stats: {
-        page_count: health.page_count,
-        chunk_count: health.chunk_count,
-        link_count: health.link_count,
-        embed_coverage: health.embed_coverage,
-      },
-      brain_score: brainScore,
+      // Flat BrainStats fields (DashboardClient expects these at top level)
+      page_count: health.page_count,
+      chunk_count: health.chunk_count,
+      link_count: health.link_count,
+      embed_coverage: health.embed_coverage,
+      brain_score: brainScore.total,
+      pages_by_type: health.pages_by_type,
+      most_connected: health.most_connected,
+      // New v0.25 fields
+      brain_score_breakdown: brainScore.components,
       doctor,
     });
   } catch (err) {

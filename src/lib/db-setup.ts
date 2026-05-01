@@ -200,6 +200,16 @@ export async function ensureCollaborationSchema(): Promise<void> {
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  // Ensure brain_id exists on page_versions (backfill from older deploys)
+  await ensureTable("page_versions_brain_id_col", `
+    DO $$
+    BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'page_versions') THEN
+        ALTER TABLE page_versions ADD COLUMN IF NOT EXISTS brain_id UUID;
+      END IF;
+    END $$;
+  `);
+
   await ensureTable("idx_page_versions", `
     CREATE INDEX IF NOT EXISTS idx_page_versions ON page_versions(brain_id, page_slug, created_at DESC)
   `);
