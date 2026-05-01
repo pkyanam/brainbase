@@ -98,9 +98,21 @@ export async function setBrainSupabaseCredentials(
 }
 
 /**
- * Retrieve decrypted Supabase credentials for a brain.
- * Returns null if no credentials are stored.
+ * Delete a brain and all associated data. Only the owner can delete.
  */
+export async function deleteBrain(brainId: string, userId: string): Promise<boolean> {
+  const access = await canAccessBrain(userId, brainId);
+  if (!access?.is_owner) return false;
+
+  // Delete in dependency order
+  await queryOne(`DELETE FROM pages WHERE brain_id = $1`, [brainId]);
+  await queryOne(`DELETE FROM brain_members WHERE brain_id = $1`, [brainId]);
+  await queryOne(`DELETE FROM brain_invites WHERE brain_id = $1`, [brainId]);
+  await queryOne(`DELETE FROM api_keys WHERE brain_id = $1`, [brainId]);
+  await queryOne(`DELETE FROM activities WHERE brain_id = $1`, [brainId]);
+  await queryOne(`DELETE FROM brains WHERE id = $1 AND owner_user_id = $2`, [brainId, userId]);
+  return true;
+}
 export async function getBrainSupabaseCredentials(
   brainId: string
 ): Promise<{ url: string; key: string } | null> {

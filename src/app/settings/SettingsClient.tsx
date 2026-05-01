@@ -52,9 +52,12 @@ export default function SettingsClient() {
   const [inviteRole, setInviteRole] = useState("editor");
   const [error, setError] = useState<string | null>(null);
 
+  const [brains, setBrains] = useState<Array<{ id: string; name: string; slug: string; role: string; is_owner: boolean }>>([]);
+
   useEffect(() => {
     if (!isLoaded || !user) return;
     loadData();
+    loadBrains();
   }, [isLoaded, user]);
 
   const loadData = async () => {
@@ -72,6 +75,27 @@ export default function SettingsClient() {
       setError("Failed to load settings");
     }
   };
+
+  const loadBrains = async () => {
+    try {
+      const res = await fetch("/api/brain/brains");
+      const data = await res.json();
+      setBrains(data.brains || []);
+    } catch {
+      // silent
+    }
+  };
+
+  async function deleteBrainById(brainId: string) {
+    if (!confirm(`Delete brain ${brainId.slice(0, 8)}…? This cannot be undone.`)) return;
+    try {
+      const res = await fetch(`/api/brain/brains?brain_id=${brainId}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete");
+      setBrains((prev) => prev.filter((b) => b.id !== brainId));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to delete brain");
+    }
+  }
 
   async function createKey(e: FormEvent) {
     e.preventDefault();
@@ -349,6 +373,41 @@ export default function SettingsClient() {
                 <KeyValue label="Email" value={user.primaryEmailAddress?.emailAddress || "N/A"} />
               </div>
             </div>
+          </Section>
+
+          {/* Brain management */}
+          <Section title="Brains" description="Manage your knowledge bases.">
+            {brains.length === 0 ? (
+              <EmptyState title="No brains found" body="Something is wrong — you should have at least one brain." />
+            ) : (
+              <div className="border border-bb-border rounded-lg overflow-hidden bg-bb-bg-secondary divide-y divide-bb-border">
+                {brains.map((b) => (
+                  <div key={b.id} className="flex items-center justify-between p-4 gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-bb-text-primary flex items-center gap-2">
+                        {b.name || "Unnamed"}
+                        {b.id.startsWith("00000") && (
+                          <span className="text-[10px] uppercase tracking-wider font-medium px-1.5 py-0.5 border border-bb-accent/40 rounded text-bb-accent bg-bb-accent-glow">
+                            Primary
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-bb-text-muted font-mono mt-0.5 truncate">
+                        {b.id}  ·  {b.role}
+                      </div>
+                    </div>
+                    {b.is_owner && !b.id.startsWith("00000") && (
+                      <button
+                        onClick={() => deleteBrainById(b.id)}
+                        className="text-xs text-bb-danger hover:text-bb-text-primary hover:bg-bb-danger/15 px-3 h-9 rounded-md transition-colors shrink-0"
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </Section>
 
           {/* Quick reference */}

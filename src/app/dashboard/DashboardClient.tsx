@@ -401,6 +401,17 @@ export default function Dashboard() {
                 </select>
               )}
 
+              {/* New page */}
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="hidden md:inline-flex h-8 w-8 items-center justify-center bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary rounded transition-colors"
+                title="New page"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+
               {/* Live indicator */}
               <div className="hidden sm:flex items-center gap-1.5 h-8 px-2.5 rounded border border-bb-border bg-bb-surface">
                 <span className={`w-1.5 h-1.5 rounded-full ${liveDot}`} title={liveStatus} />
@@ -506,15 +517,6 @@ export default function Dashboard() {
                 }}
               />
             </div>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="shrink-0 h-11 w-11 inline-flex items-center justify-center bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary rounded-lg transition-colors"
-              title="New page"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-            </button>
           </div>
 
           {/* Ask Your Brain */}
@@ -617,53 +619,6 @@ export default function Dashboard() {
                   )}
                 </div>
               )}
-            </div>
-          )}
-
-          {/* API key banner */}
-          {isLoaded && user && (
-            <div className="shrink-0 px-4 md:px-6 pt-3">
-              <div className="flex items-center flex-wrap gap-2 text-xs">
-                <span className="text-bb-text-muted uppercase tracking-wider text-[10px] font-medium">
-                  API key
-                </span>
-                {apiKey ? (
-                  <>
-                    <code className="hidden sm:inline-flex items-center h-8 px-2 text-bb-text-secondary font-mono bg-bb-surface border border-bb-border rounded">
-                      {showKey ? apiKey : apiKey.slice(0, 16) + "...···"}
-                    </code>
-                    <button
-                      onClick={async () => {
-                        try {
-                          await navigator.clipboard.writeText(apiKey);
-                          setToast({ message: "API key copied to clipboard", type: "success" });
-                        } catch {
-                          setToast({ message: "Could not copy. Visit Settings to see your full key.", type: "error" });
-                        }
-                      }}
-                      className="sm:hidden inline-flex items-center gap-1.5 h-9 px-3 bg-bb-surface border border-bb-border rounded-md text-bb-text-secondary active:bg-bb-surface-hover transition-colors"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                      </svg>
-                      <span className="font-mono">{apiKey.slice(0, 10)}…</span>
-                    </button>
-                    <button
-                      onClick={() => setShowKey(!showKey)}
-                      className="hidden sm:inline-flex h-8 px-2 items-center text-bb-text-muted hover:text-bb-text-primary transition-colors"
-                    >
-                      {showKey ? "Hide" : "Show"}
-                    </button>
-                    <a href="/settings" className="text-bb-accent hover:text-bb-accent-strong transition-colors">
-                      Manage →
-                    </a>
-                  </>
-                ) : (
-                  <a href="/settings" className="text-bb-accent hover:text-bb-accent-strong transition-colors">
-                    Create API key →
-                  </a>
-                )}
-              </div>
             </div>
           )}
 

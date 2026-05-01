@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireOwner } from "@/lib/auth-guard";
 import { queryMany } from "@/lib/supabase/client";
+import { ensureCollaborationSchema } from "@/lib/db-setup";
 
 /**
  * GET /api/admin/applications
@@ -14,6 +15,8 @@ import { queryMany } from "@/lib/supabase/client";
 export async function GET(req: NextRequest) {
   const auth = await requireOwner();
   if (auth instanceof Response) return auth;
+
+  await ensureCollaborationSchema();
 
   const url = new URL(req.url);
   const limit = Math.min(parseInt(url.searchParams.get("limit") || "50", 10), 200);

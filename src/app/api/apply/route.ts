@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/supabase/client";
+import { ensureCollaborationSchema } from "@/lib/db-setup";
 
 export async function POST(req: NextRequest) {
   try {
+    await ensureCollaborationSchema();
     const body = await req.json();
     const { name, email, company, team_size, message } = body;
 
