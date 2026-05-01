@@ -9,14 +9,21 @@ interface SearchResult {
 export default function PageList({
   results,
   onSelect,
+  query,
 }: {
   results: SearchResult[];
   onSelect: (slug: string) => void;
+  query?: string;
 }) {
-  if (results.length === 0) return null;
+  if (results.length === 0 && !query?.trim()) return null;
   return (
     <div className="absolute top-full left-0 right-0 mt-2 z-50 max-h-80 overflow-y-auto bg-bb-surface border border-bb-border-strong rounded-lg animate-fade-in">
-      {results.map((r) => (
+      {results.length === 0 && query?.trim() ? (
+        <div className="px-4 py-6 text-center">
+          <p className="text-sm text-bb-text-muted">No results for "{query}"</p>
+        </div>
+      ) : (
+        results.map((r) => (
         <button
           key={r.slug}
           onClick={() => onSelect(r.slug)}
@@ -35,7 +42,7 @@ export default function PageList({
             <p className="text-xs text-bb-text-muted mt-0.5 line-clamp-1">{r.excerpt}</p>
           )}
         </button>
-      ))}
+      )))}
     </div>
   );
 }

@@ -94,7 +94,15 @@ export default function Dashboard() {
   const [searchFocused, setSearchFocused] = useState(false);
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [showKey, setShowKey] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => {
+    if (toast) {
+      const t = setTimeout(() => setToast(null), 2500);
+      return () => clearTimeout(t);
+    }
+  }, [toast]);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Mobile side panel
@@ -434,6 +442,7 @@ export default function Dashboard() {
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-bb-text-muted hidden md:block font-mono border border-bb-border rounded px-1.5 py-0.5">⌘K</span>
               <PageList
                 results={results}
+                query={query}
                 onSelect={(slug) => {
                   handleSelectNode(slug);
                   setQuery("");
@@ -562,9 +571,9 @@ export default function Dashboard() {
                       onClick={async () => {
                         try {
                           await navigator.clipboard.writeText(apiKey);
-                          alert("API key copied to clipboard");
+                          setToast({ message: "API key copied to clipboard", type: "success" });
                         } catch {
-                          alert("Could not copy. Visit Settings to see your full key.");
+                          setToast({ message: "Could not copy. Visit Settings to see your full key.", type: "error" });
                         }
                       }}
                       className="sm:hidden inline-flex items-center gap-1.5 h-9 px-3 bg-bb-surface border border-bb-border rounded-md text-bb-text-secondary active:bg-bb-surface-hover transition-colors"
@@ -751,6 +760,15 @@ export default function Dashboard() {
           onSelect={handleSelectNode}
         />
       </div>
+
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-4 py-2.5 rounded-lg text-xs font-medium shadow-lg border transition-all animate-fade-in ${
+          toast.type === "error" ? "bg-bb-danger text-white border-bb-danger" : "bg-bb-accent text-white border-bb-accent"
+        }`}>
+          {toast.message}
+        </div>
+      )}
     </div>
   );
 }
