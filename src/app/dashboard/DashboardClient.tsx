@@ -95,6 +95,13 @@ export default function Dashboard() {
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [showKey, setShowKey] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [showHelpModal, setShowHelpModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newPageSlug, setNewPageSlug] = useState("");
+  const [newPageTitle, setNewPageTitle] = useState("");
+  const [newPageType, setNewPageType] = useState("note");
+  const [newPageContent, setNewPageContent] = useState("");
+  const [createLoading, setCreateLoading] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
@@ -176,6 +183,40 @@ export default function Dashboard() {
       setTaskLoading(false);
     }
   }, [taskQuery, currentBrainId]);
+
+  const handleCreatePage = useCallback(async () => {
+    if (!newPageSlug.trim() || !newPageTitle.trim() || !currentBrainId) return;
+    setCreateLoading(true);
+    try {
+      const r = await fetch("/api/pages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slug: newPageSlug.trim(),
+          title: newPageTitle.trim(),
+          type: newPageType,
+          content: newPageContent.trim() || undefined,
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Failed to create page");
+      setToast({ message: `Created page "${data.title}"`, type: "success" });
+      setShowCreateModal(false);
+      setNewPageSlug("");
+      setNewPageTitle("");
+      setNewPageType("note");
+      setNewPageContent("");
+      // Refresh stats
+      fetch(`/api/brain/health?brain_id=${currentBrainId}`)
+        .then((r) => r.json())
+        .then((d) => setStats(d))
+        .catch(() => {});
+    } catch (err: unknown) {
+      setToast({ message: err instanceof Error ? err.message : "Failed to create page", type: "error" });
+    } finally {
+      setCreateLoading(false);
+    }
+  }, [newPageSlug, newPageTitle, newPageType, newPageContent, currentBrainId]);
 
   // Fetch brains list
   useEffect(() => {
@@ -266,6 +307,12 @@ export default function Dashboard() {
         e.preventDefault();
         searchInputRef.current?.focus();
       }
+      if (e.key === "?" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const target = e.target as HTMLElement;
+        if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
+        e.preventDefault();
+        setShowHelpModal((open) => !open);
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -323,10 +370,19 @@ export default function Dashboard() {
         </div>
 
         <div className="flex items-center gap-1 md:gap-2 text-xs min-w-0">
-          {/* Desktop nav links */}
-          <a href="/docs" className="hidden md:inline-flex h-8 px-3 items-center text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface rounded transition-colors">Docs</a>
-          <a href="/admin" className="hidden md:inline-flex h-8 px-3 items-center text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface rounded transition-colors">Admin</a>
-          <a href="/settings" className="hidden md:inline-flex h-8 px-3 items-center text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface rounded transition-colors">Settings</a>
+              {/* Desktop nav links */}
+              <a href="/docs" className="hidden md:inline-flex h-8 px-3 items-center text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface rounded transition-colors">Docs</a>
+              <a href="/admin" className="hidden md:inline-flex h-8 px-3 items-center text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface rounded transition-colors">Admin</a>
+              <a href="/settings" className="hidden md:inline-flex h-8 px-3 items-center text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface rounded transition-colors">Settings</a>
+              <button
+                onClick={() => setShowHelpModal(true)}
+                className="hidden md:inline-flex h-8 w-8 items-center justify-center text-bb-text-muted hover:text-bb-text-primary hover:bg-bb-surface rounded transition-colors"
+                title="Keyboard shortcuts (?"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </button>
 
           {isLoaded && user ? (
             <>
@@ -450,6 +506,15 @@ export default function Dashboard() {
                 }}
               />
             </div>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="shrink-0 h-11 w-11 inline-flex items-center justify-center bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary rounded-lg transition-colors"
+              title="New page"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
           </div>
 
           {/* Ask Your Brain */}
@@ -767,6 +832,125 @@ export default function Dashboard() {
           toast.type === "error" ? "bg-bb-danger text-white border-bb-danger" : "bg-bb-accent text-white border-bb-accent"
         }`}>
           {toast.message}
+        </div>
+      )}
+
+      {/* Create page modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md bg-bb-bg-primary border border-bb-border rounded-xl shadow-xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-semibold text-bb-text-primary">New page</h3>
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="w-8 h-8 inline-flex items-center justify-center rounded-md text-bb-text-muted hover:text-bb-text-primary hover:bg-bb-surface transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[11px] uppercase tracking-wider text-bb-text-muted font-medium mb-1">Slug</label>
+                <input
+                  type="text"
+                  value={newPageSlug}
+                  onChange={(e) => setNewPageSlug(e.target.value)}
+                  placeholder="my-page"
+                  className="w-full h-10 px-3 bg-bb-bg-secondary border border-bb-border rounded-md text-sm text-bb-text-primary placeholder:text-bb-text-muted outline-none focus:border-bb-accent transition-colors"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] uppercase tracking-wider text-bb-text-muted font-medium mb-1">Title</label>
+                <input
+                  type="text"
+                  value={newPageTitle}
+                  onChange={(e) => setNewPageTitle(e.target.value)}
+                  placeholder="My Page"
+                  className="w-full h-10 px-3 bg-bb-bg-secondary border border-bb-border rounded-md text-sm text-bb-text-primary placeholder:text-bb-text-muted outline-none focus:border-bb-accent transition-colors"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] uppercase tracking-wider text-bb-text-muted font-medium mb-1">Type</label>
+                <select
+                  value={newPageType}
+                  onChange={(e) => setNewPageType(e.target.value)}
+                  className="w-full h-10 px-3 bg-bb-bg-secondary border border-bb-border rounded-md text-sm text-bb-text-primary outline-none focus:border-bb-accent transition-colors"
+                >
+                  <option value="note">Note</option>
+                  <option value="person">Person</option>
+                  <option value="company">Company</option>
+                  <option value="project">Project</option>
+                  <option value="meeting">Meeting</option>
+                  <option value="decision">Decision</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] uppercase tracking-wider text-bb-text-muted font-medium mb-1">Content (optional)</label>
+                <textarea
+                  value={newPageContent}
+                  onChange={(e) => setNewPageContent(e.target.value)}
+                  placeholder="# My Page\n\nWrite something..."
+                  rows={4}
+                  className="w-full px-3 py-2 bg-bb-bg-secondary border border-bb-border rounded-md text-sm text-bb-text-primary placeholder:text-bb-text-muted outline-none focus:border-bb-accent transition-colors resize-none"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="h-9 px-4 text-xs text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface rounded-md transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreatePage}
+                disabled={createLoading || !newPageSlug.trim() || !newPageTitle.trim()}
+                className="h-9 px-4 bg-bb-accent hover:bg-bb-accent-strong disabled:opacity-50 text-bb-bg-primary text-xs font-medium rounded-md transition-colors inline-flex items-center gap-2"
+              >
+                {createLoading && <span className="w-3 h-3 border-2 border-bb-bg-primary/30 border-t-bb-bg-primary rounded-full animate-spin" />}
+                Create page
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Help modal */}
+      {showHelpModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4" onClick={() => setShowHelpModal(false)}>
+          <div className="w-full max-w-sm bg-bb-bg-primary border border-bb-border rounded-xl shadow-xl p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-semibold text-bb-text-primary">Keyboard shortcuts</h3>
+              <button
+                onClick={() => setShowHelpModal(false)}
+                className="w-8 h-8 inline-flex items-center justify-center rounded-md text-bb-text-muted hover:text-bb-text-primary hover:bg-bb-surface transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center justify-between py-1.5 border-b border-bb-border">
+                <span className="text-bb-text-secondary">Focus search</span>
+                <kbd className="px-1.5 py-0.5 bg-bb-surface border border-bb-border rounded text-[11px] font-mono text-bb-text-muted">Cmd K</kbd>
+              </div>
+              <div className="flex items-center justify-between py-1.5 border-b border-bb-border">
+                <span className="text-bb-text-secondary">New page</span>
+                <kbd className="px-1.5 py-0.5 bg-bb-surface border border-bb-border rounded text-[11px] font-mono text-bb-text-muted">Click +</kbd>
+              </div>
+              <div className="flex items-center justify-between py-1.5 border-b border-bb-border">
+                <span className="text-bb-text-secondary">Open help</span>
+                <kbd className="px-1.5 py-0.5 bg-bb-surface border border-bb-border rounded text-[11px] font-mono text-bb-text-muted">?</kbd>
+              </div>
+              <div className="flex items-center justify-between py-1.5">
+                <span className="text-bb-text-secondary">Close modals</span>
+                <kbd className="px-1.5 py-0.5 bg-bb-surface border border-bb-border rounded text-[11px] font-mono text-bb-text-muted">Esc</kbd>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
