@@ -193,10 +193,13 @@ export default function Dashboard() {
   const [implicitRules, setImplicitRules] = useState<any[]>([]);
   const [implicitRulesOpen, setImplicitRulesOpen] = useState(false);
 
+  const [askError, setAskError] = useState<string | null>(null);
+
   const handleAsk = useCallback(async () => {
     if (!askQuery.trim() || !currentBrainId) return;
     setAskLoading(true);
     setAskResult(null);
+    setAskError(null);
     try {
       const r = await fetch("/api/ask", {
         method: "POST",
@@ -204,13 +207,17 @@ export default function Dashboard() {
         body: JSON.stringify({ q: askQuery.trim() }),
       });
       const data = await r.json();
-      if (!data.error) {
-        setAskResult(data);
-      } else {
-        setAskResult({ answer: data.error, sources: [], confidence: 0, intent: "", searchedAt: "" });
+      if (!r.ok) {
+        setAskError(data.error || `Error ${r.status}`);
+        return;
       }
+      if (data.error) {
+        setAskError(data.error);
+        return;
+      }
+      setAskResult(data);
     } catch {
-      setAskResult({ answer: "Failed to get answer from your brain.", sources: [], confidence: 0, intent: "", searchedAt: "" });
+      setAskError("Network error — couldn't reach your brain.");
     } finally {
       setAskLoading(false);
     }
@@ -575,6 +582,11 @@ export default function Dashboard() {
                   )}
                 </button>
               </div>
+              {askError && (
+                <div className="mt-2 rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-2 text-sm text-red-400">
+                  {askError}
+                </div>
+              )}
               {askResult && (
                 <div className="mt-2 rounded-lg bg-bb-surface border border-bb-border overflow-hidden">
                   <div className="flex items-center justify-between px-3 py-2 border-b border-bb-border">

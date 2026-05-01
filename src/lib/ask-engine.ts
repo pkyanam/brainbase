@@ -7,6 +7,7 @@
  *   3. LLM summarization with citations
  *
  * No graph crawling. No regex extraction. Just search + read + answer.
+ * Every phase has its own try/catch — askBrain NEVER throws.
  */
 
 import {
@@ -33,6 +34,7 @@ import {
 } from "./supabase/hybrid";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
+const ASK_MODEL = "gpt-5.4-nano";
 
 export interface AskResult {
   answer: string;
@@ -59,84 +61,91 @@ interface SearchOutput {
 
 /**
  * Run hybrid search identical to /api/query.
+ * Never throws — returns empty array on any failure.
  */
 async function runHybridSearch(
   brainId: string,
   q: string,
   limit: number
 ): Promise<SearchOutput[]> {
-  const intent: QueryIntent = classifyIntent(q);
-  const detail = detailForIntent(intent);
+  try {
+    const intent: QueryIntent = classifyIntent(q);
+    const detail = detailForIntent(intent);
 
-  const keywordLimit = detail === "high" ? limit * 3 : limit * 2;
-  const expandedQ = expandQuery(q);
+    const keywordLimit = detail === "high" ? limit * 3 : limit * 2;
+    const expandedQ = expandQuery(q);
 
-  const [keywordResults, embedding] = await Promise.all([
-    searchBrain(brainId, q, keywordLimit),
-    generateEmbeddings([expandedQ]).then((e) => e?.[0] ?? null),
-  ]);
+    const [keywordResults, embedding] = await Promise.all([
+      searchBrain(brainId, q, keywordLimit),
+      generateEmbeddings([expandedQ]).then((e) => e?.[0] ?? null),
+    ]);
 
-  let vectorResults: SearchResult[] = [];
-  if (embedding) {
-    vectorResults = await vectorSearchBrain(brainId, embedding, keywordLimit);
-  }
-
-  const dedupedVector = dedupBySlug(vectorResults);
-  const pinnedKeyword = pinExactMatches(keywordResults, q);
-  const pinnedVector = pinExactMatches(dedupedVector, q);
-
-  const fused = rrfFusion([pinnedKeyword, pinnedVector]);
-  const normed = normalizeScores(fused);
-
-  applyCompiledTruthBoost(normed);
-
-  const slugs = Array.from(normed.keys());
-  const backlinks = await fetchBacklinks(brainId, slugs);
-  applyBacklinkBoost(normed, backlinks);
-
-  // Flatten → dedup
-  const allResults: Array<{
-    slug: string;
-    score: number;
-    excerpt: string;
-    type: string;
-    source: string;
-    title: string;
-    boost_factors?: BoostFactors;
-  }> = [];
-
-  for (const [slug, entry] of normed) {
-    for (const r of entry.results) {
-      allResults.push({
-        slug,
-        score: entry.score,
-        excerpt: r.excerpt,
-        type: r.type,
-        source: r.source,
-        title: r.title,
-        boost_factors: (entry as any).boost_factors,
-      });
+    let vectorResults: SearchResult[] = [];
+    if (embedding) {
+      vectorResults = await vectorSearchBrain(brainId, embedding, keywordLimit);
     }
+
+    const dedupedVector = dedupBySlug(vectorResults);
+    const pinnedKeyword = pinExactMatches(keywordResults, q);
+    const pinnedVector = pinExactMatches(dedupedVector, q);
+
+    const fused = rrfFusion([pinnedKeyword, pinnedVector]);
+    const normed = normalizeScores(fused);
+
+    applyCompiledTruthBoost(normed);
+
+    const slugs = Array.from(normed.keys());
+    const backlinks = await fetchBacklinks(brainId, slugs);
+    applyBacklinkBoost(normed, backlinks);
+
+    // Flatten → dedup
+    const allResults: Array<{
+      slug: string;
+      score: number;
+      excerpt: string;
+      type: string;
+      source: string;
+      title: string;
+      boost_factors?: BoostFactors;
+    }> = [];
+
+    for (const [slug, entry] of normed) {
+      for (const r of entry.results) {
+        allResults.push({
+          slug,
+          score: entry.score,
+          excerpt: r.excerpt,
+          type: r.type,
+          source: r.source,
+          title: r.title,
+          boost_factors: (entry as any).boost_factors,
+        });
+      }
+    }
+
+    const finalResults = dedupBySlug(allResults);
+    applyTweetBoost(finalResults as any, intent);
+    forceExactMatchTopFinal(finalResults, q);
+
+    finalResults.sort((a, b) => b.score - a.score);
+
+    return finalResults.slice(0, limit).map((r) => ({
+      slug: r.slug,
+      title: r.title,
+      type: r.type,
+      excerpt: r.excerpt,
+      score: Math.round(r.score * 100) / 100,
+      boost_factors: (r as any).boost_factors || null,
+    }));
+  } catch (err) {
+    console.error("[brainbase] ask-engine: search phase failed:", err);
+    return [];
   }
-
-  const finalResults = dedupBySlug(allResults);
-  applyTweetBoost(finalResults as any, intent);
-  forceExactMatchTopFinal(finalResults, q);
-
-  finalResults.sort((a, b) => b.score - a.score);
-
-  return finalResults.slice(0, limit).map((r) => ({
-    slug: r.slug,
-    title: r.title,
-    type: r.type,
-    excerpt: r.excerpt,
-    score: Math.round(r.score * 100) / 100,
-    boost_factors: (r as any).boost_factors || null,
-  }));
 }
 
 /**
  * Fetch full page content for summarization context.
+ * Never throws — returns partial map on failure.
  */
 async function fetchPageContents(
   brainId: string,
@@ -144,27 +153,33 @@ async function fetchPageContents(
 ): Promise<Map<string, { title: string; content: string; type: string }>> {
   if (slugs.length === 0) return new Map();
 
-  const rows = await queryMany<{
-    slug: string;
-    title: string;
-    content: string;
-    type: string;
-  }>(
-    `SELECT slug, title, COALESCE(content, compiled_truth, '') as content, type
-     FROM pages
-     WHERE brain_id = $1 AND slug = ANY($2)`,
-    [brainId, slugs]
-  );
+  try {
+    const rows = await queryMany<{
+      slug: string;
+      title: string;
+      content: string;
+      type: string;
+    }>(
+      `SELECT slug, title, COALESCE(content, compiled_truth, '') as content, type
+       FROM pages
+       WHERE brain_id = $1 AND slug = ANY($2)`,
+      [brainId, slugs]
+    );
 
-  const map = new Map<string, { title: string; content: string; type: string }>();
-  for (const r of rows) {
-    map.set(r.slug, { title: r.title, content: r.content, type: r.type });
+    const map = new Map<string, { title: string; content: string; type: string }>();
+    for (const r of rows) {
+      map.set(r.slug, { title: r.title, content: r.content, type: r.type });
+    }
+    return map;
+  } catch (err) {
+    console.error("[brainbase] ask-engine: content fetch failed:", err);
+    return new Map();
   }
-  return map;
 }
 
 /**
  * Generate a natural language answer from search results using an LLM.
+ * Never throws — returns graceful fallback on any failure.
  */
 async function generateAnswer(
   question: string,
@@ -214,7 +229,7 @@ async function generateAnswer(
         Authorization: `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: "gpt-4.1-nano",
+        model: ASK_MODEL,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
@@ -257,27 +272,33 @@ async function fetchBacklinks(
   slugs: string[]
 ): Promise<Map<string, number>> {
   if (slugs.length === 0) return new Map();
-  const rows = await queryMany<{ slug: string; count: string }>(
-    `SELECT p.slug,
-       COALESCE(lc.cnt, 0) as count
-     FROM pages p
-     LEFT JOIN (
-       SELECT to_page_id as pid, COUNT(*) as cnt
-       FROM links WHERE brain_id = $1
-       GROUP BY to_page_id
-     ) lc ON lc.pid = p.id
-     WHERE p.brain_id = $1 AND p.slug = ANY($2)`,
-    [brainId, slugs]
-  );
-  const map = new Map<string, number>();
-  for (const r of rows) {
-    map.set(r.slug, parseInt(r.count) || 0);
+  try {
+    const rows = await queryMany<{ slug: string; count: string }>(
+      `SELECT p.slug,
+         COALESCE(lc.cnt, 0) as count
+       FROM pages p
+       LEFT JOIN (
+         SELECT to_page_id as pid, COUNT(*) as cnt
+         FROM links WHERE brain_id = $1
+         GROUP BY to_page_id
+       ) lc ON lc.pid = p.id
+       WHERE p.brain_id = $1 AND p.slug = ANY($2)`,
+      [brainId, slugs]
+    );
+    const map = new Map<string, number>();
+    for (const r of rows) {
+      map.set(r.slug, parseInt(r.count) || 0);
+    }
+    return map;
+  } catch (err) {
+    console.error("[brainbase] ask-engine: backlink fetch failed:", err);
+    return new Map();
   }
-  return map;
 }
 
 /**
  * Main entry point: ask a question, get an answer.
+ * NEVER THROWS. Always returns a valid AskResult.
  */
 export async function askBrain(
   brainId: string,
@@ -286,16 +307,16 @@ export async function askBrain(
 ): Promise<AskResult> {
   const start = Date.now();
 
-  // 1. Search
+  // 1. Search (never throws)
   const results = await runHybridSearch(brainId, question, limit);
 
-  // 2. Fetch full content
+  // 2. Fetch full content (never throws)
   const contents = await fetchPageContents(
     brainId,
     results.map((r) => r.slug)
   );
 
-  // 3. Generate answer
+  // 3. Generate answer (never throws)
   const { answer, confidence } = await generateAnswer(
     question,
     results,
