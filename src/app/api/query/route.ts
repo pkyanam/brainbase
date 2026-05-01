@@ -64,21 +64,27 @@ export async function POST(req: NextRequest) {
 
   try {
     // ── Phase 0: Multi-query expansion (LLM-powered) ──────────
+    // Intent gating: skip LLM expansion for intents that have strong
+    // dedicated handlers (entity, tweet, meeting). LLM reformulation
+    // adds ~1.5s latency with minimal recall gain for these.
+    const SKIP_EXPAND_INTENTS = new Set(["entity", "tweet", "meeting"]);
     const expand = body.expand !== false; // default true
+    const shouldExpand = expand && detail !== "low" && !SKIP_EXPAND_INTENTS.has(intent);
     let expandedQueries: string[];
-    if (expand && detail !== "low") {
+    if (shouldExpand) {
       expandedQueries = await expandQueries(q);
     } else {
-      expandedQueries = [q]; // skip LLM for low-detail or explicit disable
+      expandedQueries = [q]; // skip LLM for low-detail, explicit disable, or gated intents
     }
     const expansionApplied = expandedQueries.length > 1;
 
-    // ── Phase 1: Search each expanded query in parallel ─────────
+    // ── Phase 1: Search all expanded queries in PARALLEL ──────
     const keywordLimit = detail === "high" ? limit * 3 : limit * 2;
     const allKeywordLists: SearchResult[][] = [];
     const allVectorLists: SearchResult[][] = [];
 
-    for (const variant of expandedQueries) {
+    // Batch all keyword + embedding searches in parallel, then vector searches
+    const searchPromises = expandedQueries.map(async (variant) => {
       // Expand aliases: "YC" → "Y Combinator"
       const expandedVariant = expandQuery(variant);
 
@@ -87,12 +93,19 @@ export async function POST(req: NextRequest) {
         generateEmbeddings([expandedVariant]).then((e) => e?.[0] ?? null),
       ]);
 
-      allKeywordLists.push(kw);
-
+      let vec: SearchResult[] = [];
       if (emb) {
-        const vec = await vectorSearchBrain(auth.brainId, emb, keywordLimit);
-        allVectorLists.push(dedupBySlug(vec));
+        vec = await vectorSearchBrain(auth.brainId, emb, keywordLimit);
+        vec = dedupBySlug(vec);
       }
+
+      return { kw, vec };
+    });
+
+    const searchResults = await Promise.all(searchPromises);
+    for (const { kw, vec } of searchResults) {
+      allKeywordLists.push(kw);
+      if (vec.length > 0) allVectorLists.push(vec);
     }
 
     // ── Phase 1.5: Pin exact matches, merge into RRF ──────────

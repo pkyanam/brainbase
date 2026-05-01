@@ -15,22 +15,30 @@ import { generateEmbeddings } from "@/lib/embeddings";
 import { vectorSearchBrain } from "@/lib/supabase/search";
 
 export async function POST(req: NextRequest) {
-  const auth = await resolveAuth(req);
-  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const auth = await resolveAuth(req);
+    if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  let body: { baseline_id?: string; limit?: number } = {};
-  try { body = await req.json().catch(() => ({})); } catch { /* defaults */ }
+    let body: { baseline_id?: string; limit?: number } = {};
+    try { body = await req.json().catch(() => ({})); } catch { /* defaults */ }
 
-  const queryLimit = Math.min(body.limit || 50, 500);
-  const runId = await createEvalRun(auth.brainId, body.baseline_id);
+    const queryLimit = Math.min(body.limit || 50, 500);
+    const runId = await createEvalRun(auth.brainId, body.baseline_id);
 
-  // Background processing
-  runEvalInBackground(auth.brainId, runId, queryLimit).catch((err) => {
-    console.error("[eval] Background eval failed:", err);
-    failEvalRun(runId, err.message).catch(() => {});
-  });
+    // Background processing
+    runEvalInBackground(auth.brainId, runId, queryLimit).catch((err) => {
+      console.error("[eval] Background eval failed:", err);
+      failEvalRun(runId, err.message).catch(() => {});
+    });
 
-  return NextResponse.json({ run_id: runId, status: "running" });
+    return NextResponse.json({ run_id: runId, status: "running" });
+  } catch (err) {
+    console.error("[eval/run] Error:", err);
+    return NextResponse.json(
+      { error: "Failed to start eval run", detail: String(err) },
+      { status: 500 }
+    );
+  }
 }
 
 async function runEvalInBackground(brainId: string, runId: string, limit: number) {
