@@ -298,7 +298,7 @@ export async function POST(req: NextRequest) {
           let mentionResults: Array<{ slug: string; title: string; type: string; excerpt: string }> = [];
           let mentionScore = 1.5;  // Pass 1: exact match → highest tier
 
-          // Pass 1: exact entity name ILIKE + backlink tiebreaker
+          // Pass 1: exact entity name ILIKE + total link tiebreaker
           mentionResults = await queryMany<{
             slug: string; title: string; type: string; excerpt: string;
           }>(
@@ -306,8 +306,12 @@ export async function POST(req: NextRequest) {
                     COALESCE(p.compiled_truth, '') as excerpt
              FROM pages p
              LEFT JOIN (
-               SELECT to_page_id as pid, COUNT(*) as cnt
-               FROM links WHERE brain_id = $1 GROUP BY to_page_id
+               SELECT pid, COUNT(*) as cnt FROM (
+                 SELECT from_page_id as pid FROM links WHERE brain_id = $1
+                 UNION ALL
+                 SELECT to_page_id as pid FROM links WHERE brain_id = $1
+               ) all_links
+               GROUP BY pid
              ) lc ON lc.pid = p.id
              WHERE p.brain_id = $1 AND p.type = 'tweet'
                AND (p.compiled_truth ILIKE $2 OR p.title ILIKE $2)
@@ -318,7 +322,7 @@ export async function POST(req: NextRequest) {
           );
           console.log("[query] Entity-mention pass 1 (exact):", mentionResults.length, "rows");
 
-          // Pass 2: split into AND-search → mid tier + backlink tiebreaker
+          // Pass 2: split into AND-search → mid tier + total link tiebreaker
           if (mentionResults.length === 0 && entityName.includes(" ")) {
             mentionScore = 1.3;
             const words = entityName.split(/\s+/).filter(w => w.length > 1);
@@ -332,8 +336,12 @@ export async function POST(req: NextRequest) {
                 `SELECT p.slug, p.title, p.type, COALESCE(p.compiled_truth, '') as excerpt
                  FROM pages p
                  LEFT JOIN (
-                   SELECT to_page_id as pid, COUNT(*) as cnt
-                   FROM links WHERE brain_id = $1 GROUP BY to_page_id
+                   SELECT pid, COUNT(*) as cnt FROM (
+                     SELECT from_page_id as pid FROM links WHERE brain_id = $1
+                     UNION ALL
+                     SELECT to_page_id as pid FROM links WHERE brain_id = $1
+                   ) all_links
+                   GROUP BY pid
                  ) lc ON lc.pid = p.id
                  WHERE p.brain_id = $1 AND p.type = 'tweet'
                    AND (${ilikeClauses.join(" AND ")})
@@ -346,7 +354,7 @@ export async function POST(req: NextRequest) {
             }
           }
 
-          // Pass 3: no spaces → lowest tier + backlink tiebreaker
+          // Pass 3: no spaces → lowest tier + total link tiebreaker
           if (mentionResults.length === 0 && entityName.includes(" ")) {
             mentionScore = 1.1;
             const noSpace = entityName.replace(/\s+/g, "");
@@ -356,8 +364,12 @@ export async function POST(req: NextRequest) {
               `SELECT p.slug, p.title, p.type, COALESCE(p.compiled_truth, '') as excerpt
                FROM pages p
                LEFT JOIN (
-                 SELECT to_page_id as pid, COUNT(*) as cnt
-                 FROM links WHERE brain_id = $1 GROUP BY to_page_id
+                 SELECT pid, COUNT(*) as cnt FROM (
+                   SELECT from_page_id as pid FROM links WHERE brain_id = $1
+                   UNION ALL
+                   SELECT to_page_id as pid FROM links WHERE brain_id = $1
+                 ) all_links
+                 GROUP BY pid
                ) lc ON lc.pid = p.id
                WHERE p.brain_id = $1 AND p.type = 'tweet'
                  AND (p.compiled_truth ILIKE $2 OR p.title ILIKE $2)
@@ -639,9 +651,12 @@ async function fetchBacklinks(
        COALESCE(lc.cnt, 0) as count
      FROM pages p
      LEFT JOIN (
-       SELECT to_page_id as pid, COUNT(*) as cnt
-       FROM links WHERE brain_id = $1
-       GROUP BY to_page_id
+       SELECT pid, COUNT(*) as cnt FROM (
+         SELECT from_page_id as pid FROM links WHERE brain_id = $1
+         UNION ALL
+         SELECT to_page_id as pid FROM links WHERE brain_id = $1
+       ) all_links
+       GROUP BY pid
      ) lc ON lc.pid = p.id
      WHERE p.brain_id = $1 AND p.slug = ANY($2)`,
     [brainId, slugs]

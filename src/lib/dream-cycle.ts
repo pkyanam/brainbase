@@ -14,7 +14,7 @@
 import { queryMany, queryOne } from "./supabase/client";
 import { runAutoExtract, findOrphans } from "./auto-extract";
 import { embedStaleChunks } from "./embeddings";
-import { createSemanticLinks } from "./semantic-links";
+import { batchLinkOrphans } from "./orphan-linker";
 
 export interface DreamPhaseResult {
   phase: string;
@@ -148,13 +148,13 @@ async function runEmbedPhase(brainId: string, processAll: boolean): Promise<Drea
   }
 }
 
-// ── Phase 3: Orphan detection + auto-linking ────────────────────────────
+// ── Phase 3: Orphan detection + auto-linking (batch vector+FTS) ──
 
 async function runOrphansPhase(brainId: string, processAll: boolean): Promise<DreamPhaseResult> {
   try {
-    const orphans = await findOrphans(brainId);
+    const result = await batchLinkOrphans(brainId);
 
-    if (orphans.length === 0) {
+    if (result.orphansFound === 0) {
       return {
         phase: "orphans",
         status: "ok",
@@ -163,34 +163,26 @@ async function runOrphansPhase(brainId: string, processAll: boolean): Promise<Dr
       };
     }
 
-    // Auto-link orphans via semantic similarity
-    let autoLinked = 0;
-    const toProcess = processAll ? orphans : orphans.slice(0, 10);
-
-    for (const orphanSlug of toProcess) {
-      try {
-        const links = await createSemanticLinks(
-          brainId,
-          orphanSlug,
-          `Auto-linked orphan via semantic similarity`
-        );
-        autoLinked += links.length;
-      } catch (err) {
-        console.error(`[dream] Auto-link failed for ${orphanSlug}:`, err);
-      }
-    }
-
     return {
       phase: "orphans",
-      status: orphans.length > 0 ? "warn" : "ok",
-      summary: `${orphans.length} orphans found, ${autoLinked} auto-linked`,
-      details: { orphanCount: orphans.length, autoLinked, orphans: orphans.slice(0, 20) },
+      status: result.totalInserted > 0 ? "ok" : "warn",
+      summary: `${result.orphansFound} orphans found, ` +
+        `${result.vectorPairs} vector links, ${result.ftsPairs} FTS links, ` +
+        `${result.totalInserted} total edges created`,
+      details: {
+        orphanCount: result.orphansFound,
+        vectorLinked: result.vectorLinked,
+        vectorPairs: result.vectorPairs,
+        ftsLinked: result.ftsLinked,
+        ftsPairs: result.ftsPairs,
+        totalInserted: result.totalInserted,
+      },
     };
   } catch (err) {
     return {
       phase: "orphans",
       status: "fail",
-      summary: "Orphan detection failed",
+      summary: "Orphan linking failed",
       details: { error: String(err) },
     };
   }

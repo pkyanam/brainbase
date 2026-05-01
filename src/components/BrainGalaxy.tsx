@@ -509,8 +509,10 @@ export default function BrainGalaxy({
   onSelectNode: (slug: string) => void;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const { resolved } = useTheme();
   const isDark = resolved === "dark";
+  const cameraRef = useRef<any>(null);
 
   const colors = useMemo(() => getThemeColors(isDark), [isDark]);
 
@@ -519,8 +521,93 @@ export default function BrainGalaxy({
     onSelectNode(slug);
   }, [onSelectNode]);
 
+  // Search results
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    return nodes
+      .filter((n) => n.label.toLowerCase().includes(q) || n.id.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [nodes, searchQuery]);
+
+  // Connected nodes for the selected node
+  const connectedIds = useMemo(() => {
+    if (!selectedId) return new Set<string>();
+    const conn = new Set<string>();
+    conn.add(selectedId);
+    for (const e of edges) {
+      if (e.source === selectedId) conn.add(e.target);
+      if (e.target === selectedId) conn.add(e.source);
+    }
+    return conn;
+  }, [selectedId, edges]);
+
+  const handleSearchSelect = useCallback((slug: string) => {
+    setSelectedId(slug);
+    setSearchQuery("");
+    onSelectNode(slug);
+  }, [onSelectNode]);
+
   return (
     <div className="w-full h-full relative">
+      {/* Search overlay */}
+      <div className="absolute top-4 left-4 z-10 w-64">
+        <div className="relative">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none"
+            style={{ color: isDark ? "#8b949e" : "#57606a" }}
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Find a node..."
+            className="w-full h-9 pl-9 pr-3 rounded-lg border text-xs outline-none transition-colors bg-bb-bg-primary/90 backdrop-blur-sm"
+            style={{
+              borderColor: isDark ? "#333" : "#d1d5db",
+              color: isDark ? "#e6edf3" : "#1f2328",
+            }}
+          />
+        </div>
+        {searchResults.length > 0 && (
+          <div className="mt-1 rounded-lg border overflow-hidden max-h-56 overflow-y-auto bg-bb-bg-primary/95 backdrop-blur-sm"
+            style={{ borderColor: isDark ? "#333" : "#d1d5db" }}>
+            {searchResults.map((n) => (
+              <button
+                key={n.id}
+                onClick={() => handleSearchSelect(n.id)}
+                className="w-full text-left px-3 py-2 text-xs hover:bg-bb-surface transition-colors flex items-center gap-2"
+              >
+                <span className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: colors.typeColors[n.type] || colors.fallback }} />
+                <span className="truncate" style={{ color: isDark ? "#e6edf3" : "#1f2328" }}>{n.label}</span>
+                <span className="text-[10px] shrink-0 ml-auto tabular-nums" style={{ color: isDark ? "#8b949e" : "#57606a" }}>
+                  {n.linkCount} links
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Selected node info badge */}
+      {selectedId && (
+        <div className="absolute top-4 right-4 z-10 px-3 py-2 rounded-lg border text-xs bg-bb-bg-primary/90 backdrop-blur-sm"
+          style={{ borderColor: isDark ? "#333" : "#d1d5db" }}>
+          <span style={{ color: isDark ? "#8b949e" : "#57606a" }}>
+            Connected: <strong style={{ color: isDark ? "#e6edf3" : "#1f2328" }}>{connectedIds.size - 1}</strong> nodes
+          </span>
+          <button
+            onClick={() => setSelectedId(null)}
+            className="ml-2 text-[10px] hover:underline"
+            style={{ color: colors.fallback }}
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
       <Canvas
         camera={{ position: [0, 0, 14], fov: 50 }}
         gl={{ antialias: true, alpha: false }}
@@ -529,6 +616,7 @@ export default function BrainGalaxy({
         <ambientLight intensity={isDark ? 0.5 : 0.8} />
         <Scene nodes={nodes} edges={edges} onSelectNode={handleSelect} selectedId={selectedId} colors={colors} />
         <OrbitControls
+          ref={cameraRef}
           enableDamping
           dampingFactor={0.08}
           minDistance={0.5}
@@ -538,7 +626,7 @@ export default function BrainGalaxy({
       <div className="absolute bottom-4 left-4 text-[10px] tabular-nums bg-bb-bg-primary/80 backdrop-blur-sm rounded px-2 py-1 border border-bb-border/50 pointer-events-none"
         style={{ color: isDark ? "#8b949e" : "#57606a" }}
       >
-        {nodes.length} nodes • {edges.length} edges • WASD to pan • scroll to zoom
+        {nodes.length} nodes • {edges.length} edges • type to search • WASD to pan
       </div>
     </div>
   );
