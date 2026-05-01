@@ -154,7 +154,9 @@ export async function getEvalCandidates(
   brainId: string,
   opts: { since?: string; limit?: number; tool?: string } = {}
 ): Promise<EvalCandidateRow[]> {
-  await ensureEvalSchema();
+  try { await ensureEvalSchema(); } catch (e) {
+    console.error("[eval] ensureEvalSchema failed:", e);
+  }
   const conditions: string[] = ["brain_id = $1"];
   const params: any[] = [brainId];
   let paramIdx = 2;
@@ -263,7 +265,9 @@ export async function getEvalRuns(
   brainId: string,
   limit = 20
 ): Promise<EvalRunRow[]> {
-  await ensureEvalSchema();
+  try { await ensureEvalSchema(); } catch (e) {
+    console.error("[eval] ensureEvalSchema failed:", e);
+  }
   return queryMany<EvalRunRow>(
     `SELECT id, brain_id, status, total_queries,
             avg_mrr, avg_p3, avg_p5, avg_latency_ms,
