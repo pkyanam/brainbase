@@ -66,6 +66,7 @@ export async function ensureUsageSchema(): Promise<void> {
         ALTER TABLE brains ADD COLUMN IF NOT EXISTS page_quota INT DEFAULT 100;
         ALTER TABLE brains ADD COLUMN IF NOT EXISTS search_quota INT DEFAULT 500;
         ALTER TABLE brains ADD COLUMN IF NOT EXISTS api_quota INT DEFAULT 200;
+        ALTER TABLE brains ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;
       END IF;
     END $$;
   `);
