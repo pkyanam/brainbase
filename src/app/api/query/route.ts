@@ -283,93 +283,83 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // ── Entity-mention handler: "tweets about X", "tweets mentioning X" ──
+      // ── Entity-mention handler: 3-pass fallback with tiered scoring ──
       const aboutMatch = q.match(/(?:tweets?\s+(?:about|on|mentioning|regarding|re|involving|referencing)\s+)(.+)/i);
       if (aboutMatch && aboutMatch[1]) {
         const entityName = aboutMatch[1].trim();
         console.log("[query] Entity-mention handler running for:", entityName);
         try {
           let mentionResults: Array<{ slug: string; title: string; type: string; excerpt: string }> = [];
+          let mentionScore = 1.5;  // Pass 1: exact match → highest tier
 
-          // Try 1: exact entity name ILIKE
+          // Pass 1: exact entity name ILIKE
           mentionResults = await queryMany<{
             slug: string; title: string; type: string; excerpt: string;
           }>(
             `SELECT p.slug, p.title, p.type,
                     COALESCE(p.compiled_truth, '') as excerpt
              FROM pages p
-             WHERE p.brain_id = $1
-               AND p.type = 'tweet'
+             WHERE p.brain_id = $1 AND p.type = 'tweet'
                AND (p.compiled_truth ILIKE $2 OR p.title ILIKE $2)
-             ORDER BY p.updated_at DESC
-             LIMIT 20`,
+             ORDER BY p.updated_at DESC LIMIT 20`,
             [auth.brainId, `%${entityName}%`]
           );
-          console.log("[query] Entity-mention pass 1 (exact):", mentionResults.length, "rows for:", entityName);
+          console.log("[query] Entity-mention pass 1 (exact):", mentionResults.length, "rows");
 
-          // Try 2: if 0 results and multi-word, split into words and AND-search
+          // Pass 2: split into AND-search → mid tier
           if (mentionResults.length === 0 && entityName.includes(" ")) {
+            mentionScore = 1.3;
             const words = entityName.split(/\s+/).filter(w => w.length > 1);
             if (words.length >= 2) {
               const ilikeClauses = words.map((_, i) =>
                 `(p.compiled_truth ILIKE $${i + 2} OR p.title ILIKE $${i + 2})`
               );
-              const wordParams = words.map(w => `%${w}%`);
               mentionResults = await queryMany<{
                 slug: string; title: string; type: string; excerpt: string;
               }>(
-                `SELECT p.slug, p.title, p.type,
-                        COALESCE(p.compiled_truth, '') as excerpt
+                `SELECT p.slug, p.title, p.type, COALESCE(p.compiled_truth, '') as excerpt
                  FROM pages p
-                 WHERE p.brain_id = $1
-                   AND p.type = 'tweet'
+                 WHERE p.brain_id = $1 AND p.type = 'tweet'
                    AND (${ilikeClauses.join(" AND ")})
-                 ORDER BY p.updated_at DESC
-                 LIMIT 20`,
-                [auth.brainId, ...wordParams]
+                 ORDER BY p.updated_at DESC LIMIT 20`,
+                [auth.brainId, ...words.map(w => `%${w}%`)]
               );
-              console.log("[query] Entity-mention pass 2 (AND words):", mentionResults.length, "rows for words:", words);
+              console.log("[query] Entity-mention pass 2 (AND):", mentionResults.length, "rows");
             }
           }
 
-          // Try 3: if still 0, try without spaces (e.g., "GarryTan" for "Garry Tan")
+          // Pass 3: no spaces → lowest tier
           if (mentionResults.length === 0 && entityName.includes(" ")) {
+            mentionScore = 1.1;
             const noSpace = entityName.replace(/\s+/g, "");
             mentionResults = await queryMany<{
               slug: string; title: string; type: string; excerpt: string;
             }>(
-              `SELECT p.slug, p.title, p.type,
-                      COALESCE(p.compiled_truth, '') as excerpt
+              `SELECT p.slug, p.title, p.type, COALESCE(p.compiled_truth, '') as excerpt
                FROM pages p
-               WHERE p.brain_id = $1
-                 AND p.type = 'tweet'
+               WHERE p.brain_id = $1 AND p.type = 'tweet'
                  AND (p.compiled_truth ILIKE $2 OR p.title ILIKE $2)
-               ORDER BY p.updated_at DESC
-               LIMIT 20`,
+               ORDER BY p.updated_at DESC LIMIT 20`,
               [auth.brainId, `%${noSpace}%`]
             );
-            console.log("[query] Entity-mention pass 3 (no space):", mentionResults.length, "rows for:", noSpace);
+            console.log("[query] Entity-mention pass 3 (no-space):", mentionResults.length, "rows");
           }
 
           if (mentionResults.length === 0) {
-            console.log("[query] Entity-mention ALL PASSES returned zero for:", entityName);
+            console.log("[query] Entity-mention ALL PASSES zero for:", entityName);
           }
 
+          // Inject with tiered score — pass 1 beats pass 2 beats pass 3 after boost
           for (const r of mentionResults) {
             const existing = finalResults.find((fr) => fr.slug === r.slug);
-            const mentionScore = 1.5;
             if (existing) {
               existing.score = Math.max(existing.score, mentionScore);
               existing.excerpt = r.excerpt || existing.excerpt;
               (existing as any).handler_path = "entity_mention";
             } else {
               finalResults.push({
-                slug: r.slug,
-                score: mentionScore,
-                excerpt: r.excerpt || "",
-                type: r.type,
-                source: "fts_and" as any,
-                title: r.title,
+                slug: r.slug, score: mentionScore, excerpt: r.excerpt || "",
+                type: r.type, source: "fts_and" as any, title: r.title,
                 boost_factors: { total: mentionScore } as BoostFactors,
                 handler_path: "entity_mention",
               } as any);
@@ -412,52 +402,76 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── Phase 7: Tweet boost for ALL intents ─────────────────────
-    // Tweet intent: 2.5x. All other intents: 2.0x baseline.
-    console.log("[query] Applying tweet boost, intent:", intent);
-    applyTweetBoost(finalResults as any, intent);
-
-    // ── Phase 7.5: Tweet-content retrieval fallback ──────────────
-    // For non-tweet-intent queries ("PS5 linux loader"), the hybrid search
-    // often returns zero tweet-type results. Run a direct tweet-content
-    // ILIKE search and inject results so the baseline boost has something
-    // to work with.
+    // ── Phase 7: Tweet-content retrieval fallback ──────────────
+    // MUST run BEFORE tweet boost so fallback rows get the multiplier.
+    // For non-tweet-intent queries where hybrid returns few/no tweets,
+    // search tweet content directly and inject with tiered scoring.
     if (intent !== "tweet") {
       const tweetResults = finalResults.filter(r => r.type === "tweet");
       if (tweetResults.length < 3) {
-        console.log("[query] Tweet-content fallback: only", tweetResults.length, "tweets in results, running ILIKE");
+        console.log("[query] Tweet-content fallback: only", tweetResults.length, "tweets in results");
         try {
           const terms = q.split(/\s+/).filter(t => t.length > 2);
-          if (terms.length > 0) {
-            const ilikeClauses = terms.map((_, i) =>
+          if (terms.length >= 2) {
+            // Tiered: require ALL terms, then fall back to >= 2 terms
+            const ilikeAll = terms.map((_, i) =>
               `(p.compiled_truth ILIKE $${i + 2} OR p.title ILIKE $${i + 2})`
             );
-            const termParams = terms.map(t => `%${t}%`);
-            const fallbackResults = await queryMany<{
+            const allParams = terms.map(t => `%${t}%`);
+            let fallbackResults = await queryMany<{
               slug: string; title: string; type: string; excerpt: string;
             }>(
-              `SELECT p.slug, p.title, p.type,
-                      COALESCE(p.compiled_truth, '') as excerpt
+              `SELECT p.slug, p.title, p.type, COALESCE(p.compiled_truth, '') as excerpt
                FROM pages p
-               WHERE p.brain_id = $1
-                 AND p.type = 'tweet'
-                 AND (${ilikeClauses.join(" AND ")})
-               ORDER BY p.updated_at DESC
-               LIMIT 10`,
-              [auth.brainId, ...termParams]
+               WHERE p.brain_id = $1 AND p.type = 'tweet'
+                 AND (${ilikeAll.join(" AND ")})
+               ORDER BY p.updated_at DESC LIMIT 10`,
+              [auth.brainId, ...allParams]
             );
-            console.log("[query] Tweet-content fallback results:", fallbackResults.length, "rows");
+            let fallbackScore = 0.8;  // All terms match → highest tier
+            console.log("[query] Fallback pass 1 (all terms):", fallbackResults.length, "rows");
+
+            // If < 3 results with all terms, relax to >= 2 terms
+            if (fallbackResults.length < 3 && terms.length >= 3) {
+              // Use OR instead of AND, then filter client-side
+              const ilikeOr = terms.map((_, i) =>
+                `(p.compiled_truth ILIKE $${i + 2} OR p.title ILIKE $${i + 2})`
+              );
+              const orResults = await queryMany<{
+                slug: string; title: string; type: string; excerpt: string;
+              }>(
+                `SELECT p.slug, p.title, p.type, COALESCE(p.compiled_truth, '') as excerpt
+                 FROM pages p
+                 WHERE p.brain_id = $1 AND p.type = 'tweet'
+                   AND (${ilikeOr.join(" OR ")})
+                 ORDER BY p.updated_at DESC LIMIT 20`,
+                [auth.brainId, ...allParams]
+              );
+              // Filter to rows matching >= 2 terms (client-side)
+              const multiMatch = orResults.filter(r => {
+                const text = ((r.excerpt || "") + " " + (r.title || "")).toLowerCase();
+                const matches = terms.filter(t => text.includes(t.toLowerCase()));
+                return matches.length >= 2;
+              });
+              // Merge: keep all-term results, add multi-match results not already present
+              const existingSlugs = new Set(fallbackResults.map(r => r.slug));
+              for (const r of multiMatch) {
+                if (!existingSlugs.has(r.slug)) {
+                  fallbackResults.push(r);
+                  existingSlugs.add(r.slug);
+                }
+              }
+              fallbackScore = 0.5;  // Partial match → mid tier
+              console.log("[query] Fallback pass 2 (>=2 terms): added", multiMatch.length, "rows, total:", fallbackResults.length);
+            }
+
             for (const r of fallbackResults) {
               const existing = finalResults.find((fr) => fr.slug === r.slug);
               if (!existing) {
                 finalResults.push({
-                  slug: r.slug,
-                  score: 0.5,  // Moderate — below structured handlers, above noise
-                  excerpt: r.excerpt || "",
-                  type: r.type,
-                  source: "fts_and" as any,
-                  title: r.title,
-                  boost_factors: { total: 0.5 } as BoostFactors,
+                  slug: r.slug, score: fallbackScore, excerpt: r.excerpt || "",
+                  type: r.type, source: "fts_and" as any, title: r.title,
+                  boost_factors: { total: fallbackScore } as BoostFactors,
                   handler_path: "tweet_fallback",
                 } as any);
               }
@@ -469,7 +483,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── Phase 8: Exact match pin + sort ──────────────────────────
+    // ── Phase 8: Tweet boost for ALL intents ─────────────────────
+    // MUST run AFTER fallback so tweet_fallback rows get the multiplier.
+    // Tweet intent: 2.5x. All other intents: 2.0x baseline.
+    console.log("[query] Applying tweet boost, intent:", intent);
+    applyTweetBoost(finalResults as any, intent);
+
+    // ── Phase 9: Exact match pin + sort ──────────────────────────
     forceExactMatchTopFinal(finalResults, q);
 
     finalResults.sort((a, b) => b.score - a.score);
