@@ -10,6 +10,7 @@ import PageList from "@/components/dashboard/PageList";
 import ActivityFeed from "@/components/dashboard/ActivityFeed";
 import MembersCard from "@/components/dashboard/MembersCard";
 import PageSidebar from "@/components/dashboard/PageSidebar";
+import { UsageBanner } from "@/components/UsageBanner";
 
 interface BrainStats {
   page_count: number;
@@ -97,6 +98,19 @@ export default function Dashboard() {
       return () => clearTimeout(t);
     }
   }, [toast]);
+
+  // Show success toast after Stripe checkout redirect
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("checkout") === "success") {
+      setToast({ message: "Upgraded to Pro! Your brain now has higher limits.", type: "success" });
+      // Clean the URL
+      const url = new URL(window.location.href);
+      url.searchParams.delete("checkout");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, []);
+
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Mobile side panel
@@ -585,6 +599,8 @@ export default function Dashboard() {
           )}
         </div>
       </header>
+
+      <UsageBanner />
 
       <div className="flex-1 flex flex-col md:flex-row min-h-0">
         {/* Main */}

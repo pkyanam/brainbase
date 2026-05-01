@@ -7,10 +7,20 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireBrainAccess } from "@/lib/auth-guard";
+import { getBrainPlan } from "@/lib/usage";
 
 export async function POST(req: NextRequest) {
   const auth = await requireBrainAccess(req);
   if (auth instanceof Response) return auth;
+
+  // Don't double-charge — check current plan
+  const currentPlan = await getBrainPlan(auth.brainId);
+  if (currentPlan === "pro" || currentPlan === "unlimited") {
+    return NextResponse.json(
+      { error: "Already on Pro plan" },
+      { status: 400 }
+    );
+  }
 
   const stripeKey = process.env.STRIPE_SECRET_KEY;
   if (!stripeKey) {

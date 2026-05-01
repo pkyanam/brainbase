@@ -15,7 +15,7 @@ interface QuotaConfig {
   maxBrains: number;
 }
 
-const PLAN_LIMITS: Record<PlanTier, QuotaConfig> = {
+export const PLAN_LIMITS: Record<PlanTier, QuotaConfig> = {
   free: {
     pagesPerMonth: 100,
     searchesPerMonth: 500,
