@@ -7,12 +7,14 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireBrainAccess } from "@/lib/auth-guard";
+import { resolveApiAuth } from "@/lib/api-auth";
 import { askBrain } from "@/lib/ask-engine";
 
 export async function POST(req: NextRequest) {
-  const auth = await requireBrainAccess(req);
-  if (auth instanceof Response) return auth;
+  const auth = await resolveApiAuth(req);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   try {
     const body = await req.json().catch(() => ({}));
