@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import nextDynamic from "next/dynamic";
 import { useUser, SignOutButton } from "@clerk/nextjs";
+import { useTheme } from "@/components/ThemeProvider";
 import type { GraphNode } from "@/lib/supabase/graph";
 import DreamStatusCard from "@/components/DreamStatusCard";
 import StatsBar from "@/components/dashboard/StatsBar";
@@ -83,6 +84,7 @@ interface Invite {
 
 export default function Dashboard() {
   const { user, isLoaded } = useUser();
+  const { resolved: themeResolved, toggle: toggleTheme } = useTheme();
   const [stats, setStats] = useState<BrainStats | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -114,6 +116,14 @@ export default function Dashboard() {
 
   // Mobile side panel
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
+
+  // Collapsible desktop sidebar
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return localStorage.getItem("brainbase-sidebar-collapsed") === "true";
+    } catch { return false; }
+  });
 
   // v0.3 — Collaboration
   const [brains, setBrains] = useState<Brain[]>([]);
@@ -222,6 +232,14 @@ export default function Dashboard() {
       setAskLoading(false);
     }
   }, [askQuery, currentBrainId]);
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try { localStorage.setItem("brainbase-sidebar-collapsed", String(next)); } catch {}
+      return next;
+    });
+  }, []);
 
   const handleCreatePage = useCallback(async () => {
     if (!newPageSlug.trim() || !newPageTitle.trim() || !currentBrainId) return;
@@ -421,6 +439,22 @@ export default function Dashboard() {
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
+              </button>
+              <button
+                onClick={toggleTheme}
+                className="hidden md:inline-flex h-8 w-8 items-center justify-center text-bb-text-muted hover:text-bb-text-primary hover:bg-bb-surface rounded transition-colors"
+                aria-label="Toggle theme"
+                title="Toggle theme"
+              >
+                {themeResolved === "dark" ? (
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                  </svg>
+                )}
               </button>
 
           {isLoaded && user ? (
@@ -795,64 +829,88 @@ export default function Dashboard() {
         </div>
 
         {/* Right panel: activity + members (desktop) */}
-        <aside className="hidden md:flex shrink-0 w-72 border-l border-bb-border bg-bb-bg-secondary flex-col">
-          <ActivityFeed
-            activities={activities}
-            open={activityOpen}
-            onToggle={() => setActivityOpen(!activityOpen)}
-            onSelect={handleSelectNode}
-          />
-          <section className="shrink-0 border-b border-bb-border flex flex-col">
-            <button
-              onClick={() => setImplicitRulesOpen(!implicitRulesOpen)}
-              className="shrink-0 h-11 px-4 flex items-center justify-between text-[11px] font-medium uppercase tracking-wider text-bb-text-secondary hover:text-bb-text-primary transition-colors"
+        <aside
+          className={`hidden md:flex shrink-0 border-l border-bb-border bg-bb-bg-secondary flex-col transition-all duration-200 ease-out ${
+            sidebarCollapsed ? "w-10 items-center" : "w-72"
+          }`}
+        >
+          <button
+            onClick={toggleSidebar}
+            className="shrink-0 w-full h-10 flex items-center justify-center text-bb-text-muted hover:text-bb-text-primary hover:bg-bb-surface transition-colors"
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            <svg
+              className={`w-4 h-4 transition-transform duration-200 ${sidebarCollapsed ? "rotate-180" : ""}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
             >
-              <span className="flex items-center gap-2">
-                Unwritten rules
-                {implicitRules.length > 0 && (
-                  <span className="px-1.5 py-0.5 rounded bg-bb-surface border border-bb-border text-[10px] text-bb-text-muted tabular-nums normal-case tracking-normal">
-                    {implicitRules.length}
+              <path strokeLinecap="round" strokeLinejoin="round" d="M11 17l-5-5 5-5m7 5h-12" />
+            </svg>
+          </button>
+          {!sidebarCollapsed && (
+            <>
+              <ActivityFeed
+                activities={activities}
+                open={activityOpen}
+                onToggle={() => setActivityOpen(!activityOpen)}
+                onSelect={handleSelectNode}
+              />
+              <section className="shrink-0 border-b border-bb-border flex flex-col">
+                <button
+                  onClick={() => setImplicitRulesOpen(!implicitRulesOpen)}
+                  className="shrink-0 h-11 px-4 flex items-center justify-between text-[11px] font-medium uppercase tracking-wider text-bb-text-secondary hover:text-bb-text-primary transition-colors"
+                >
+                  <span className="flex items-center gap-2">
+                    Unwritten rules
+                    {implicitRules.length > 0 && (
+                      <span className="px-1.5 py-0.5 rounded bg-bb-surface border border-bb-border text-[10px] text-bb-text-muted tabular-nums normal-case tracking-normal">
+                        {implicitRules.length}
+                      </span>
+                    )}
                   </span>
-                )}
-              </span>
-              <svg className={`w-4 h-4 transition-transform ${implicitRulesOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-            {implicitRulesOpen && (
-              <div className="px-4 pb-4 max-h-56 overflow-y-auto space-y-px">
-                {implicitRules.length === 0 ? (
-                  <div className="py-4 text-center">
-                    <p className="text-xs text-bb-text-secondary">None detected yet</p>
-                    <p className="text-[11px] text-bb-text-muted mt-1">Add more timeline entries and decisions.</p>
-                  </div>
-                ) : (
-                  implicitRules.map((r, i) => (
-                    <div key={i} className="text-xs py-2 border-b border-bb-border last:border-0">
-                      <p className="text-bb-text-secondary leading-relaxed">{r.observation}</p>
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <span className="text-[10px] text-bb-text-muted tabular-nums">
-                          {Math.round(r.confidence * 100)}% confidence
-                        </span>
-                        <button
-                          onClick={() => handleSelectNode(r.page_slug)}
-                          className="text-[10px] text-bb-accent hover:text-bb-accent-strong truncate max-w-[120px]"
-                        >
-                          {r.page_title}
-                        </button>
+                  <svg className={`w-4 h-4 transition-transform ${implicitRulesOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {implicitRulesOpen && (
+                  <div className="px-4 pb-4 max-h-56 overflow-y-auto space-y-px">
+                    {implicitRules.length === 0 ? (
+                      <div className="py-4 text-center">
+                        <p className="text-xs text-bb-text-secondary">None detected yet</p>
+                        <p className="text-[11px] text-bb-text-muted mt-1">Add more timeline entries and decisions.</p>
                       </div>
-                    </div>
-                  ))
+                    ) : (
+                      implicitRules.map((r, i) => (
+                        <div key={i} className="text-xs py-2 border-b border-bb-border last:border-0">
+                          <p className="text-bb-text-secondary leading-relaxed">{r.observation}</p>
+                          <div className="flex items-center gap-2 mt-1.5">
+                            <span className="text-[10px] text-bb-text-muted tabular-nums">
+                              {Math.round(r.confidence * 100)}% confidence
+                            </span>
+                            <button
+                              onClick={() => handleSelectNode(r.page_slug)}
+                              className="text-[10px] text-bb-accent hover:text-bb-accent-strong truncate max-w-[120px]"
+                            >
+                              {r.page_title}
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 )}
-              </div>
-            )}
-          </section>
-          <MembersCard
-            members={members}
-            invites={invites}
-            open={membersOpen}
-            onToggle={() => setMembersOpen(!membersOpen)}
-          />
+              </section>
+              <MembersCard
+                members={members}
+                invites={invites}
+                open={membersOpen}
+                onToggle={() => setMembersOpen(!membersOpen)}
+              />
+            </>
+          )}
         </aside>
 
         {/* Mobile side panel drawer */}
