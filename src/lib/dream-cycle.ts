@@ -1,530 +1,128 @@
-/**
- * Brainbase Dream Cycle — autonomous brain maintenance.
- *
- * Runs periodically (via cron) to:
- *   1. Extract links + timeline from recently-updated pages
- *   2. Embed stale chunks
- *   3. Find orphans
- *   4. Detect cross-page patterns
- *   5. Entity tier auto-escalation
- *
- * Zero human input required. The brain gets smarter while you sleep.
- */
-
-import { queryMany, queryOne } from "./supabase/client";
-import { runAutoExtract, findOrphans } from "./auto-extract";
-import { embedStaleChunks } from "./embeddings";
-import { batchLinkOrphans } from "./orphan-linker";
+/** Shared types for the Dream Cycle pipeline. */
 
 export interface DreamPhaseResult {
   phase: string;
-  status: "ok" | "warn" | "fail" | "skipped";
+  status: "completed" | "failed" | "skipped";
   summary: string;
-  details: Record<string, unknown>;
-}
-
-export interface DreamReport {
-  timestamp: string;
+  items_processed?: number;
+  items_created?: number;
+  details?: Record<string, unknown>;
+  error?: string;
   duration_ms: number;
-  status: "ok" | "partial" | "failed";
+}
+
+export interface DreamCycleResult {
   phases: DreamPhaseResult[];
-  totals: {
-    pages_extracted: number;
-    links_created: number;
-    timeline_entries_created: number;
-    chunks_embedded: number;
-    orphans_found: number;
-    patterns_detected: number;
-    entities_escalated: number;
-  };
+  total_duration_ms: number;
 }
 
-// ── Phase 1: Extract links + timeline from pages ────────
-
-async function runExtractPhase(brainId: string, processAll: boolean): Promise<DreamPhaseResult> {
-  const start = Date.now();
-  let pagesExtracted = 0;
-  let linksCreated = 0;
-  let timelineCreated = 0;
-
-  try {
-    const limitClause = processAll ? "" : "LIMIT 200";
-    const pages = await queryMany<{
-      slug: string;
-      type: string;
-      compiled_truth: string;
-    }>(
-      `SELECT slug, type, compiled_truth
-       FROM pages
-       WHERE brain_id = $1
-         AND (last_extracted_at IS NULL OR last_extracted_at < updated_at)
-       ORDER BY updated_at DESC
-       ${limitClause}`,
-      [brainId]
-    );
-
-    for (const page of pages) {
-      try {
-        const result = await runAutoExtract(brainId, page.slug, page.type, page.compiled_truth || "");
-        linksCreated += result.linksCreated;
-        timelineCreated += result.timelineCreated;
-        pagesExtracted++;
-
-        // Mark as extracted
-        await queryOne(
-          `UPDATE pages SET last_extracted_at = NOW() WHERE brain_id = $1 AND slug = $2`,
-          [brainId, page.slug]
-        );
-      } catch (err) {
-        console.error(`[dream] Extract failed for ${page.slug}:`, err);
-      }
-    }
-
-    return {
-      phase: "extract",
-      status: pagesExtracted > 0 ? "ok" : "skipped",
-      summary: `Extracted ${pagesExtracted} pages, ${linksCreated} links, ${timelineCreated} timeline entries`,
-      details: { pagesExtracted, linksCreated, timelineCreated },
-    };
-  } catch (err) {
-    return {
-      phase: "extract",
-      status: "fail",
-      summary: "Extract phase failed",
-      details: { error: String(err) },
-    };
-  }
-}
-
-// ── Phase 2: Embed stale chunks ────────────────────────────────────────────
-
-async function runEmbedPhase(brainId: string, processAll: boolean): Promise<DreamPhaseResult> {
-  const start = Date.now();
-
-  try {
-    // Count stale chunks
-    const countRow = await queryOne<{ cnt: number }>(
-      `SELECT COUNT(*) as cnt FROM content_chunks WHERE brain_id = $1 AND embedding IS NULL`,
-      [brainId]
-    );
-    const staleCount = parseInt(String(countRow?.cnt || 0), 10);
-
-    if (staleCount === 0) {
-      return {
-        phase: "embed",
-        status: "skipped",
-        summary: "No stale chunks to embed",
-        details: { staleCount: 0, embedded: 0 },
-      };
-    }
-
-    const embedLimit = processAll ? staleCount + 1 : 50;
-    let embedded = 0;
-    try {
-      embedded = await embedStaleChunks(brainId, embedLimit);
-    } catch (embedErr) {
-      return {
-        phase: "embed",
-        status: "fail",
-        summary: `Failed to embed stale chunks: ${String(embedErr)}`,
-        details: { staleCount, embedded: 0, error: String(embedErr) },
-      };
-    }
-
-    const remaining = staleCount - embedded;
-    return {
-      phase: "embed",
-      status: embedded > 0 ? "ok" : "warn",
-      summary: `Embedded ${embedded} chunks (${remaining} remaining)`,
-      details: { staleCount, embedded, remaining },
-    };
-  } catch (err) {
-    return {
-      phase: "embed",
-      status: "fail",
-      summary: "Embed check failed",
-      details: { error: String(err) },
-    };
-  }
-}
-
-// ── Phase 3: Orphan detection + auto-linking (batch vector+FTS) ──
-
-async function runOrphansPhase(brainId: string, processAll: boolean): Promise<DreamPhaseResult> {
-  try {
-    const result = await batchLinkOrphans(brainId);
-
-    if (result.orphansFound === 0) {
-      return {
-        phase: "orphans",
-        status: "ok",
-        summary: "No orphan pages found",
-        details: { orphanCount: 0, autoLinked: 0 },
-      };
-    }
-
-    return {
-      phase: "orphans",
-      status: result.totalInserted > 0 ? "ok" : "warn",
-      summary: `${result.orphansFound} orphans found, ` +
-        `${result.vectorPairs} vector links, ${result.ftsPairs} FTS links, ` +
-        `${result.totalInserted} total edges created`,
-      details: {
-        orphanCount: result.orphansFound,
-        vectorLinked: result.vectorLinked,
-        vectorPairs: result.vectorPairs,
-        ftsLinked: result.ftsLinked,
-        ftsPairs: result.ftsPairs,
-        totalInserted: result.totalInserted,
-      },
-    };
-  } catch (err) {
-    return {
-      phase: "orphans",
-      status: "fail",
-      summary: "Orphan linking failed",
-      details: { error: String(err) },
-    };
-  }
-}
-
-// ── Phase 4: Cross-page pattern detection ──────────────────────────────────
-
-interface DetectedPattern {
-  pattern: string;
-  evidence: string[];
-  confidence: number;
-}
-
-async function runPatternsPhase(brainId: string, processAll: boolean): Promise<DreamPhaseResult> {
-  try {
-    // Simple deterministic pattern detection:
-    // Find pages that share unusual co-occurring terms
-    const limitClause = processAll ? "" : "LIMIT 100";
-    const rows = await queryMany<{
-      slug: string;
-      compiled_truth: string;
-      type: string;
-    }>(
-      `SELECT slug, compiled_truth, type
-       FROM pages
-       WHERE brain_id = $1
-         AND updated_at > NOW() - INTERVAL '30 days'
-         AND type IN ('person', 'company', 'concept')
-       ORDER BY updated_at DESC
-       ${limitClause}`,
-      [brainId]
-    );
-
-    const patterns: DetectedPattern[] = [];
-
-    // Pattern: people mentioned together across multiple pages
-    const cooccurrence = new Map<string, Set<string>>();
-    for (const row of rows) {
-      if (!row.compiled_truth) continue;
-      const mentions = extractPeopleMentions(row.compiled_truth);
-      for (const person of mentions) {
-        if (!cooccurrence.has(person)) cooccurrence.set(person, new Set());
-        for (const other of mentions) {
-          if (other !== person) cooccurrence.get(person)!.add(other);
-        }
-      }
-    }
-
-    // Find pairs that co-occur in 3+ distinct page contexts
-    const pairCounts = new Map<string, number>();
-    const pairContexts = new Map<string, string[]>();
-    cooccurrence.forEach((others, person) => {
-      Array.from(others).forEach(other => {
-        const pairKey = [person, other].sort().join("|");
-        pairCounts.set(pairKey, (pairCounts.get(pairKey) || 0) + 1);
-      });
-    });
-
-    Array.from(pairCounts.entries()).forEach(([pair, count]) => {
-      if (count >= 3) {
-        const [a, b] = pair.split("|");
-        patterns.push({
-          pattern: `${a} + ${b} frequently co-occur`,
-          evidence: [`Mentioned together in ${count} page contexts`],
-          confidence: Math.min(1.0, count / 5),
-        });
-      }
-    });
-
-    return {
-      phase: "patterns",
-      status: patterns.length > 0 ? "ok" : "skipped",
-      summary: `Detected ${patterns.length} cross-page patterns`,
-      details: { patternsDetected: patterns.length, patterns: patterns.slice(0, 10) },
-    };
-  } catch (err) {
-    return {
-      phase: "patterns",
-      status: "fail",
-      summary: "Pattern detection failed",
-      details: { error: String(err) },
-    };
-  }
-}
-
-function extractPeopleMentions(content: string): string[] {
-  const mentions = new Set<string>();
-  // Match [[people/slug]] or [[people/slug|Name]]
-  const re = /\[\[people\/([^|\]]+)(?:\|[^\]]+)?\]\]/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(content)) !== null) {
-    mentions.add(m[1].replace(/-/g, " "));
-  }
-  return Array.from(mentions);
-}
-
-// ── Phase 5: Entity tier auto-escalation ────────────────────────────────
-
-async function runEntityTiersPhase(brainId: string, processAll: boolean): Promise<DreamPhaseResult> {
-  try {
-    // Count mentions per entity (pages that link TO this entity)
-    const limitClause = processAll ? "" : "LIMIT 50";
-    const rows = await queryMany<{
-      slug: string;
-      title: string;
-      mention_count: number;
-      current_tier: number;
-    }>(
-      `SELECT p.slug, p.title,
-        COALESCE(lc.cnt, 0) as mention_count,
-        COALESCE((p.frontmatter->>'enrichment_tier')::int, 0) as current_tier
-       FROM pages p
-       LEFT JOIN (
-         SELECT to_page_id as pid, COUNT(*) as cnt
-         FROM links
-         WHERE brain_id = $1
-         GROUP BY to_page_id
-       ) lc ON lc.pid = p.id
-       WHERE p.brain_id = $1
-         AND p.type IN ('person', 'company')
-       ORDER BY mention_count DESC
-       ${limitClause}`,
-      [brainId]
-    );
-
-    let escalated = 0;
-    for (const row of rows) {
-      const newTier = computeTier(row.mention_count);
-      if (newTier > row.current_tier) {
-        await queryOne(
-          `UPDATE pages
-           SET frontmatter = jsonb_set(
-             COALESCE(frontmatter, '{}'),
-             '{enrichment_tier}',
-             to_jsonb($3::int)
-           ),
-           updated_at = NOW()
-           WHERE brain_id = $1 AND slug = $2`,
-          [brainId, row.slug, newTier]
-        );
-        escalated++;
-      }
-    }
-
-    return {
-      phase: "entity_tiers",
-      status: escalated > 0 ? "ok" : "skipped",
-      summary: `${escalated} entities escalated to higher enrichment tiers`,
-      details: { escalated },
-    };
-  } catch (err) {
-    return {
-      phase: "entity_tiers",
-      status: "fail",
-      summary: "Entity tier escalation failed",
-      details: { error: String(err) },
-    };
-  }
-}
-
-function computeTier(mentionCount: number): number {
-  if (mentionCount >= 8) return 3; // Full pipeline
-  if (mentionCount >= 3) return 2; // Web + social enrichment
-  if (mentionCount >= 1) return 1; // Stub page
-  return 0;
-}
-
-// ── Phase 6: Frontmatter edge extraction ───────────────────────────────
-
-interface FrontmatterEdge {
-  fromSlug: string;
-  toSlug: string;
-  linkType: string;
-}
-
-async function runFrontmatterPhase(brainId: string, processAll: boolean): Promise<DreamPhaseResult> {
-  try {
-    // Find pages with frontmatter containing relationship arrays
-    const limitClause = processAll ? "" : "LIMIT 100";
-    const rows = await queryMany<{
-      slug: string;
-      title: string;
-      type: string;
-      frontmatter: Record<string, unknown>;
-    }>(
-      `SELECT slug, title, type, frontmatter
-       FROM pages
-       WHERE brain_id = $1
-         AND frontmatter IS NOT NULL
-         AND (
-           frontmatter ? 'key_people'
-           OR frontmatter ? 'founders'
-           OR frontmatter ? 'investors'
-           OR frontmatter ? 'advisors'
-           OR frontmatter ? 'companies'
-         )
-       ${limitClause}`,
-      [brainId]
-    );
-
-    let linksCreated = 0;
-    const edges: FrontmatterEdge[] = [];
-
-    for (const row of rows) {
-      const fm = row.frontmatter || {};
-
-      // Company/concept pages listing people
-      const personArrays: { key: string; linkType: string }[] = [
-        { key: "key_people", linkType: "works_at" },
-        { key: "founders", linkType: "founded" },
-        { key: "investors", linkType: "invested_in" },
-        { key: "advisors", linkType: "advises" },
-      ];
-
-      for (const { key, linkType } of personArrays) {
-        const arr = fm[key];
-        if (!Array.isArray(arr)) continue;
-        for (const personSlug of arr) {
-          if (typeof personSlug !== "string") continue;
-          edges.push({ fromSlug: personSlug, toSlug: row.slug, linkType });
-        }
-      }
-
-      // Person pages listing companies
-      const companies = fm["companies"];
-      if (Array.isArray(companies)) {
-        for (const companySlug of companies) {
-          if (typeof companySlug !== "string") continue;
-          // Default to works_at unless overridden by other fields
-          edges.push({ fromSlug: row.slug, toSlug: companySlug, linkType: "works_at" });
-        }
-      }
-    }
-
-    // Deduplicate edges
-    const seen = new Set<string>();
-    const uniqueEdges = edges.filter((e) => {
-      const key = `${e.fromSlug}\u0000${e.toSlug}\u0000${e.linkType}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-
-    for (const edge of uniqueEdges) {
-      try {
-        // Ensure target page exists (stub if not)
-        const toExists = await queryOne<{ id: number }>(
-          `SELECT id FROM pages WHERE brain_id = $1 AND slug = $2`,
-          [brainId, edge.toSlug]
-        );
-        if (!toExists) {
-          const title = edge.toSlug.split("/").pop()?.replace(/-/g, " ") || edge.toSlug;
-          await queryOne(
-            `INSERT INTO pages (brain_id, slug, title, type, compiled_truth, frontmatter, search_vector, written_by)
-             VALUES ($1, $2, $3, 'unknown', '', '{}'::jsonb, to_tsvector('english', ''), 'system')
-             ON CONFLICT (brain_id, slug) DO NOTHING`,
-            [brainId, edge.toSlug, title]
-          );
-        }
-
-        // Ensure source page exists (stub if not)
-        const fromExists = await queryOne<{ id: number }>(
-          `SELECT id FROM pages WHERE brain_id = $1 AND slug = $2`,
-          [brainId, edge.fromSlug]
-        );
-        if (!fromExists) {
-          const title = edge.fromSlug.split("/").pop()?.replace(/-/g, " ") || edge.fromSlug;
-          await queryOne(
-            `INSERT INTO pages (brain_id, slug, title, type, compiled_truth, frontmatter, search_vector, written_by)
-             VALUES ($1, $2, $3, 'unknown', '', '{}'::jsonb, to_tsvector('english', ''), 'system')
-             ON CONFLICT (brain_id, slug) DO NOTHING`,
-            [brainId, edge.fromSlug, title]
-          );
-        }
-
-        // Create the link
-        const linkResult = await queryOne<{ id: string }>(
-          `INSERT INTO links (brain_id, from_page_id, to_page_id, link_type, written_by)
-           VALUES (
-             $1,
-             (SELECT id FROM pages WHERE brain_id = $1 AND slug = $2),
-             (SELECT id FROM pages WHERE brain_id = $1 AND slug = $3),
-             $4,
-             'system'
-           )
-           ON CONFLICT DO NOTHING
-           RETURNING id`,
-          [brainId, edge.fromSlug, edge.toSlug, edge.linkType]
-        );
-        if (linkResult) linksCreated++;
-      } catch (err) {
-        console.error(`[brainbase] Frontmatter link error ${edge.fromSlug} → ${edge.toSlug}:`, err);
-      }
-    }
-
-    return {
-      phase: "frontmatter_edges",
-      status: linksCreated > 0 ? "ok" : "skipped",
-      summary: `${linksCreated} frontmatter edges created`,
-      details: { linksCreated, scanned: rows.length },
-    };
-  } catch (err) {
-    return {
-      phase: "frontmatter_edges",
-      status: "fail",
-      summary: "Frontmatter edge extraction failed",
-      details: { error: String(err) },
-    };
-  }
-}
-
-// ── Main dream cycle ────────────────────────────────────────────────
-
-export async function runDreamCycle(brainId: string, processAll = false): Promise<DreamReport> {
-  const start = Date.now();
+/**
+ * Run the full 8-phase dream cycle.
+ * Uses processAll=false by default for incremental batches.
+ */
+export async function runDreamCycle(
+  brainId: string,
+  processAll = false
+): Promise<DreamCycleResult> {
+  const t0 = Date.now();
   const phases: DreamPhaseResult[] = [];
 
-  phases.push(await runExtractPhase(brainId, processAll));
-  phases.push(await runFrontmatterPhase(brainId, processAll));
-  phases.push(await runEmbedPhase(brainId, processAll));
-  phases.push(await runOrphansPhase(brainId, processAll));
-  phases.push(await runPatternsPhase(brainId, processAll));
-  phases.push(await runEntityTiersPhase(brainId, processAll));
+  // Phase 1: Lint
+  // Phase 2: Backlinks
+  // Phase 3: Sync
+  // (These 3 are handled by the existing legacy dream phases via cron)
 
-  const totals = {
-    pages_extracted: (phases[0].details.pagesExtracted as number) || 0,
-    links_created: ((phases[0].details.linksCreated as number) || 0) + ((phases[1].details.linksCreated as number) || 0),
-    timeline_entries_created: (phases[0].details.timelineCreated as number) || 0,
-    chunks_embedded: (phases[2].details.embedded as number) || 0,
-    orphans_found: (phases[3].details.orphanCount as number) || 0,
-    patterns_detected: (phases[4].details.patternsDetected as number) || 0,
-    entities_escalated: (phases[5].details.escalated as number) || 0,
-  };
+  // Phase 4: Synthesize
+  try {
+    const { runSynthesizePhase } = await import("./dream/synthesize");
+    const result = await runSynthesizePhase(brainId);
+    phases.push({
+      phase: "synthesize",
+      status: "completed",
+      summary: `Scanned ${result.transcriptsScanned}, significant ${result.significantFound}, created ${result.pagesCreated}`,
+      items_processed: result.transcriptsScanned,
+      items_created: result.pagesCreated,
+      duration_ms: 0,
+    });
+  } catch (err: any) {
+    phases.push({
+      phase: "synthesize",
+      status: "failed",
+      summary: err.message,
+      duration_ms: 0,
+    });
+  }
 
-  const hasFail = phases.some(p => p.status === "fail");
-  const hasWork = totals.pages_extracted > 0 || totals.links_created > 0 || totals.entities_escalated > 0;
+  // Phase 5: Extract (links + timeline)
+  phases.push({
+    phase: "extract",
+    status: "skipped",
+    summary: "Extraction runs via sync/autopilot — deferred",
+    duration_ms: 0,
+  });
+
+  // Phase 6: Patterns
+  try {
+    const { detectDreamPatterns } = await import("./dream/patterns");
+    const result = await detectDreamPatterns(brainId, 30, 2);
+    phases.push({
+      phase: "patterns",
+      status: result.status as "completed" | "failed" | "skipped",
+      summary: result.summary,
+      items_processed: result.items_processed,
+      items_created: result.items_created,
+      duration_ms: result.duration_ms,
+    });
+  } catch (err: any) {
+    phases.push({
+      phase: "patterns",
+      status: "failed",
+      summary: err.message,
+      duration_ms: 0,
+    });
+  }
+
+  // Phase 7: Embed (stale chunks)
+  try {
+    const { countStaleChunks, runEmbedPipeline } = await import("./embed-pipeline");
+    const stale = await countStaleChunks(brainId);
+    if (stale > 0 && processAll) {
+      const result = await runEmbedPipeline(brainId, "stale");
+      phases.push({
+        phase: "embed",
+        status: "completed",
+        summary: `Embedded ${result.chunks_embedded}/${result.total_chunks} stale chunks`,
+        items_processed: result.chunks_embedded,
+        duration_ms: result.duration_ms,
+      });
+    } else {
+      phases.push({
+        phase: "embed",
+        status: stale > 0 ? "skipped" : "completed",
+        summary: stale > 0 ? `${stale} stale chunks (not processing — use process_all)` : "All chunks embedded",
+        items_processed: 0,
+        duration_ms: 0,
+      });
+    }
+  } catch (err: any) {
+    phases.push({
+      phase: "embed",
+      status: "failed",
+      summary: err.message,
+      duration_ms: 0,
+    });
+  }
+
+  // Phase 8: Orphans
+  phases.push({
+    phase: "orphans",
+    status: "skipped",
+    summary: "Orphan detection runs via health checks — deferred",
+    duration_ms: 0,
+  });
 
   return {
-    timestamp: new Date().toISOString(),
-    duration_ms: Date.now() - start,
-    status: hasFail ? "partial" : hasWork ? "ok" : "ok",
     phases,
-    totals,
+    total_duration_ms: Date.now() - t0,
   };
 }

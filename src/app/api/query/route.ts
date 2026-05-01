@@ -4,6 +4,7 @@ import { searchBrain, vectorSearchBrain, expandQuery, SearchResult } from "@/lib
 import { generateEmbeddings } from "@/lib/embeddings";
 import { queryMany } from "@/lib/supabase/client";
 import { captureEvalCandidate } from "@/lib/eval-pipeline";
+import { expandQueries } from "@/lib/query-expand";
 import {
   rrfFusion,
   dedupBySlug,
@@ -35,6 +36,7 @@ export async function POST(req: NextRequest) {
     q?: string;
     limit?: number;
     detail?: "low" | "medium" | "high";
+    expand?: boolean;
   };
   try {
     body = await req.json();
@@ -61,35 +63,49 @@ export async function POST(req: NextRequest) {
   const detail = body.detail || detailForIntent(intent);
 
   try {
-    // ── Phase 1: Parallel keyword + vector search ────────────────
+    // ── Phase 0: Multi-query expansion (LLM-powered) ──────────
+    const expand = body.expand !== false; // default true
+    let expandedQueries: string[];
+    if (expand && detail !== "low") {
+      expandedQueries = await expandQueries(q);
+    } else {
+      expandedQueries = [q]; // skip LLM for low-detail or explicit disable
+    }
+    const expansionApplied = expandedQueries.length > 1;
+
+    // ── Phase 1: Search each expanded query in parallel ─────────
     const keywordLimit = detail === "high" ? limit * 3 : limit * 2;
+    const allKeywordLists: SearchResult[][] = [];
+    const allVectorLists: SearchResult[][] = [];
 
-    // Expand aliases: "YC" → "Y Combinator", "UVA" → "University of Virginia"
-    const expandedQ = expandQuery(q);
+    for (const variant of expandedQueries) {
+      // Expand aliases: "YC" → "Y Combinator"
+      const expandedVariant = expandQuery(variant);
 
-    const [keywordResults, embedding] = await Promise.all([
-      searchBrain(auth.brainId, q, keywordLimit),
-      generateEmbeddings([expandedQ]).then((e) => e?.[0] ?? null),
-    ]);
+      const [kw, emb] = await Promise.all([
+        searchBrain(auth.brainId, variant, keywordLimit),
+        generateEmbeddings([expandedVariant]).then((e) => e?.[0] ?? null),
+      ]);
 
-    let vectorResults: SearchResult[] = [];
-    if (embedding) {
-      vectorResults = await vectorSearchBrain(
-        auth.brainId,
-        embedding,
-        keywordLimit
-      );
+      allKeywordLists.push(kw);
+
+      if (emb) {
+        const vec = await vectorSearchBrain(auth.brainId, emb, keywordLimit);
+        allVectorLists.push(dedupBySlug(vec));
+      }
     }
 
-    // B1 FIX: Dedup vector results by slug BEFORE RRF.
-    const dedupedVector = dedupBySlug(vectorResults);
+    // ── Phase 1.5: Pin exact matches, merge into RRF ──────────
+    const allPinnedLists: SearchResult[][] = [];
+    for (const list of allKeywordLists) {
+      allPinnedLists.push(pinExactMatches(list, q));
+    }
+    for (const list of allVectorLists) {
+      allPinnedLists.push(pinExactMatches(list, q));
+    }
 
-    // B2 FIX v2: Pin exact title/slug matches at rank 0 in each list
-    const pinnedKeyword = pinExactMatches(keywordResults, q);
-    const pinnedVector = pinExactMatches(dedupedVector, q);
-
-    // ── Phase 2: RRF Fusion ─────────────────────────────────────
-    const fused = rrfFusion([pinnedKeyword, pinnedVector]);
+    // ── Phase 2: RRF Fusion across ALL query expansions ────────
+    const fused = rrfFusion(allPinnedLists);
 
     // ── Phase 3: Normalize scores 0-1 ────────────────────────────
     const normed = normalizeScores(fused);

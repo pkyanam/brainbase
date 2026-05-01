@@ -407,6 +407,38 @@ export async function ensureMinionsSchema(): Promise<void> {
  * when it's NULL. This is a safety net for external tools (like gbrain
  * CLI) that haven't been updated to include brain_id in their queries.
  */
+/**
+ * v0.25 — Dream cycle schema: dream_verdicts cache for transcript significance.
+ */
+export async function ensureDreamSchema(): Promise<void> {
+  const ensureTable = async (label: string, sql: string) => {
+    try {
+      await query(sql);
+    } catch (err) {
+      console.error(`[brainbase] Dream schema ensure failed for ${label}:`, err);
+    }
+  };
+
+  await ensureTable("dream_verdicts", `
+    CREATE TABLE IF NOT EXISTS dream_verdicts (
+      file_path     TEXT NOT NULL,
+      content_hash  TEXT NOT NULL,
+      verdict       TEXT NOT NULL,
+      brain_id      UUID,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (file_path, content_hash)
+    )
+  `);
+
+  await ensureTable("idx_dream_verdicts_brain", `
+    CREATE INDEX IF NOT EXISTS idx_dream_verdicts_brain
+      ON dream_verdicts (brain_id, created_at DESC)
+      WHERE brain_id IS NOT NULL
+  `);
+
+  console.log("[brainbase] Dream schema ensured");
+}
+
 export async function installBrainIdTriggers(): Promise<void> {
   try {
     const legacyBrainId = '00000000-0000-0000-0000-000000000001';

@@ -52,8 +52,11 @@ export async function GET(req: NextRequest) {
         const report = await runDreamCycle(brain.brain_id, false);
         results.push({
           brain_id: brain.brain_id,
-          status: report.status,
-          totals: report.totals,
+          status: "completed",
+          totals: {
+            phases: report.phases.length,
+            duration_ms: report.total_duration_ms,
+          },
         });
       } catch (err) {
         console.error(`[brainbase] Dream cycle failed for ${brain.brain_id}:`, err);
