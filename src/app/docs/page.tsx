@@ -68,6 +68,13 @@ Connect via JSON-RPC 2.0 to \`POST /api/mcp\`.
 | \`upsert_trigger\` | Create automation rule | \`name, conditions, actions\` |
 | \`run_triggers\` | Manually fire rules on page | \`slug, title, type?, content?\` |
 
+### Enrichment (REST API)
+
+Brainbase's enrichment pipeline creates rich, sourced pages for people and companies with
+a single API call. No manual page building required.
+
+\`POST /api/brain/enrich\` — See [Enrichment API](#enrichment) section below.
+
 ---
 
 ## 4. How to Think About the Brain
@@ -631,6 +638,7 @@ await brain.addLink("people/garry-tan", "companies/y-combinator", "works_at");`}
             { method: "POST", color: "bg-bb-accent-dim/20 text-bb-accent-dim", path: "/api/brain/link", desc: "Create a link. Body: {from, to, link_type?}" },
             { method: "DELETE", color: "bg-red-900/20 text-red-400", path: "/api/brain/link", desc: "Remove a link. Body: {from, to}" },
             { method: "POST", color: "bg-bb-accent-dim/20 text-bb-accent-dim", path: "/api/brain/timeline", desc: "Add timeline entry. Body: {slug, date, summary, detail?, source?}" },
+            { method: "POST", color: "bg-bb-accent/20 text-bb-accent font-semibold", path: "/api/brain/enrich", desc: "✨ Enrich a person or company page. Tiered pipeline with Brave web search + OpenAI formatting. Body: {name, type?, tier?, context?, force?}" },
           ].map((ep) => (
             <div key={ep.path} className="border border-bb-border rounded-xl p-4">
               <div className="flex items-center gap-3 mb-2">
@@ -649,6 +657,85 @@ await brain.addLink("people/garry-tan", "companies/y-combinator", "works_at");`}
             <code className="text-sm text-bb-text-primary">/api/mcp</code>
           </div>
           <p className="text-sm text-bb-text-muted">JSON-RPC MCP endpoint. 19 tools: search, query, get_page, get_links, get_backlinks, get_timeline, get_health, get_stats, get_graph, list_pages, traverse_graph, put_page, delete_page, add_link, remove_link, add_timeline_entry, upsert_trigger, list_triggers, run_triggers.</p>
+        </div>
+      </section>
+
+      {/* ══════════════ ENRICHMENT API ══════════════ */}
+      <section id="enrichment" className="mb-12 scroll-mt-24">
+        <h2 className="text-lg font-semibold mb-3">Enrichment API</h2>
+        <p className="text-sm text-bb-text-secondary mb-4">
+          The enrichment pipeline creates rich, sourced pages for people and companies
+          with a single API call. It uses Brave Search for live web research and GPT-5.4-nano
+          for structured template formatting. No manual page building required.
+        </p>
+
+        <div className="border border-bb-border rounded-xl overflow-hidden mb-6">
+          <div className="bg-bb-bg-secondary px-4 py-3 border-b border-bb-border">
+            <h3 className="text-sm font-semibold text-bb-text-primary">Quick Start</h3>
+          </div>
+          <div className="p-4 bg-bb-bg-primary">
+            <pre className="text-xs text-bb-text-secondary overflow-x-auto">
+              <code>{`# Enrich a person (Tier 2 — includes Brave web search)
+curl -X POST ${baseUrl}/api/brain/enrich \\
+  -H "Authorization: Bearer <YOUR_API_KEY>" \\
+  -H "Content-Type: application/json" \\
+  -d '{"name":"Satya Nadella","type":"person","tier":2}'
+
+# Response
+# {
+#   "slug": "people/satya-nadella",
+#   "action": "created",
+#   "sources": ["brave", "openai"],
+#   "_diag": { "braveCalled": true, "braveResults": 5 },
+#   "linksCreated": 3,
+#   "rawDataStored": 2
+# }`}</code>
+            </pre>
+          </div>
+        </div>
+
+        <div className="space-y-4 mb-6">
+          <h3 className="text-sm font-semibold text-bb-text-primary">Tiers</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {[
+              { tier: "1", name: "Deep Research", web: "Brave (10 results)", sections: "12 sections", latency: "Async (<5 min)", desc: "Inner circle, key contacts" },
+              { tier: "2", name: "Standard", web: "Brave (5 results)", sections: "4 sections", latency: "Sync (<10s)", desc: "Notable entities — recommended default" },
+              { tier: "3", name: "Quick Lookup", web: "OpenAI only", sections: "2 sections", latency: "Sync (<5s)", desc: "Quick lookups, no web search" },
+            ].map((t) => (
+              <div key={t.tier} className="border border-bb-border rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="px-2 py-0.5 bg-bb-accent/10 text-bb-accent text-xs font-mono font-bold rounded">Tier {t.tier}</span>
+                  <span className="text-sm font-semibold text-bb-text-primary">{t.name}</span>
+                </div>
+                <div className="space-y-1 text-xs text-bb-text-muted">
+                  <div>Web: {t.web}</div>
+                  <div>Sections: {t.sections}</div>
+                  <div>Latency: {t.latency}</div>
+                  <div className="text-bb-text-secondary pt-1">{t.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="border border-bb-border rounded-xl overflow-hidden">
+          <div className="bg-bb-bg-secondary px-4 py-3 border-b border-bb-border">
+            <h3 className="text-sm font-semibold text-bb-text-primary">Request Body</h3>
+          </div>
+          <div className="p-4 bg-bb-bg-primary space-y-2 text-sm">
+            <div className="grid grid-cols-[120px_1fr] gap-2 text-xs">
+              <span className="text-bb-text-muted font-mono">name *</span>
+              <span className="text-bb-text-secondary">Entity name (e.g., "Satya Nadella", "Stripe")</span>
+              <span className="text-bb-text-muted font-mono">type</span>
+              <span className="text-bb-text-secondary"><code>person</code>, <code>company</code>, or <code>auto</code> (heuristics — default)</span>
+              <span className="text-bb-text-muted font-mono">tier</span>
+              <span className="text-bb-text-secondary"><code>1</code>, <code>2</code> (default), or <code>3</code></span>
+              <span className="text-bb-text-muted font-mono">context</span>
+              <span className="text-bb-text-secondary">Free text about the entity (1.6-1.9x richer pages)</span>
+              <span className="text-bb-text-muted font-mono">force</span>
+              <span className="text-bb-text-secondary">Re-enrich even if updated within 7 days</span>
+            </div>
+          </div>
         </div>
       </section>
 

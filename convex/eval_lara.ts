@@ -3,7 +3,7 @@ import { query, mutation, action, internalMutation, internalAction, internalQuer
 import { internal } from "./_generated/api";
 
 // ═══════════════════════════════════════════════════════════════════
-// Lara Eval Dataset — 120+ queries with verified ground truth
+// Lara Eval Dataset — 139 queries with verified ground truth
 // Completely separate from Arlan's eval. Does NOT clear his candidates.
 // ═══════════════════════════════════════════════════════════════════
 
@@ -290,7 +290,7 @@ function precisionAt(ret: string[], exp: string[], k: number): number {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// DATASET: 120 queries across 16 categories
+// DATASET: 139 queries across 16 categories
 // Ground truth verified against actual brain content (May 2026)
 // ═══════════════════════════════════════════════════════════════════
 

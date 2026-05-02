@@ -8,7 +8,7 @@ interface EvalRun {
   p_at_5: number;
   latency_ms: number;
   date: string;
-  status: "pass" | "fail";
+  status: "pass" | "fail" | "running";
 }
 
 interface Props {
@@ -163,20 +163,27 @@ export default function EvalResultsTable({ evals, loading, error }: Props) {
                 {fmtDate(row.date)}
               </td>
               <td className="py-3 pl-3">
-                <span
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                    row.status === "pass"
-                      ? "bg-bb-success/10 text-bb-success border border-bb-success/20"
-                      : "bg-bb-danger/10 text-bb-danger border border-bb-danger/20"
-                  }`}
-                >
+                {row.status === "running" ? (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-bb-accent/10 text-bb-accent border border-bb-accent/20">
+                    <span className="w-1.5 h-1.5 rounded-full bg-bb-accent animate-pulse" />
+                    Running...
+                  </span>
+                ) : (
                   <span
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      row.status === "pass" ? "bg-bb-success" : "bg-bb-danger"
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                      row.status === "pass"
+                        ? "bg-bb-success/10 text-bb-success border border-bb-success/20"
+                        : "bg-bb-danger/10 text-bb-danger border border-bb-danger/20"
                     }`}
-                  />
-                  {row.status === "pass" ? "Pass" : "Fail"}
-                </span>
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        row.status === "pass" ? "bg-bb-success" : "bg-bb-danger"
+                      }`}
+                    />
+                    {row.status === "pass" ? "Pass" : "Fail"}
+                  </span>
+                )}
               </td>
             </tr>
           ))}

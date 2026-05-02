@@ -126,7 +126,7 @@ export const runBrainEmbed = internalAction({
   handler: async (_ctx, args) => {
     console.log(`[convex:embed] Embedding ${args.brainId}`);
     try {
-      const result = await embedBrainChunks(args.brainId, 100);
+      const result = await embedBrainChunks(args.brainId, 40);
       console.log(`[convex:embed] Done:`, JSON.stringify(result).slice(0, 200));
       return { status: "ok", brainId: args.brainId, result };
     } catch (err: any) {

@@ -18,7 +18,7 @@ interface EvalRun {
   p_at_5: number;
   latency_ms: number;
   date: string;
-  status: "pass" | "fail";
+  status: "pass" | "fail" | "running";
 }
 
 interface EvalCandidate {
@@ -83,6 +83,7 @@ export default function EvalDashboard() {
   );
   const seedLaraEval = useMutation(api.eval_lara.seedLaraEval);
   const runLaraEval = useMutation(api.eval_lara.runLaraEval);
+  const clearLaraEval = useMutation(api.eval_lara.clearLaraEval);
 
   // Map Convex runs to UI format
   const mappedRuns: EvalRun[] = ((showLara ? laraRuns : convexRuns) || []).map((run: any) => ({
@@ -93,7 +94,7 @@ export default function EvalDashboard() {
     p_at_5: run.avgP5 ?? 0,
     latency_ms: run.avgLatencyMs ?? 0,
     date: run._creationTime ? new Date(run._creationTime).toLocaleDateString() : "",
-    status: run.status === "completed" ? "pass" as const : "fail" as const,
+    status: run.status === "completed" ? "pass" : run.status === "running" ? "running" : "fail",
   }));
 
   // Fetch candidates via Convex
@@ -172,6 +173,19 @@ export default function EvalDashboard() {
       setLaraRunLoading(false);
     }
   }, [brainId, runLaraEval]);
+
+  const handleClearLara = useCallback(async () => {
+    if (!brainId) return;
+    try {
+      await clearLaraEval({ brainId });
+      setToast({ message: "Lara eval cleared. Re-seed when ready.", type: "success" });
+    } catch (err: unknown) {
+      setToast({
+        message: err instanceof Error ? err.message : "Failed to clear Lara eval",
+        type: "error",
+      });
+    }
+  }, [brainId, clearLaraEval]);
 
   const handleSaveCaptureSettings = useCallback(async () => {
     setToast({ message: "Capture settings saved", type: "success" });
@@ -369,16 +383,21 @@ export default function EvalDashboard() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {/* Mode toggle — always visible */}
             <button
               onClick={() => setShowLara(!showLara)}
               className={`hidden md:inline-flex h-11 px-4 items-center gap-2 text-sm font-medium rounded-lg border transition-colors ${
                 showLara
-                  ? "bg-bb-accent/10 border-bb-accent text-bb-accent"
+                  ? "border-bb-border text-bb-text-muted hover:text-bb-text-primary hover:border-bb-border-strong"
                   : "border-bb-border text-bb-text-muted hover:text-bb-text-primary hover:border-bb-border-strong"
               }`}
+              title={showLara ? "Switch to Arlan's eval" : "Switch to Lara's eval"}
             >
-              {showLara ? "Lara Eval" : "Arlan Eval"}
+              <span className={`w-2 h-2 rounded-full ${showLara ? "bg-bb-accent" : "bg-bb-text-muted"}`} />
+              {showLara ? "Switch to Arlan Eval" : "Switch to Lara Eval"}
             </button>
+
+            {/* Lara mode actions */}
             {showLara && !hasLaraCandidates && (
               <button
                 onClick={handleSeedLara}
@@ -393,27 +412,41 @@ export default function EvalDashboard() {
               </button>
             )}
             {showLara && hasLaraCandidates && (
-              <button
-                onClick={handleRunLara}
-                disabled={laraRunLoading}
-                className="inline-flex items-center gap-2 h-11 px-5 bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {laraRunLoading ? (
-                  <>
-                    <span className="w-4 h-4 border-2 border-bb-bg-primary/30 border-t-bb-bg-primary rounded-full animate-spin" />
-                    Running...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    Run Lara Eval
-                  </>
-                )}
-              </button>
+              <>
+                <button
+                  onClick={handleRunLara}
+                  disabled={laraRunLoading}
+                  className="inline-flex items-center gap-2 h-11 px-5 bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {laraRunLoading ? (
+                    <>
+                      <span className="w-4 h-4 border-2 border-bb-bg-primary/30 border-t-bb-bg-primary rounded-full animate-spin" />
+                      Running...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Run Lara Eval
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={handleClearLara}
+                  className="inline-flex items-center gap-2 h-11 px-4 bg-bb-surface hover:bg-bb-danger/10 text-bb-danger text-sm font-medium rounded-lg border border-bb-border transition-colors"
+                  title="Clear all Lara eval candidates and runs"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Clear
+                </button>
+              </>
             )}
+
+            {/* Arlan mode actions */}
             {!showLara && (
               <button
                 onClick={handleRunEval}
@@ -445,7 +478,7 @@ export default function EvalDashboard() {
                         d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                       />
                     </svg>
-                    Run Eval
+                    Run Arlan Eval
                   </>
                 )}
               </button>
