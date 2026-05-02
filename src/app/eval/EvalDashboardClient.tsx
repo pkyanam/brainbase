@@ -121,8 +121,8 @@ export default function EvalDashboard() {
     setRunLoading(true);
     try {
       const r = await fetch("/api/eval/run", { method: "POST" });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.detail || data.error || `HTTP ${r.status}`);
       setToast({ message: "Eval run started!", type: "success" });
       // Refresh list after a short delay
       setTimeout(() => {

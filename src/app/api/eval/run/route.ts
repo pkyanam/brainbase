@@ -3,13 +3,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { resolveAuth } from "@/lib/auth-guard";
-import {
-  createEvalRun,
-  completeEvalRun,
-  failEvalRun,
-  insertEvalResult,
-  getEvalCandidates,
-} from "@/lib/eval-pipeline";
+import { query, queryOne, queryMany } from "@/lib/supabase/client";
 import { searchBrain, expandQuery } from "@/lib/supabase/search";
 import { generateEmbeddings } from "@/lib/embeddings";
 import { vectorSearchBrain } from "@/lib/supabase/search";
@@ -22,13 +16,55 @@ export async function POST(req: NextRequest) {
     let body: { baseline_id?: string; limit?: number } = {};
     try { body = await req.json().catch(() => ({})); } catch { /* defaults */ }
 
+    // ── Ensure eval tables exist ──
+    try {
+      await query(`CREATE TABLE IF NOT EXISTS eval_runs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        brain_id UUID NOT NULL, status TEXT NOT NULL DEFAULT 'running',
+        total_queries INTEGER DEFAULT 0, avg_mrr DOUBLE PRECISION,
+        avg_p3 DOUBLE PRECISION, avg_p5 DOUBLE PRECISION,
+        avg_latency_ms DOUBLE PRECISION, passed INTEGER DEFAULT 0,
+        failed INTEGER DEFAULT 0, baseline_id UUID, meta JSONB,
+        created_at TIMESTAMPTZ DEFAULT NOW(), completed_at TIMESTAMPTZ
+      )`);
+      await query(`CREATE TABLE IF NOT EXISTS eval_results (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        run_id UUID NOT NULL, query_text TEXT NOT NULL,
+        returned_slugs TEXT[], expected_slugs TEXT[],
+        mrr DOUBLE PRECISION, p3 DOUBLE PRECISION,
+        p5 DOUBLE PRECISION, latency_ms DOUBLE PRECISION,
+        passed BOOLEAN, raw_meta JSONB,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`);
+      await query(`CREATE TABLE IF NOT EXISTS eval_capture_failures (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        brain_id UUID NOT NULL, tool TEXT, query_text TEXT,
+        reason TEXT NOT NULL, error_message TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`);
+    } catch (e) {
+      console.error("[eval/run] Inline schema ensure failed:", e);
+    }
+
     const queryLimit = Math.min(body.limit || 50, 500);
-    const runId = await createEvalRun(auth.brainId, body.baseline_id);
+
+    // Create the run
+    const runRow = await queryOne<{ id: string }>(
+      `INSERT INTO eval_runs (brain_id, status, baseline_id)
+       VALUES ($1, 'running', $2) RETURNING id`,
+      [auth.brainId, body.baseline_id || null]
+    );
+    const runId = runRow!.id;
 
     // Background processing
     runEvalInBackground(auth.brainId, runId, queryLimit).catch((err) => {
       console.error("[eval] Background eval failed:", err);
-      failEvalRun(runId, err.message).catch(() => {});
+      query(
+        `UPDATE eval_runs SET status = 'failed',
+         meta = jsonb_set(COALESCE(meta, '{}'), '{error}', to_jsonb($2::text)),
+         completed_at = NOW() WHERE id = $1`,
+        [runId, String(err.message).slice(0, 1000)]
+      ).catch(() => {});
     });
 
     return NextResponse.json({ run_id: runId, status: "running" });
@@ -42,9 +78,22 @@ export async function POST(req: NextRequest) {
 }
 
 async function runEvalInBackground(brainId: string, runId: string, limit: number) {
-  const candidates = await getEvalCandidates(brainId, { limit, tool: "query" });
+  // Get candidates
+  const { rows: candidates } = await query<any>(
+    `SELECT id, brain_id, tool, query_text, result_count, top_slugs, meta
+     FROM eval_candidates
+     WHERE brain_id = $1 AND tool = 'query'
+     ORDER BY created_at DESC LIMIT $2`,
+    [brainId, limit]
+  );
+
   if (candidates.length === 0) {
-    await failEvalRun(runId, "No captured candidates to evaluate");
+    await query(
+      `UPDATE eval_runs SET status = 'failed',
+       meta = jsonb_set(COALESCE(meta, '{}'), '{error}', to_jsonb('No captured candidates to evaluate')),
+       completed_at = NOW() WHERE id = $1`,
+      [runId]
+    );
     return;
   }
 
@@ -73,11 +122,12 @@ async function runEvalInBackground(brainId: string, runId: string, limit: number
       const ms = Date.now() - t0;
       const isPassed = p3 >= 0.3;
 
-      await insertEvalResult(runId, {
-        queryText: c.query_text, returnedSlugs: ret, expectedSlugs: exp,
-        mrr, p3, p5, latencyMs: ms, passed: isPassed,
-        rawMeta: { candidate_id: c.id },
-      });
+      await query(
+        `INSERT INTO eval_results (run_id, query_text, returned_slugs, expected_slugs,
+           mrr, p3, p5, latency_ms, passed, raw_meta)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [runId, c.query_text, ret, exp, mrr, p3, p5, ms, isPassed, JSON.stringify({ candidate_id: c.id })]
+      );
 
       totalMrr += mrr; totalP3 += p3; totalP5 += p5; totalLatency += ms;
       if (isPassed) passed++; else failed++;
@@ -88,14 +138,14 @@ async function runEvalInBackground(brainId: string, runId: string, limit: number
   }
 
   const n = candidates.length;
-  await completeEvalRun(runId, {
-    totalQueries: n,
-    avgMrr: n > 0 ? totalMrr / n : 0,
-    avgP3: n > 0 ? totalP3 / n : 0,
-    avgP5: n > 0 ? totalP5 / n : 0,
-    avgLatencyMs: n > 0 ? Math.round(totalLatency / n) : 0,
-    passed, failed,
-  });
+  await query(
+    `UPDATE eval_runs
+     SET status = 'completed', total_queries = $1, avg_mrr = $2, avg_p3 = $3,
+         avg_p5 = $4, avg_latency_ms = $5, passed = $6, failed = $7, completed_at = NOW()
+     WHERE id = $8`,
+    [n, n > 0 ? totalMrr / n : 0, n > 0 ? totalP3 / n : 0, n > 0 ? totalP5 / n : 0,
+     n > 0 ? Math.round(totalLatency / n) : 0, passed, failed, runId]
+  );
 }
 
 function computeMetrics(ret: string[], exp: string[]) {
