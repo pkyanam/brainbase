@@ -51,6 +51,30 @@ export async function runDreamCycle(
     }
   }
 
+  // ── Phase 1b: Link tweets to their authors ──────────────
+  {
+    const p0 = Date.now();
+    try {
+      const { linkTweetsToAuthors } = await import("./tweet-linker");
+      const result = await linkTweetsToAuthors(brainId, 100);
+      phases.push({
+        phase: "tweet_author_link",
+        status: "completed",
+        summary: `${result.tweetsScanned} tweets scanned, ${result.linked} linked to authors, ${result.noHandle} no-handle, ${result.errors} errors`,
+        items_processed: result.tweetsScanned,
+        items_created: result.linked,
+        duration_ms: Date.now() - p0,
+      });
+    } catch (err: any) {
+      phases.push({
+        phase: "tweet_author_link",
+        status: "failed",
+        summary: err.message,
+        duration_ms: Date.now() - p0,
+      });
+    }
+  }
+
   // ── Phase 2: Link orphans via vector + FTS similarity ─────
   {
     const p0 = Date.now();
