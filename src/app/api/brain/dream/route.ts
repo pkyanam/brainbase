@@ -70,7 +70,13 @@ export async function GET(req: NextRequest) {
       `SELECT COUNT(*)::int as cnt FROM pages WHERE brain_id = $1 AND (frontmatter->>'dream_generated')::boolean = true`, [auth.brainId]
     );
     const orphanCount = await queryOne<{ cnt: number }>(
-      `SELECT COUNT(*)::int as cnt FROM pages p WHERE p.brain_id = $1 AND NOT EXISTS (SELECT 1 FROM links l WHERE l.brain_id = $1 AND l.to_page_id = p.id)`,
+      `SELECT COUNT(*)::int as cnt FROM pages p
+       WHERE p.brain_id = $1
+         AND NOT EXISTS (
+           SELECT 1 FROM links l
+           WHERE l.brain_id = $1
+             AND (l.from_page_id = p.id OR l.to_page_id = p.id)
+         )`,
       [auth.brainId]
     );
     const lastExtracted = await queryOne<{ ts: string | null }>(
