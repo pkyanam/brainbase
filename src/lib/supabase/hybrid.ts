@@ -13,6 +13,7 @@
  */
 
 import { SearchResult } from "./search";
+import { getRankingConfig } from "../ranking-config";
 
 // ─── RRF (Reciprocal Rank Fusion) ────────────────────────────────
 const RRF_K = 60;
@@ -215,7 +216,6 @@ export function forceExactMatchTopFinal(
 }
 
 // ─── Compiled Truth Boost ─────────────────────────────────────────
-const COMPILED_TRUTH_BOOST = 1.15;
 
 /**
  * Apply compiled_truth boost (1.15x) to results whose best chunk is from compiled_truth.
@@ -224,15 +224,16 @@ const COMPILED_TRUTH_BOOST = 1.15;
 export function applyCompiledTruthBoost(
   fused: Map<string, { score: number; results: SearchResult[]; boost_factors?: BoostFactors }>
 ): void {
+  const cfg = getRankingConfig();
   for (const [, entry] of fused) {
     const hasCompiledTruth = entry.results.some(
       (r) => (r as any).chunk_source === "compiled_truth" || (r as any).chunk_source === undefined
     );
     if (hasCompiledTruth) {
-      entry.score *= COMPILED_TRUTH_BOOST;
+      entry.score *= cfg.compiledTruthBoost;
       if (!entry.boost_factors) entry.boost_factors = { total: 1.0 };
-      entry.boost_factors.compiled_truth = COMPILED_TRUTH_BOOST;
-      entry.boost_factors.total = (entry.boost_factors.total || 1) * COMPILED_TRUTH_BOOST;
+      entry.boost_factors.compiled_truth = cfg.compiledTruthBoost;
+      entry.boost_factors.total = (entry.boost_factors.total || 1) * cfg.compiledTruthBoost;
     }
   }
 }
@@ -250,25 +251,14 @@ export function applyCompiledTruthBoost(
  *   - meeting       1.1×  (decision records)
  *   - tweet/blog    0.9×  (bulk/chronological, slightly discount)
  */
-const SOURCE_BOOSTS: Record<string, number> = {
-  original: 1.5,
-  writing: 1.4,
-  concept: 1.3,
-  person: 1.2,
-  meeting: 1.1,
-  decision: 1.1,
-  tweet: 0.9,
-  blog: 0.9,
-};
-
 export function applySourceBoost(
   fused: Map<string, { score: number; results: SearchResult[]; boost_factors?: BoostFactors }>
 ): void {
+  const cfg = getRankingConfig();
   for (const [, entry] of fused) {
-    // Use the type from the highest-scoring result in this entry
     const bestResult = entry.results.reduce((a, b) => (a.score > b.score ? a : b), entry.results[0]);
     const pageType = bestResult?.type?.toLowerCase() || "";
-    const multiplier = SOURCE_BOOSTS[pageType] || 1.0;
+    const multiplier = cfg.sourceBoosts[pageType] || 1.0;
 
     if (multiplier !== 1.0) {
       entry.score *= multiplier;
@@ -287,10 +277,11 @@ export function applyBacklinkBoost(
   fused: Map<string, { score: number; results: SearchResult[]; boost_factors?: BoostFactors }>,
   backlinks: Map<string, number>
 ): void {
+  const cfg = getRankingConfig();
   for (const [slug, entry] of fused) {
     const bl = backlinks.get(slug) || 0;
     if (bl > 0) {
-      const multiplier = 1 + 0.05 * Math.log(1 + bl);
+      const multiplier = 1 + cfg.backlinkCoef * Math.log(1 + bl);
       entry.score *= multiplier;
       if (!entry.boost_factors) entry.boost_factors = { total: 1.0 };
       entry.boost_factors.backlinks = Math.round(multiplier * 1000) / 1000;

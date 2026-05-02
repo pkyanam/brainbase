@@ -32,6 +32,7 @@ import {
   QueryIntent,
   BoostFactors,
 } from "./supabase/hybrid";
+import { classifyIntentLLM } from "./intent-classifier";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const ASK_MODEL = "gpt-5.4-nano";
@@ -69,7 +70,7 @@ async function runHybridSearch(
   limit: number
 ): Promise<SearchOutput[]> {
   try {
-    const intent: QueryIntent = classifyIntent(q);
+    const intent: QueryIntent = (await classifyIntentLLM(q, classifyIntent)) as QueryIntent;
     const detail = detailForIntent(intent);
 
     const keywordLimit = detail === "high" ? limit * 3 : limit * 2;
@@ -341,7 +342,7 @@ export async function askBrain(
       relevance: r.score,
     })),
     confidence,
-    intent: classifyIntent(question),
+    intent: (await classifyIntentLLM(question, classifyIntent)) as QueryIntent,
     searchedAt: new Date().toISOString(),
   };
 }

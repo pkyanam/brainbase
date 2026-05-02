@@ -25,6 +25,7 @@ import {
   OrdinalMatch,
   DateRangeMatch,
 } from "@/lib/supabase/hybrid";
+import { classifyIntentLLM } from "@/lib/intent-classifier";
 
 export async function POST(req: NextRequest) {
   const auth = await resolveApiAuth(req);
@@ -58,8 +59,8 @@ export async function POST(req: NextRequest) {
 
   const limit = Math.min(Number(body.limit) || 20, 100);
 
-  // Classify intent (zero-latency heuristic, no LLM)
-  const intent: QueryIntent = classifyIntent(q);
+  // Classify intent (LLM with regex fallback)
+  const intent: QueryIntent = (await classifyIntentLLM(q, classifyIntent)) as QueryIntent;
   const detail = body.detail || detailForIntent(intent);
 
   try {
