@@ -277,10 +277,7 @@ export async function traverseGraph(
   console.log(`[brainbase] traverseGraph: slug=${startSlug} depth=${depthCap} direction=${direction} linkType=${linkType || 'none'} typeFilter="${typeFilter}"`);
 
   if (direction === "out") {
-    const rows = await queryMany<{
-      slug: string; title: string; type: string; depth: number; link_type: string;
-    }>(
-      `WITH RECURSIVE traversal AS (
+    const sql = `WITH RECURSIVE traversal AS (
         SELECT p.id, p.slug, p.title, p.type, 0 AS depth, ARRAY[p.id] AS path, NULL::text AS link_type
         FROM pages p WHERE p.brain_id = $1 AND p.slug = $2
 
@@ -294,13 +291,17 @@ export async function traverseGraph(
       )
       SELECT slug, title, type, depth, link_type
       FROM traversal
-      ORDER BY depth, title`,
-      [brainId, startSlug, depthCap, ...typeParam]
-    );
-    return rows.map(r => ({
-      slug: r.slug, title: r.title, type: r.type, depth: r.depth,
-      link_type: r.link_type || undefined,
-    }));
+      ORDER BY depth, title`;
+    const params = [brainId, startSlug, depthCap, ...typeParam];
+    console.log(`[brainbase] traverse out: params.length=${params.length} typeFilter="${typeFilter}"`);
+    try {
+      const rows = await queryMany<{slug: string; title: string; type: string; depth: number; link_type: string;}>(sql, params);
+      console.log(`[brainbase] traverse out: ${rows.length} rows returned`);
+      return rows.map(r => ({slug: r.slug, title: r.title, type: r.type, depth: r.depth, link_type: r.link_type || undefined}));
+    } catch (err) {
+      console.error(`[brainbase] traverse out SQL error:`, err);
+      throw err;
+    }
   }
 
   if (direction === "in") {
