@@ -6,6 +6,19 @@ import { getCurrentUserId } from "./auth-guard";
 export async function resolveApiAuth(
   req: NextRequest
 ): Promise<{ userId: string; brainId: string } | null> {
+  // 0. Convex service-to-service auth (X-Convex-Secret)
+  const convexSecret = req.headers.get("x-convex-secret");
+  if (convexSecret && convexSecret === process.env.CONVEX_EVAL_SECRET) {
+    const userId = "convex-eval-service";
+    const requestedBrainId = req.headers.get("x-brain-id");
+    if (requestedBrainId) {
+      return { userId, brainId: requestedBrainId };
+    }
+    // Default to a known brain — for eval, use the header's brain id
+    const defaultBrainId = process.env.CONVEX_EVAL_BRAIN_ID;
+    if (defaultBrainId) return { userId, brainId: defaultBrainId };
+  }
+
   // 1. API key auth (Bearer token)
   const authHeader = req.headers.get("authorization");
   const token = authHeader ? authHeader.match(/^Bearer\s+(.+)$/i)?.[1] : null;

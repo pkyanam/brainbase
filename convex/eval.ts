@@ -110,15 +110,15 @@ export const processRun = internalMutation({
 
     try {
       const baseUrl = process.env.BRAINBASE_API_URL || "https://brainbase.belweave.ai";
-      const apiKey = process.env.BRAINBASE_API_KEY || "";
+      const evalSecret = process.env.CONVEX_EVAL_SECRET || "";
 
       // Call Brainbase query API
       const res = await fetch(`${baseUrl}/api/query`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
           "X-Brain-Id": args.brainId,
+          "X-Convex-Secret": evalSecret,
         },
         body: JSON.stringify({ q: candidate.queryText, limit: 10, detail: "medium" }),
       });
