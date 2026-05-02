@@ -207,7 +207,7 @@ async function bulkInsertLinks(
     const values = chunk
       .map(
         (_p, j) =>
-          `($1, $${j * 4 + 2}, $${j * 4 + 3}, 'semantic', $${j * 4 + 4})`
+          `($1, $${j * 3 + 2}, $${j * 3 + 3}, 'semantic', $${j * 3 + 4})`
       )
       .join(", ");
 
