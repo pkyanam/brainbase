@@ -91,7 +91,7 @@ async function runEvalCycle(brainId: string, runId: string, limit: number) {
   const { rows: candidates } = await query<any>(
     `SELECT id, brain_id, tool, query_text, result_count, top_slugs, meta
      FROM eval_candidates
-     WHERE brain_id = $1 AND tool = 'query'
+     WHERE brain_id = $1 AND (tool = 'query' OR tool = 'search')
      ORDER BY created_at DESC LIMIT $2`,
     [brainId, limit]
   );
