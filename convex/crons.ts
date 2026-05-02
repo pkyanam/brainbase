@@ -11,6 +11,8 @@ import { internal } from "./_generated/api";
 
 const crons = cronJobs();
 
+export default crons;
+
 // Daily dream cycle (06:00 UTC = midnight EST)
 // ── Daily: run dream cycle across all brains ──
 // @ts-ignore — types regenerate after `npx convex dev`

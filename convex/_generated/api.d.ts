@@ -8,7 +8,12 @@
  * @module
  */
 
+import type * as crons from "../crons.js";
+import type * as dream from "../dream.js";
 import type * as eval from "../eval.js";
+import type * as jobs from "../jobs.js";
+import type * as lib_brainbase from "../lib/brainbase.js";
+import type * as lib_supabase from "../lib/supabase.js";
 
 import type {
   ApiFromModules,
@@ -17,7 +22,12 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  crons: typeof crons;
+  dream: typeof dream;
   eval: typeof eval;
+  jobs: typeof jobs;
+  "lib/brainbase": typeof lib_brainbase;
+  "lib/supabase": typeof lib_supabase;
 }>;
 
 /**
