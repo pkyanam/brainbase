@@ -93,7 +93,7 @@ export async function resolveEntity(
     updatedAt: null,
     linkCount: 0,
     notable: true, // User requested it, so it's notable
-    detectedType: requestedType === "auto" ? "person" : requestedType,
+    detectedType: requestedType === "auto" ? null : requestedType,
   };
 }
 
@@ -118,12 +118,12 @@ async function getLinkCount(brainId: string, slug: string): Promise<number> {
 function resolveType(
   dbType: string,
   requested: EnrichEntityType | "auto"
-): EnrichEntityType {
+): EnrichEntityType | null {
   if (requested !== "auto") return requested;
   if (dbType === "person") return "person";
   if (dbType === "company" || dbType === "organization") return "company";
-  // Fall through to heuristics when dbType is something else (concept, note, etc.)
-  return "person";
+  // Unknown type — let the heuristic figure it out
+  return null;
 }
 
 /**
