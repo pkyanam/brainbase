@@ -123,14 +123,21 @@ export default function EvalDashboard() {
       const r = await fetch("/api/eval/run", { method: "POST" });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.detail || data.error || `HTTP ${r.status}`);
-      setToast({ message: "Eval run started!", type: "success" });
-      // Refresh list after a short delay
-      setTimeout(() => {
-        fetch("/api/eval/list")
-          .then((r) => r.json())
-          .then((d) => setEvals(d.evals || []))
-          .catch(() => {});
-      }, 2000);
+      setToast({ message: "Eval run complete!", type: "success" });
+      // Refresh list immediately (processing is synchronous now)
+      const listR = await fetch("/api/eval/list");
+      const listData = await listR.json().catch(() => ({}));
+      const mapped = (listData.runs || []).map((run: any) => ({
+        id: run.id,
+        query: `Eval #${run.total_queries || 0} queries`,
+        mrr: run.avg_mrr ?? 0,
+        p_at_3: run.avg_p3 ?? 0,
+        p_at_5: run.avg_p5 ?? 0,
+        latency_ms: run.avg_latency_ms ?? 0,
+        date: run.created_at ?? "",
+        status: run.status === "completed" ? "pass" : run.status === "failed" ? "fail" : "pass",
+      }));
+      setEvals(mapped);
     } catch (err: unknown) {
       setToast({
         message:
