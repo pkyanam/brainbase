@@ -26,12 +26,14 @@ export async function POST(req: NextRequest) {
   let auth: { userId: string; brainId: string } | null = null;
 
   if (isCron) {
-    // Cron auth — use default brain from env
-    const brainId = req.headers.get("x-brain-id") || process.env.CONVEX_EVAL_BRAIN_ID;
-    if (!brainId) {
-      return NextResponse.json({ error: "No brain ID configured for cron auth" }, { status: 400 });
+    // Cron auth — auto-detect brain from DB
+    const brains = await queryMany<{ brain_id: string }>(
+      `SELECT brain_id FROM pages GROUP BY brain_id ORDER BY COUNT(*) DESC LIMIT 1`
+    );
+    if (brains.length === 0) {
+      return NextResponse.json({ error: "No brains found in database" }, { status: 404 });
     }
-    auth = { userId: "cron-service", brainId };
+    auth = { userId: "cron-service", brainId: brains[0].brain_id };
   } else {
     auth = await resolveApiAuth(req);
   }
