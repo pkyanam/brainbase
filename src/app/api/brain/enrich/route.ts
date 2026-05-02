@@ -21,12 +21,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveApiAuth } from "@/lib/api-auth";
 import { enrichEntity } from "@/lib/enrich";
 import { submitJob } from "@/lib/minions/queue";
+import { ensureRawDataSchema, ensureTagsColumn } from "@/lib/db-setup";
 import type { EnrichRequest, EnrichTier } from "@/lib/enrich/types";
 
 // Configured tiers that must run async (because they exceed Vercel's 10s limit)
 const ASYNC_TIERS: EnrichTier[] = [1];
 
 export async function POST(req: NextRequest) {
+  // Idempotent schema init — ensures tables exist regardless of auth path
+  await ensureRawDataSchema();
+  await ensureTagsColumn();
+
   const auth = await resolveApiAuth(req);
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

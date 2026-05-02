@@ -113,6 +113,7 @@ async function getLinkCount(brainId: string, slug: string): Promise<number> {
 
 /**
  * Map a page type to a standardized entity type.
+ * When type is "auto" and entity not found, use heuristics.
  */
 function resolveType(
   dbType: string,
@@ -121,7 +122,72 @@ function resolveType(
   if (requested !== "auto") return requested;
   if (dbType === "person") return "person";
   if (dbType === "company" || dbType === "organization") return "company";
-  // Default to person for unknown types
+  // Fall through to heuristics when dbType is something else (concept, note, etc.)
+  return "person";
+}
+
+/**
+ * Auto-detect entity type when the user didn't specify one.
+ * Uses fast heuristics — no LLM call needed.
+ */
+export function detectEntityType(name: string): EnrichEntityType {
+  const n = name.trim();
+
+  // Known company suffixes
+  const companySuffixes = [
+    "Inc", "Inc.", "Corp", "Corp.", "Corporation", "LLC", "Ltd", "Ltd.",
+    "GmbH", "AG", "SA", "SAS", "SRL", "PLC", "LLP", "LP",
+    "Incorporated", "Limited",
+  ];
+  for (const suffix of companySuffixes) {
+    if (n.endsWith(` ${suffix}`) || n === suffix) return "company";
+  }
+
+  // Descriptor words that suggest a company
+  const companyWords = [
+    "Labs", "Technologies", "Software", "Solutions", "Systems",
+    "Ventures", "Capital", "Partners", "Group", "Holdings",
+    "Networks", "Analytics", "Dynamics", "Robotics", "Therapeutics",
+    "Biosciences", "Energy", "Financial", "Insurance", "Media",
+    "Studios", "Games", "Pharmaceuticals", "Airlines",
+  ];
+  for (const word of companyWords) {
+    if (n.toLowerCase().includes(` ${word.toLowerCase()}`)) return "company";
+  }
+
+  // Common single-word company names (startup/tech-heavy subset)
+  const knownCompanies = new Set([
+    "stripe", "google", "apple", "microsoft", "amazon", "meta", "netflix",
+    "openai", "anthropic", "deepmind", "notion", "figma", "linear",
+    "vercel", "supabase", "clerk", "convex", "replit", "cursor",
+    "midjourney", "runway", "huggingface", "stability", "cohere",
+    "adept", "character", "perplexity", "mistral", "inflection",
+    "databricks", "snowflake", "palantir", "airbnb", "uber", "lyft",
+    "doordash", "instacart", "robinhood", "coinbase", "binance",
+    "stripe", "square", "paypal", "spotify", "slack", "zoom",
+    "atlassian", "salesforce", "oracle", "sap", "ibm", "intel",
+    "nvidia", "amd", "tesla", "rivian", "lucid", "sonos", "peloton",
+    "grammarly", "calendly", "lattice", "rippling", "deel", "remote",
+    "canva", "miro", "webflow", "spline", "unity", "epic",
+    "bloomberg", "reuters", "axios", "theinformation", "techcrunch",
+    "sequoia", "benchmark", "a16z", "accel", "foundersfund",
+    "greylock", "kleiner", "lightspeed", "indexventures", "bessemer",
+    "ycombinator",
+  ]);
+  if (knownCompanies.has(n.toLowerCase())) return "company";
+
+  // Person signals: single name, honorifics, known person names
+  const personPrefixes = ["Dr.", "Dr ", "Mr.", "Mr ", "Mrs.", "Mrs ",
+    "Ms.", "Ms ", "Prof.", "Prof ", "Sen.", "Rep.", "Gov."];
+  for (const prefix of personPrefixes) {
+    if (n.startsWith(prefix)) return "person";
+  }
+
+  // Two+ words with no company indicators → likely person
+  const wordCount = n.split(/\s+/).length;
+  if (wordCount >= 2) return "person";
+
+  // Single word, not in known companies → ambiguous, default person
   return "person";
 }
 

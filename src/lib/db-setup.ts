@@ -212,6 +212,10 @@ export async function ensureSchema(): Promise<void> {
     `);
 
     console.log("[brainbase] Schema ensured (multi-tenant)");
+
+    // v0.5 — Ensure new tables/columns exist (idempotent)
+    await ensureRawDataSchema();
+    await ensureTagsColumn();
   } catch (err) {
     console.error("[brainbase] Schema setup error:", err);
   }

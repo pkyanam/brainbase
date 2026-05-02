@@ -118,22 +118,22 @@ export const TIER_CONFIGS: Record<EnrichTier, TierConfig> = {
   1: {
     model: "gpt-5.4-nano",
     maxTokens: 4096,
-    externalSources: ["openai"],
-    sectionCount: 12, // Full person/company template
+    externalSources: ["perplexity", "openai"],
+    sectionCount: 12,
     deepCrossRef: true,
   },
   2: {
     model: "gpt-5.4-nano",
     maxTokens: 2048,
-    externalSources: ["openai"],
-    sectionCount: 6, // Core sections only
+    externalSources: ["perplexity", "openai"],
+    sectionCount: 6,
     deepCrossRef: false,
   },
   3: {
     model: "gpt-5.4-nano",
     maxTokens: 1024,
     externalSources: ["openai"],
-    sectionCount: 3, // State + summary only
+    sectionCount: 3,
     deepCrossRef: false,
   },
 };

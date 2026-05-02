@@ -13,14 +13,15 @@
  *   7. Cross-reference detected entities (create links)
  */
 
-import { resolveEntity, suggestSlug } from "./resolve";
-import { fetchFromOpenAI } from "./sources";
+import { resolveEntity, suggestSlug, detectEntityType } from "./resolve";
+import { fetchFromPerplexity, formatWithOpenAI } from "./sources";
 import { buildPersonPage, buildCompanyPage } from "./templates";
-import { putPage, addLink } from "../supabase/write";
+import { putPage, addLink, deletePage } from "../supabase/write";
 import { putRawData } from "../supabase/raw-data";
 import { addTag } from "../supabase/tags";
 import { logActivity } from "../activity";
 import type { EnrichRequest, EnrichResult, EnrichEntityType, EnrichTier } from "./types";
+import { TIER_CONFIGS } from "./types";
 
 /**
  * Main enrichment entry point.
@@ -40,7 +41,8 @@ export async function enrichEntity(
   const resolution = await resolveEntity(brainId, request.name, entityType);
 
   const detectedType: EnrichEntityType =
-    resolution.detectedType || (entityType === "auto" ? "person" : entityType);
+    resolution.detectedType ||
+    (entityType === "auto" ? detectEntityType(request.name) : entityType);
 
   // Skip if recently enriched (within 7 days) and not forced
   if (
@@ -63,24 +65,52 @@ export async function enrichEntity(
     };
   }
 
+  // ── Compute slug early (needed for raw data storage) ────────────────
+  const slug = resolution.exists
+    ? resolution.slug!
+    : suggestSlug(request.name, detectedType);
+
   // ── Step 2: Fetch external data ─────────────────────────────────────
-  const sourceData = await fetchFromOpenAI(
+  const config = TIER_CONFIGS[tier];
+  const usePerplexity = config.externalSources.includes("perplexity");
+
+  // Phase 2a: Web research via Perplexity (Tiers 1-2)
+  let researchData: string | null = null;
+  const allSources: string[] = [];
+  let rawDataStored = 0;
+
+  if (usePerplexity) {
+    const pp = await fetchFromPerplexity(request.name, detectedType, tier, request.context);
+    if (pp) {
+      researchData = pp.content;
+      allSources.push("perplexity");
+      await putRawData(brainId, slug || suggestSlug(request.name, detectedType), "perplexity", {
+        prompt: { name: request.name, type: detectedType, tier },
+        raw: pp.content,
+        meta: pp.meta,
+      });
+      rawDataStored++;
+    }
+  }
+
+  // Phase 2b: Format with OpenAI (all tiers)
+  const formatted = await formatWithOpenAI(
     request.name,
     detectedType,
     tier,
+    researchData,
     request.context
   );
+  allSources.push("openai");
 
   // ── Step 3: Generate structured page content ────────────────────────
   const template =
     detectedType === "company"
-      ? buildCompanyPage(request.name, sourceData.content, request.context)
-      : buildPersonPage(request.name, sourceData.content, request.context);
+      ? buildCompanyPage(request.name, formatted.content, request.context)
+      : buildPersonPage(request.name, formatted.content, request.context);
 
   // ── Step 4: Write page to brain ─────────────────────────────────────
-  const slug = resolution.exists
-    ? resolution.slug!
-    : suggestSlug(request.name, detectedType);
+  const isNew = !resolution.exists;
 
   const page = await putPage(brainId, {
     slug,
@@ -91,53 +121,70 @@ export async function enrichEntity(
     written_by: userId,
   });
 
-  await logActivity({
-    brainId,
-    actorUserId: userId,
-    action: resolution.exists ? "page_updated" : "page_created",
-    entityType: "page",
-    entitySlug: slug,
-    metadata: {
-      enriched_by: "enrich-pipeline",
-      tier,
-      source: "openai",
-    },
-  });
-
-  // ── Step 5: Store raw data (provenance) ─────────────────────────────
-  await putRawData(brainId, slug, "openai", {
-    prompt: { name: request.name, type: detectedType, tier },
-    raw: sourceData.content,
-    meta: sourceData.meta,
-  });
-
-  // ── Step 6: Apply suggested tags ────────────────────────────────────
-  for (const tag of template.tags) {
-    try {
-      await addTag(brainId, slug, tag);
-    } catch {
-      // Tag already exists or page not found — non-fatal
-    }
-  }
-
-  // ── Step 7: Cross-reference detected entities ───────────────────────
+  // ── Steps 5-7: Post-write operations (wrapped for rollback) ─────────
   let linksCreated = 0;
-  for (const entityName of template.detectedEntities.slice(0, 10)) {
-    const targetResolution = await resolveEntity(brainId, entityName, "auto");
-    if (targetResolution.exists && targetResolution.slug) {
+  try {
+    await logActivity({
+      brainId,
+      actorUserId: userId,
+      action: isNew ? "page_created" : "page_updated",
+      entityType: "page",
+      entitySlug: slug,
+      metadata: {
+        enriched_by: "enrich-pipeline",
+        tier,
+        sources: allSources.join(","),
+      },
+    });
+
+    // Step 5: Store raw data (provenance) — OpenAI formatted output
+    await putRawData(brainId, slug, "openai", {
+      prompt: { name: request.name, type: detectedType, tier },
+      raw: formatted.content,
+      meta: formatted.meta,
+    });
+    rawDataStored++;
+
+    // Step 6: Apply suggested tags
+    for (const tag of template.tags) {
       try {
-        const ok = await addLink(
-          brainId,
-          slug,
-          targetResolution.slug,
-          "mentions",
-          userId
-        );
-        if (ok) linksCreated++;
+        await addTag(brainId, slug, tag);
       } catch {
-        // Link may already exist — non-fatal
+        // Tag already exists or page not found — non-fatal
       }
     }
+
+    // Step 7: Cross-reference detected entities
+    for (const entityName of template.detectedEntities.slice(0, 10)) {
+      const targetResolution = await resolveEntity(brainId, entityName, "auto");
+      if (targetResolution.exists && targetResolution.slug) {
+        try {
+          const ok = await addLink(
+            brainId,
+            slug,
+            targetResolution.slug,
+            "mentions",
+            userId
+          );
+          if (ok) linksCreated++;
+        } catch {
+          // Link may already exist — non-fatal
+        }
+      }
+    }
+  } catch (postErr) {
+    // Rollback: if the page was newly created and post-write ops failed,
+    // delete the orphan page to avoid leaving incomplete data.
+    console.error("[enrich] Post-write operations failed:", postErr);
+    if (isNew) {
+      try {
+        await deletePage(brainId, slug);
+        console.error(`[enrich] Rolled back orphan page: ${slug}`);
+      } catch (rollbackErr) {
+        console.error(`[enrich] Rollback failed for ${slug}:`, rollbackErr);
+      }
+    }
+    throw postErr;
   }
 
   return {
@@ -146,14 +193,15 @@ export async function enrichEntity(
     type: detectedType,
     action: resolution.exists ? "updated" : "created",
     compiledTruth: template.content,
-    sources: ["openai"],
+    sources: allSources,
     newSignals: [
-      `Enriched via OpenAI (${sourceData.meta?.model}, tier ${tier})`,
+      `Enriched via ${allSources.join(" + ")} (tier ${tier}, ${formatted.meta?.model})`,
+      researchData ? "Web research data included" : "LLM knowledge only",
       ...template.detectedEntities.slice(0, 5).map((e) => `Detected entity: ${e}`),
     ],
     enrichedAt: new Date().toISOString(),
     linksCreated,
-    rawDataStored: 1,
+    rawDataStored,
   };
 }
 

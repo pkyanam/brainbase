@@ -136,13 +136,6 @@ function buildPersonBody(rawContent: string, context?: string): string {
     }
   }
 
-  // Add user context if provided (as Relationship section)
-  if (context) {
-    parts.push(
-      `## Relationship\n\n${context.trim()}`
-    );
-  }
-
   // Add empty Timeline marker — will be populated by subsequent enrichments
   parts.push(
     "## Timeline\n\n*No timeline entries yet. Run a dream cycle to auto-extract dates.*"
