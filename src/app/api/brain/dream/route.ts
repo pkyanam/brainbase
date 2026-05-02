@@ -69,14 +69,23 @@ export async function GET(req: NextRequest) {
     const dreamPages = await queryOne<{ cnt: number }>(
       `SELECT COUNT(*)::int as cnt FROM pages WHERE brain_id = $1 AND (frontmatter->>'dream_generated')::boolean = true`, [auth.brainId]
     );
+    const orphanCount = await queryOne<{ cnt: number }>(
+      `SELECT COUNT(*)::int as cnt FROM pages p WHERE p.brain_id = $1 AND NOT EXISTS (SELECT 1 FROM links l WHERE l.brain_id = $1 AND l.to_page_id = p.id)`,
+      [auth.brainId]
+    );
+    const lastExtracted = await queryOne<{ ts: string | null }>(
+      `SELECT MAX(updated_at)::text as ts FROM pages WHERE brain_id = $1`, [auth.brainId]
+    );
 
     return NextResponse.json({
       brain_id: auth.brainId,
       status: "ok",
       pages: pageCount?.cnt || 0,
       links: linkCount?.cnt || 0,
-      stale_chunks: staleChunks?.cnt || 0,
-      dream_generated_pages: dreamPages?.cnt || 0,
+      orphans: orphanCount?.cnt ?? 0,
+      stale_chunks: staleChunks?.cnt ?? 0,
+      tiered_entities: dreamPages?.cnt ?? 0,
+      last_extracted_at: lastExtracted?.ts || null,
     });
   } catch (err) {
     console.error("[brainbase] Dream status error:", err);

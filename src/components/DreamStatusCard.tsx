@@ -122,7 +122,7 @@ export default function DreamStatusCard({ brainId }: { brainId: string | null })
       )}
 
       <div className="mt-2 text-[10px] text-bb-text-muted/60">
-        Runs automatically every day. Click "Run Now" to process all pages at once.
+        Runs automatically every 6 hours. Click "Run Now" to process all pages at once.
       </div>
     </div>
   );

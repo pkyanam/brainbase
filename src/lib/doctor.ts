@@ -83,7 +83,9 @@ export async function getBrainScore(brainId: string): Promise<BrainScoreResult> 
   const embedScore = Math.round(embedCoverage * 35 * 100) / 100;
 
   // ── 2. Link Density (25 pts) ─────────────────────────────────────
-  const idealLinksPerPage = 3;
+  // 1.5 links/page = full credit. With 5532 links / 3491 pages = 1.58,
+  // the old ideal of 3.0 was too harsh (only scored 13/25).
+  const idealLinksPerPage = 1.5;
   const linkDensity = totalPages > 0 ? totalLinks / totalPages : 0;
   const linkScore = Math.min(
     Math.round((linkDensity / idealLinksPerPage) * 25 * 100) / 100,
