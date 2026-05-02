@@ -272,8 +272,9 @@ export async function traverseGraph(
 ): Promise<TraversalResult[]> {
   const depthCap = Math.min(depth, 10);
 
-  const typeFilter = linkType ? `AND l.link_type = $${direction === "both" ? 4 : 4}` : "";
+  const typeFilter = linkType ? `AND l.link_type = $4` : "";
   const typeParam = linkType ? [linkType] : [];
+  console.log(`[brainbase] traverseGraph: slug=${startSlug} depth=${depthCap} direction=${direction} linkType=${linkType || 'none'} typeFilter="${typeFilter}"`);
 
   if (direction === "out") {
     const rows = await queryMany<{
