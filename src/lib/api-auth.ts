@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { validateApiKey } from "./api-keys";
-import { canAccessBrain, getOrCreateBrainForUser } from "./brain-context";
+import { canAccessBrain, getOrCreateBrainForUser, getBrainsForUser } from "./brain-context";
 import { getCurrentUserId } from "./auth-guard";
 
 export async function resolveApiAuth(
@@ -12,8 +12,14 @@ export async function resolveApiAuth(
     const userId = "convex-eval-service";
     const requestedBrainId = req.headers.get("x-brain-id");
     if (requestedBrainId) {
-      // If X-Brain-Id looks like a Clerk user ID (user_*), resolve to brain UUID
+      // If X-Brain-Id looks like a Clerk user ID (user_*), resolve to best brain
       if (requestedBrainId.startsWith("user_")) {
+        // Use same resolution as the dashboard: get brains for user, pick first
+        const brains = await getBrainsForUser(requestedBrainId);
+        if (brains.length > 0) {
+          return { userId, brainId: brains[0].id };
+        }
+        // Fallback: create if none exist
         const brainId = await getOrCreateBrainForUser(requestedBrainId);
         return { userId, brainId };
       }
