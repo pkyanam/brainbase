@@ -40,25 +40,31 @@ export const listCandidates = query({
 export const seedAndRun = mutation({
   args: { brainId: v.string() },
   handler: async (ctx, args) => {
-    // Check for existing candidates
-    const existing = await ctx.db
+    // Clear old candidates and re-seed fresh
+    const oldCandidates = await ctx.db
       .query("evalCandidates")
       .withIndex("by_brain", (q) => q.eq("brainId", args.brainId))
-      .take(1);
+      .take(100);
+    for (const c of oldCandidates) {
+      await ctx.db.delete(c._id);
+    }
 
-    // Seed if empty
-    if (existing.length === 0) {
-      const seedQueries = ["stripe", "yc", "hermes", "preetham"];
-      for (const q of seedQueries) {
-        await ctx.db.insert("evalCandidates", {
-          brainId: args.brainId,
-          tool: "search",
-          queryText: q,
-          resultCount: 0,
-          topSlugs: [],
-          meta: { seed: true },
-        });
-      }
+    // Seed with expected results for real eval scoring
+    const seedQueries: { query: string; topSlugs: string[] }[] = [
+      { query: "hermes", topSlugs: ["software/hermes-agent"] },
+      { query: "pkyanam", topSlugs: ["people/pkyanam"] },
+      { query: "lara", topSlugs: ["agents/lara"] },
+      { query: "garry tan", topSlugs: ["people/garry-tan"] },
+    ];
+    for (const { query, topSlugs } of seedQueries) {
+      await ctx.db.insert("evalCandidates", {
+        brainId: args.brainId,
+        tool: "search",
+        queryText: query,
+        resultCount: 0,
+        topSlugs,
+        meta: { seed: true },
+      });
     }
 
     // Create eval run
@@ -164,8 +170,11 @@ export const processRun = internalAction({
   args: {
     runId: v.id("evalRuns"),
     brainId: v.string(),
+    index: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const idx = args.index ?? 0;
+
     // Read candidates
     const candidates = await ctx.runQuery(internal.eval.getCandidates, {
       brainId: args.brainId,
@@ -179,12 +188,21 @@ export const processRun = internalAction({
       return;
     }
 
-    const candidate = candidates[0];
-    const remaining = candidates.slice(1);
+    // All done — finalize
+    if (idx >= candidates.length) {
+      await ctx.runMutation(internal.eval.finalizeRun, {
+        runId: args.runId,
+      });
+      return;
+    }
+
+    const candidate = candidates[idx];
 
     try {
       const baseUrl = process.env.BRAINBASE_API_URL || "https://brainbase.belweave.ai";
       const evalSecret = process.env.CONVEX_EVAL_SECRET || "";
+
+      console.log(`[eval] Candidate ${idx + 1}/${candidates.length}: ${candidate.queryText}`);
 
       // Call Brainbase query API
       const res = await fetch(`${baseUrl}/api/query`, {
@@ -222,17 +240,12 @@ export const processRun = internalAction({
         passed,
       });
 
-      // Process next or finalize
-      if (remaining.length > 0) {
-        await ctx.scheduler.runAfter(0, internal.eval.processRun, {
-          runId: args.runId,
-          brainId: args.brainId,
-        });
-      } else {
-        await ctx.runMutation(internal.eval.finalizeRun, {
-          runId: args.runId,
-        });
-      }
+      // Schedule next candidate
+      await ctx.scheduler.runAfter(0, internal.eval.processRun, {
+        runId: args.runId,
+        brainId: args.brainId,
+        index: idx + 1,
+      });
     } catch (err: any) {
       console.error("[eval] Candidate failed:", candidate.queryText, err.message);
       await ctx.runMutation(internal.eval.failRun, {
@@ -251,6 +264,21 @@ export const getCandidates = internalQuery({
       .query("evalCandidates")
       .withIndex("by_brain", (q) => q.eq("brainId", args.brainId))
       .take(50);
+  },
+});
+
+// ── Helper: clear candidates for a fresh seed ──────────────────
+
+export const clearCandidates = mutation({
+  args: { brainId: v.string() },
+  handler: async (ctx, args) => {
+    const candidates = await ctx.db
+      .query("evalCandidates")
+      .withIndex("by_brain", (q) => q.eq("brainId", args.brainId))
+      .take(100);
+    for (const c of candidates) {
+      await ctx.db.delete(c._id);
+    }
   },
 });
 

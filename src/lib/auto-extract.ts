@@ -156,3 +156,56 @@ export async function runAutoExtract(
 
   return { linksCreated, timelineCreated, unresolved };
 }
+
+/**
+ * Batch-extract links from pages that haven't been processed yet.
+ * Used by the dream cycle to connect the graph overnight.
+ */
+export async function extractLinksFromStalePages(
+  brainId: string,
+  limit = 50
+): Promise<{
+  pagesScanned: number;
+  linksCreated: number;
+  timelineEntries: number;
+}> {
+  // Find pages with zero backlinks (never been processed by extraction)
+  const rows = await queryMany<{ slug: string; type: string; compiled_truth: string }>(
+    `SELECT p.slug, p.type, COALESCE(p.compiled_truth, '') as compiled_truth
+     FROM pages p
+     WHERE p.brain_id = $1
+       AND p.type != 'tweet'  -- skip tweets, too many
+       AND NOT EXISTS (
+         SELECT 1 FROM links l
+         WHERE l.brain_id = $1
+           AND (l.from_page_id = p.id OR l.to_page_id = p.id)
+       )
+       AND p.compiled_truth IS NOT NULL
+       AND p.compiled_truth != ''
+     LIMIT $2`,
+    [brainId, limit]
+  );
+
+  let totalLinks = 0;
+  let totalTimeline = 0;
+
+  for (const row of rows) {
+    try {
+      const result = await runAutoExtract(brainId, row.slug, row.type, row.compiled_truth);
+      totalLinks += result.linksCreated;
+      totalTimeline += result.timelineCreated;
+    } catch (err) {
+      console.error(`[brainbase] Extract error for ${row.slug}:`, err);
+    }
+  }
+
+  console.log(
+    `[brainbase] Batch extract: ${rows.length} pages → ${totalLinks} links, ${totalTimeline} timeline entries`
+  );
+
+  return {
+    pagesScanned: rows.length,
+    linksCreated: totalLinks,
+    timelineEntries: totalTimeline,
+  };
+}

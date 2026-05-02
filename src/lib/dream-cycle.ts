@@ -17,8 +17,8 @@ export interface DreamCycleResult {
 }
 
 /**
- * Run the full 8-phase dream cycle.
- * Uses processAll=false by default for incremental batches.
+ * Run the full dream cycle.
+ * Processes ALL phases — no more stubs. The brain actually gets smarter.
  */
 export async function runDreamCycle(
   brainId: string,
@@ -27,99 +27,134 @@ export async function runDreamCycle(
   const t0 = Date.now();
   const phases: DreamPhaseResult[] = [];
 
-  // Phase 1: Lint
-  // Phase 2: Backlinks
-  // Phase 3: Sync
-  // (These 3 are handled by the existing legacy dream phases via cron)
-
-  // Phase 4: Synthesize
-  try {
-    const { runSynthesizePhase } = await import("./dream/synthesize");
-    const result = await runSynthesizePhase(brainId);
-    phases.push({
-      phase: "synthesize",
-      status: "completed",
-      summary: `Scanned ${result.transcriptsScanned}, significant ${result.significantFound}, created ${result.pagesCreated}`,
-      items_processed: result.transcriptsScanned,
-      items_created: result.pagesCreated,
-      duration_ms: 0,
-    });
-  } catch (err: any) {
-    phases.push({
-      phase: "synthesize",
-      status: "failed",
-      summary: err.message,
-      duration_ms: 0,
-    });
-  }
-
-  // Phase 5: Extract (links + timeline)
-  phases.push({
-    phase: "extract",
-    status: "skipped",
-    summary: "Extraction runs via sync/autopilot — deferred",
-    duration_ms: 0,
-  });
-
-  // Phase 6: Patterns
-  try {
-    const { detectDreamPatterns } = await import("./dream/patterns");
-    const result = await detectDreamPatterns(brainId, 30, 2);
-    phases.push({
-      phase: "patterns",
-      status: result.status as "completed" | "failed" | "skipped",
-      summary: result.summary,
-      items_processed: result.items_processed,
-      items_created: result.items_created,
-      duration_ms: result.duration_ms,
-    });
-  } catch (err: any) {
-    phases.push({
-      phase: "patterns",
-      status: "failed",
-      summary: err.message,
-      duration_ms: 0,
-    });
-  }
-
-  // Phase 7: Embed (stale chunks)
-  try {
-    const { countStaleChunks, runEmbedPipeline } = await import("./embed-pipeline");
-    const stale = await countStaleChunks(brainId);
-    if (stale > 0 && processAll) {
-      const result = await runEmbedPipeline(brainId, "stale");
+  // ── Phase 1: Extract links from ALL unprocessed pages ──────
+  {
+    const p0 = Date.now();
+    try {
+      const { extractLinksFromStalePages } = await import("./auto-extract");
+      const result = await extractLinksFromStalePages(brainId, processAll ? 500 : 50);
       phases.push({
-        phase: "embed",
+        phase: "extract_links",
         status: "completed",
-        summary: `Embedded ${result.chunks_embedded}/${result.total_chunks} stale chunks`,
-        items_processed: result.chunks_embedded,
-        duration_ms: result.duration_ms,
+        summary: `${result.pagesScanned} pages scanned, ${result.linksCreated} links created, ${result.timelineEntries} timeline entries`,
+        items_processed: result.pagesScanned,
+        items_created: result.linksCreated,
+        duration_ms: Date.now() - p0,
       });
-    } else {
+    } catch (err: any) {
       phases.push({
-        phase: "embed",
-        status: stale > 0 ? "skipped" : "completed",
-        summary: stale > 0 ? `${stale} stale chunks (not processing — use process_all)` : "All chunks embedded",
-        items_processed: 0,
-        duration_ms: 0,
+        phase: "extract_links",
+        status: "failed",
+        summary: err.message,
+        duration_ms: Date.now() - p0,
       });
     }
-  } catch (err: any) {
-    phases.push({
-      phase: "embed",
-      status: "failed",
-      summary: err.message,
-      duration_ms: 0,
-    });
   }
 
-  // Phase 8: Orphans
-  phases.push({
-    phase: "orphans",
-    status: "skipped",
-    summary: "Orphan detection runs via health checks — deferred",
-    duration_ms: 0,
-  });
+  // ── Phase 2: Link orphans via vector + FTS similarity ─────
+  {
+    const p0 = Date.now();
+    try {
+      const { batchLinkOrphans } = await import("./orphan-linker");
+      const result = await batchLinkOrphans(brainId);
+      phases.push({
+        phase: "link_orphans",
+        status: "completed",
+        summary: `${result.orphansFound} orphans found, ${result.totalInserted} semantic links created (${result.vectorPairs} vector + ${result.ftsPairs} FTS)`,
+        items_processed: result.orphansFound,
+        items_created: result.totalInserted,
+        duration_ms: Date.now() - p0,
+      });
+    } catch (err: any) {
+      phases.push({
+        phase: "link_orphans",
+        status: "failed",
+        summary: err.message,
+        duration_ms: Date.now() - p0,
+      });
+    }
+  }
+
+  // ── Phase 3: Synthesize meeting transcripts ───────────────
+  {
+    const p0 = Date.now();
+    try {
+      const { runSynthesizePhase } = await import("./dream/synthesize");
+      const result = await runSynthesizePhase(brainId);
+      phases.push({
+        phase: "synthesize",
+        status: "completed",
+        summary: `Scanned ${result.transcriptsScanned}, significant ${result.significantFound}, created ${result.pagesCreated}`,
+        items_processed: result.transcriptsScanned,
+        items_created: result.pagesCreated,
+        duration_ms: Date.now() - p0,
+      });
+    } catch (err: any) {
+      phases.push({
+        phase: "synthesize",
+        status: "failed",
+        summary: err.message,
+        duration_ms: Date.now() - p0,
+      });
+    }
+  }
+
+  // ── Phase 4: Detect patterns ──────────────────────────────
+  {
+    const p0 = Date.now();
+    try {
+      const { detectDreamPatterns } = await import("./dream/patterns");
+      const result = await detectDreamPatterns(brainId, 30, 2);
+      phases.push({
+        phase: "patterns",
+        status: result.status as "completed" | "failed" | "skipped",
+        summary: result.summary,
+        items_processed: result.items_processed,
+        items_created: result.items_created,
+        duration_ms: Date.now() - p0,
+      });
+    } catch (err: any) {
+      phases.push({
+        phase: "patterns",
+        status: "failed",
+        summary: err.message,
+        duration_ms: Date.now() - p0,
+      });
+    }
+  }
+
+  // ── Phase 5: Embed stale chunks ───────────────────────────
+  {
+    const p0 = Date.now();
+    try {
+      const { countStaleChunks, runEmbedPipeline } = await import("./embed-pipeline");
+      const stale = await countStaleChunks(brainId);
+      if (stale > 0) {
+        const result = await runEmbedPipeline(brainId, "stale");
+        phases.push({
+          phase: "embed",
+          status: "completed",
+          summary: `Embedded ${result.chunks_embedded}/${stale} stale chunks`,
+          items_processed: result.chunks_embedded,
+          duration_ms: Date.now() - p0,
+        });
+      } else {
+        phases.push({
+          phase: "embed",
+          status: "completed",
+          summary: "All chunks embedded",
+          duration_ms: Date.now() - p0,
+        });
+      }
+    } catch (err: any) {
+      phases.push({
+        phase: "embed",
+        status: "failed",
+        summary: err.message,
+        duration_ms: Date.now() - p0,
+      });
+    }
+  }
 
   return {
     phases,
