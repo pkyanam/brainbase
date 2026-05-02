@@ -32,7 +32,7 @@ export async function runDreamCycle(
     const p0 = Date.now();
     try {
       const { extractLinksFromStalePages } = await import("./auto-extract");
-      const result = await extractLinksFromStalePages(brainId, processAll ? 500 : 50);
+      const result = await extractLinksFromStalePages(brainId, processAll ? 1000 : 200);
       phases.push({
         phase: "extract_links",
         status: "completed",
@@ -56,7 +56,7 @@ export async function runDreamCycle(
     const p0 = Date.now();
     try {
       const { linkTweetsToAuthors } = await import("./tweet-linker");
-      const result = await linkTweetsToAuthors(brainId, 100);
+      const result = await linkTweetsToAuthors(brainId, 500);
       phases.push({
         phase: "tweet_author_link",
         status: "completed",
