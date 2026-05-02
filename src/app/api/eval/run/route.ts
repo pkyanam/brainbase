@@ -18,6 +18,13 @@ export async function POST(req: NextRequest) {
 
     // ── Ensure eval tables exist ──
     try {
+      await query(`CREATE TABLE IF NOT EXISTS eval_candidates (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        brain_id UUID NOT NULL, tool TEXT NOT NULL,
+        query_text TEXT NOT NULL, result_count INTEGER,
+        top_slugs TEXT[], meta JSONB,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`);
       await query(`CREATE TABLE IF NOT EXISTS eval_runs (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         brain_id UUID NOT NULL, status TEXT NOT NULL DEFAULT 'running',

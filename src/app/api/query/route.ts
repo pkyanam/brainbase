@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveApiAuth } from "@/lib/api-auth";
 import { searchBrain, vectorSearchBrain, expandQuery, SearchResult } from "@/lib/supabase/search";
 import { generateEmbeddings } from "@/lib/embeddings";
-import { queryMany } from "@/lib/supabase/client";
+import { queryMany, query } from "@/lib/supabase/client";
 import { captureEvalCandidate } from "@/lib/eval-pipeline";
 import { expandQueries } from "@/lib/query-expand";
 import {
@@ -612,14 +612,22 @@ export async function POST(req: NextRequest) {
 
     // ── Eval capture (fire-and-forget) ────────────────────────
     const top5Slugs = final.slice(0, 5).map((r) => r.slug);
-    captureEvalCandidate({
-      brainId: auth.brainId,
-      tool: "query",
-      queryText: q,
-      resultCount: final.length,
-      topSlugs: top5Slugs,
-      meta: { intent, detail, limit },
-    }).catch((e) => console.error("[eval] Background capture error:", e));
+
+    // Ensure eval_candidates exists before capturing
+    query(`CREATE TABLE IF NOT EXISTS eval_candidates (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      brain_id UUID NOT NULL, tool TEXT NOT NULL,
+      query_text TEXT NOT NULL, result_count INTEGER,
+      top_slugs TEXT[], meta JSONB,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`).catch(() => {});
+
+    // Fire-and-forget INSERT
+    query(
+      `INSERT INTO eval_candidates (brain_id, tool, query_text, result_count, top_slugs, meta)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [auth.brainId, "query", q, final.length, top5Slugs, JSON.stringify({ intent, detail, limit })]
+    ).catch((e) => console.error("[eval] Background capture error:", e));
 
     return NextResponse.json({
       q,
