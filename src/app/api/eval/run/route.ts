@@ -63,16 +63,18 @@ export async function POST(req: NextRequest) {
     );
     const runId = runRow!.id;
 
-    // Background processing
-    runEvalInBackground(auth.brainId, runId, queryLimit).catch((err) => {
-      console.error("[eval] Background eval failed:", err);
-      query(
+    // Process synchronously (Vercel Hobby kills background promises after response)
+    try {
+      await runEvalCycle(auth.brainId, runId, queryLimit);
+    } catch (err: any) {
+      console.error("[eval] Eval cycle failed:", err);
+      await query(
         `UPDATE eval_runs SET status = 'failed',
          meta = jsonb_set(COALESCE(meta, '{}'), '{error}', to_jsonb($2::text)),
          completed_at = NOW() WHERE id = $1`,
         [runId, String(err.message).slice(0, 1000)]
       ).catch(() => {});
-    });
+    }
 
     return NextResponse.json({ run_id: runId, status: "running" });
   } catch (err) {
@@ -84,7 +86,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-async function runEvalInBackground(brainId: string, runId: string, limit: number) {
+async function runEvalCycle(brainId: string, runId: string, limit: number) {
   // Get candidates
   const { rows: candidates } = await query<any>(
     `SELECT id, brain_id, tool, query_text, result_count, top_slugs, meta
