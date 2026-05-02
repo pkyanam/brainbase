@@ -610,24 +610,28 @@ export async function POST(req: NextRequest) {
       pin: (r as any).boost_factors?.exact_match >= 90 || r.score >= 90,
     }));
 
-    // ── Eval capture (fire-and-forget) ────────────────────────
+    // ── Eval capture ───────────────────────────────────────
     const top5Slugs = final.slice(0, 5).map((r) => r.slug);
 
-    // Ensure eval_candidates exists before capturing
-    query(`CREATE TABLE IF NOT EXISTS eval_candidates (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      brain_id UUID NOT NULL, tool TEXT NOT NULL,
-      query_text TEXT NOT NULL, result_count INTEGER,
-      top_slugs TEXT[], meta JSONB,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )`).catch(() => {});
-
-    // Fire-and-forget INSERT
-    query(
-      `INSERT INTO eval_candidates (brain_id, tool, query_text, result_count, top_slugs, meta)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [auth.brainId, "query", q, final.length, top5Slugs, JSON.stringify({ intent, detail, limit })]
-    ).catch((e) => console.error("[eval] Background capture error:", e));
+    // Ensure table exists THEN insert (must be sequential — different pool connections)
+    (async () => {
+      try {
+        await query(`CREATE TABLE IF NOT EXISTS eval_candidates (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          brain_id UUID NOT NULL, tool TEXT NOT NULL,
+          query_text TEXT NOT NULL, result_count INTEGER,
+          top_slugs TEXT[], meta JSONB,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )`);
+        await query(
+          `INSERT INTO eval_candidates (brain_id, tool, query_text, result_count, top_slugs, meta)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [auth.brainId, "query", q, final.length, top5Slugs, JSON.stringify({ intent, detail, limit })]
+        );
+      } catch (e) {
+        console.error("[eval] Background capture error:", e);
+      }
+    })();
 
     return NextResponse.json({
       q,
