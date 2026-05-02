@@ -55,6 +55,10 @@ export const seedAndRun = mutation({
       { query: "pkyanam", topSlugs: ["people/pkyanam"] },
       { query: "lara", topSlugs: ["agents/lara"] },
       { query: "garry tan", topSlugs: ["people/garry-tan"] },
+      { query: "brainbase", topSlugs: ["projects/brainbase"] },
+      { query: "anthropic", topSlugs: ["companies/anthropic"] },
+      { query: "radicle", topSlugs: ["projects/radicle"] },
+      { query: "ghostty", topSlugs: ["projects/ghostty"] },
     ];
     for (const { query, topSlugs } of seedQueries) {
       await ctx.db.insert("evalCandidates", {

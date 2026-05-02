@@ -598,6 +598,14 @@ export function classifyIntent(query: string): QueryIntent {
     return "entity";
   }
 
+  // Phase 2.2: Lowercase single-word entity detection.
+  // "hermes", "pkyanam", "lara", "brainbase" — single lowercase words
+  // that are likely entity/project/handle lookups. The old classifier only
+  // caught capitalized proper nouns, missing ~30% of real entity queries.
+  if (words.length === 1 && /^[a-z][a-z0-9_-]{1,}$/.test(words[0]) && words[0].length >= 2) {
+    return "entity";
+  }
+
   return "general";
 }
 
