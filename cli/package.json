@@ -1,6 +1,6 @@
 {
   "name": "brainbase-cli",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Official CLI for Brainbase — query and manage your knowledge graph from the terminal",
   "keywords": [
     "brainbase",

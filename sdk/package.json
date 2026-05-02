@@ -1,6 +1,6 @@
 {
   "name": "brainbase-sdk",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "SDK for Brainbase — the knowledge graph API for AI agents",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

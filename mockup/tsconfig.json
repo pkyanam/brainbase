@@ -1,7 +1,6 @@
 {
   "compilerOptions": {
     "target": "ES2017",
-    "downlevelIteration": true,
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
@@ -20,8 +19,7 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"],
-      "convex/*": ["./convex/*"]
+      "@/*": ["./src/*"]
     }
   },
   "include": [
@@ -32,5 +30,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "cli", "scripts", "mockup"]
+  "exclude": ["node_modules"]
 }

@@ -22,6 +22,13 @@ import { deletePageCommand } from "./commands/delete-page.js";
 import { addLinkCommand } from "./commands/add-link.js";
 import { removeLinkCommand } from "./commands/remove-link.js";
 import { addTimelineCommand } from "./commands/add-timeline.js";
+import { enrichCommand } from "./commands/enrich.js";
+import { askCommand } from "./commands/ask.js";
+import { rawDataCommand } from "./commands/raw-data.js";
+import { tagsCommand } from "./commands/tags.js";
+import { versionsCommand } from "./commands/versions.js";
+import { jobsCommand } from "./commands/jobs.js";
+import { apiKeysCommand } from "./commands/api-keys.js";
 import { configSetCommand, configGetCommand, configListCommand, configUnsetCommand } from "./commands/config.js";
 
 const program = new Command();
@@ -37,7 +44,7 @@ function getConfig(): ReturnType<typeof loadConfig> {
 program
   .name("brainbase")
   .description("CLI for Brainbase — the knowledge graph for AI agents")
-  .version("0.1.0")
+  .version("0.2.0")
   .option("--brain-id <id>", "target a specific brain (overrides BRAINBASE_BRAIN_ID)")
   .option("--api-key <key>", "API key (overrides BRAINBASE_API_KEY)")
   .option("--json", "output raw JSON instead of formatted text")
@@ -53,11 +60,7 @@ program
   .option("-l, --limit <n>", "max results", parseInt, 20)
   .action(async (query, options) => {
     const config = getConfig();
-    const globalOpts = program.opts();
-    await searchCommand(query, config, {
-      ...globalOpts,
-      limit: options.limit,
-    });
+    await searchCommand(query, config, { ...program.opts(), limit: options.limit });
   });
 
 program
@@ -66,11 +69,15 @@ program
   .option("-l, --limit <n>", "max results", parseInt, 20)
   .action(async (question, options) => {
     const config = getConfig();
-    const globalOpts = program.opts();
-    await queryCommand(question, config, {
-      ...globalOpts,
-      limit: options.limit,
-    });
+    await queryCommand(question, config, { ...program.opts(), limit: options.limit });
+  });
+
+program
+  .command("ask <question>")
+  .description("ask a question and get an LLM-generated answer with cited sources")
+  .action(async (question) => {
+    const config = getConfig();
+    await askCommand(question, config, program.opts());
   });
 
 program
@@ -122,14 +129,7 @@ program
   .option("-o, --offset <n>", "skip N results", parseInt, 0)
   .action(async (options) => {
     const config = getConfig();
-    const globalOpts = program.opts();
-    await listCommand(config, {
-      ...globalOpts,
-      type: options.type,
-      writtenBy: options.writtenBy,
-      limit: options.limit,
-      offset: options.offset,
-    });
+    await listCommand(config, { ...program.opts(), ...options });
   });
 
 program
@@ -143,12 +143,7 @@ program
   )
   .action(async (slug, options) => {
     const config = getConfig();
-    const globalOpts = program.opts();
-    await traverseCommand(slug, config, {
-      ...globalOpts,
-      depth: options.depth,
-      direction: options.direction,
-    });
+    await traverseCommand(slug, config, { ...program.opts(), depth: options.depth, direction: options.direction });
   });
 
 program
@@ -170,8 +165,6 @@ program
   .option("--written-by <agent>", "agent or user identifier (e.g. 'lara', 'jarvis')")
   .action(async (slug, title, options) => {
     const config = getConfig();
-    const globalOpts = program.opts();
-
     let content = options.content;
     if (options.stdin) {
       const chunks: Buffer[] = [];
@@ -180,13 +173,7 @@ program
       }
       content = Buffer.concat(chunks).toString("utf-8");
     }
-
-    await putPageCommand(slug, title, config, {
-      ...globalOpts,
-      type: options.type,
-      content,
-      writtenBy: options.writtenBy,
-    });
+    await putPageCommand(slug, title, config, { ...program.opts(), type: options.type, content, writtenBy: options.writtenBy });
   });
 
 program
@@ -204,12 +191,7 @@ program
   .option("--written-by <agent>", "agent or user identifier")
   .action(async (from, to, options) => {
     const config = getConfig();
-    const globalOpts = program.opts();
-    await addLinkCommand(from, to, config, {
-      ...globalOpts,
-      type: options.type,
-      writtenBy: options.writtenBy,
-    });
+    await addLinkCommand(from, to, config, { ...program.opts(), type: options.type, writtenBy: options.writtenBy });
   });
 
 program
@@ -228,13 +210,78 @@ program
   .option("--written-by <agent>", "agent or user identifier")
   .action(async (slug, date, summary, options) => {
     const config = getConfig();
-    const globalOpts = program.opts();
-    await addTimelineCommand(slug, date, summary, config, {
-      ...globalOpts,
-      detail: options.detail,
-      source: options.source,
-      writtenBy: options.writtenBy,
-    });
+    await addTimelineCommand(slug, date, summary, config, { ...program.opts(), detail: options.detail, source: options.source, writtenBy: options.writtenBy });
+  });
+
+// ── Enrichment ──────────────────────────────────────────────────
+
+program
+  .command("enrich <name>")
+  .description("enrich a person or company page (Brave web search + OpenAI formatting)")
+  .option("-t, --tier <n>", "enrichment tier: 1=full (async), 2=standard (default, <10s), 3=quick (<5s)", "2")
+  .option("--type <type>", "entity type: person, company, or auto (default)")
+  .option("--context <text>", "additional context about the entity")
+  .option("--force", "re-enrich even if updated within 7 days")
+  .action(async (name, options) => {
+    const config = getConfig();
+    await enrichCommand(name, config, { ...program.opts(), tier: options.tier, type: options.type, context: options.context, force: options.force });
+  });
+
+// ── Tags ────────────────────────────────────────────────────────
+
+program
+  .command("tags <slug>")
+  .description("view tags on a page")
+  .option("--add <tag>", "add a tag to the page")
+  .option("--remove <tag>", "remove a tag from the page")
+  .action(async (slug, options) => {
+    const config = getConfig();
+    await tagsCommand(slug, config, { ...program.opts(), add: options.add, remove: options.remove });
+  });
+
+// ── Raw data ────────────────────────────────────────────────────
+
+program
+  .command("raw-data <slug>")
+  .description("view stored provenance data for a page")
+  .option("--source <source>", "filter by source (e.g. brave, openai)")
+  .action(async (slug, options) => {
+    const config = getConfig();
+    await rawDataCommand(slug, config, { ...program.opts(), source: options.source });
+  });
+
+// ── Versions ────────────────────────────────────────────────────
+
+program
+  .command("versions <slug>")
+  .description("view page version history")
+  .action(async (slug) => {
+    const config = getConfig();
+    await versionsCommand(slug, config, program.opts());
+  });
+
+// ── Jobs ────────────────────────────────────────────────────────
+
+program
+  .command("jobs [jobId]")
+  .description("list jobs or view a specific job by ID")
+  .option("--status <status>", "filter by status (waiting, active, completed, failed)")
+  .option("-l, --limit <n>", "max results", parseInt, 20)
+  .action(async (jobId, options) => {
+    const config = getConfig();
+    await jobsCommand(jobId, config, { ...program.opts(), status: options.status, limit: options.limit });
+  });
+
+// ── API keys ────────────────────────────────────────────────────
+
+program
+  .command("api-keys")
+  .description("list API keys")
+  .option("--create <name>", "create a new API key with this name")
+  .option("--revoke <id>", "revoke an API key by ID")
+  .action(async (options) => {
+    const config = getConfig();
+    await apiKeysCommand(config, { ...program.opts(), name: options.create, revoke: options.revoke });
   });
 
 // ── Config commands ────────────────────────────────────────────

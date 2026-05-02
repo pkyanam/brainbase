@@ -13,7 +13,7 @@ import { CliConfig } from "../types.js";
 import { readConfigFile } from "./config-file.js";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
-const DEFAULT_BASE_URL = "http://localhost:5174";
+const DEFAULT_BASE_URL = "https://brainbase.belweave.ai";
 
 /** Environment variable names */
 export const ENV = {

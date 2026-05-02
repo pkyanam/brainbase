@@ -1,9 +1,6 @@
 # Brainbase CLI
 
-> The official command-line interface for [Brainbase](https://brainbase.belweave.ai) — query and manage your knowledge graph from the terminal.
-
-[![npm version](https://img.shields.io/npm/v/brainbase-cli.svg)](https://www.npmjs.com/package/brainbase-cli)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+Terminal-native CLI for [Brainbase](https://brainbase.belweave.ai) — query and manage your knowledge graph.
 
 ## Install
 
@@ -11,179 +8,144 @@
 npm install -g brainbase-cli
 ```
 
-Requires **Node.js 18+** (uses native `fetch`).
-
-## Quickstart
+## Configure
 
 ```bash
-# Set your endpoint and API key
-export BRAINBASE_URL="https://brainbase.belweave.ai"
-export BRAINBASE_API_KEY="bb_live_..."
+brainbase config set apiKey bb_live_your_key_here
+brainbase config set baseUrl https://brainbase.belweave.ai   # default
+brainbase config set brainId your-brain-uuid                 # optional
+```
 
-# Search your brain
+Config is stored in `~/.brainbase/config.json`. Priority: CLI flags > env vars > config file.
+
+## Usage
+
+### Read
+
+```bash
+# Search
 brainbase search "garry tan"
+brainbase search "pricing exceptions" --json | jq '.[].slug'
 
-# Ask a natural language question
-brainbase query "who do I know at YC?"
+# Natural language query
+brainbase query "who invested in Anthropic"
 
-# Check brain health
+# Ask (LLM-generated answer with cited sources)
+brainbase ask "who handles refunds?"
+
+# Brain health
 brainbase health
+brainbase stats
 
-# Get a specific page
+# Pages
 brainbase page people/garry-tan
+brainbase list --type person --limit 10
+brainbase list --written-by lara
+
+# Graph
+brainbase links people/garry-tan
+brainbase traverse people/garry-tan --depth 3 --direction both
+brainbase graph --json | jq '.nodes | length'
+
+# Timeline & history
+brainbase timeline people/garry-tan
+brainbase versions people/garry-tan
+
+# Tags
+brainbase tags people/garry-tan
+brainbase tags people/garry-tan --add founder
+brainbase tags people/garry-tan --remove founder
+
+# Provenance data
+brainbase raw-data people/satya-nadella
+brainbase raw-data people/satya-nadella --source brave
 ```
 
-## Configuration
-
-The CLI reads from environment variables:
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `BRAINBASE_URL` | No | `http://localhost:5174` | Brainbase API endpoint |
-| `BRAINBASE_API_KEY` | Yes* | — | Your API key |
-| `BRAINBASE_BRAIN_ID` | No | — | Default brain ID (multi-tenant) |
-| `BRAINBASE_TIMEOUT_MS` | No | `30000` | Request timeout in ms |
-
-\* Required for remote URLs. Not needed for localhost.
-
-**Multi-brain support:** Override the default brain per-command:
+### Write
 
 ```bash
-brainbase health --brain-id <uuid>
+# Pages
+brainbase put-page ideas/new-thing "My Idea" --type idea --content "# Hello"
+echo "# Markdown from stdin" | brainbase put-page ideas/stdin-test "Test" --stdin
+
+# Links
+brainbase add-link people/garry-tan companies/y-combinator --type works_at
+brainbase remove-link people/garry-tan companies/old-company
+
+# Timeline
+brainbase add-timeline people/garry-tan "2024-03-01" "Became YC CEO" --source "https://techcrunch.com/..."
+
+# Cleanup
+brainbase delete-page ideas/obsolete
 ```
 
-## Commands
-
-### Read Operations
-
-| Command | Description |
-|---------|-------------|
-| `brainbase search <query>` | Full-text search |
-| `brainbase query <question>` | Natural language query |
-| `brainbase health` | Brain health dashboard |
-| `brainbase stats` | Detailed statistics |
-| `brainbase page <slug>` | Get a page by slug |
-| `brainbase links <slug>` | Show page links |
-| `brainbase timeline <slug>` | Show timeline entries |
-| `brainbase list` | List all pages |
-| `brainbase traverse <slug>` | Traverse the knowledge graph |
-| `brainbase graph` | Dump full graph as JSON |
-
-### Write Operations
-
-| Command | Description |
-|---------|-------------|
-| `brainbase put-page <slug> <title>` | Create or update a page |
-| `brainbase delete-page <slug>` | Delete a page |
-| `brainbase add-link <from> <to>` | Create a link |
-| `brainbase remove-link <from> <to>` | Remove a link |
-| `brainbase add-timeline <slug> <date> <summary>` | Add timeline entry |
-
-### Page Content from Stdin
-
-Pipe markdown content directly instead of escaping it in a flag:
+### Enrichment
 
 ```bash
-# Write from a file
-cat note.md | brainbase put-page ideas/new-thing "My Idea" --type idea --stdin
+# Standard enrichment (Tier 2 — Brave web search + OpenAI, <10s)
+brainbase enrich "Satya Nadella" --type person --tier 2
 
-# Write from heredoc
-brainbase put-page email/2026-04-29/subject "Subject" --type email --stdin <<'EOF'
-# Meeting Notes
+# Auto-detect type (works for Stripe, OpenAI, Vercel...)
+brainbase enrich "Stripe" --tier 2
 
-- Point one
-- Point two
-EOF
+# With context (richer pages)
+brainbase enrich "Tom Blomfield" --type person --context "YC partner, ex-Monzo CEO"
+
+# Deep research (Tier 1 — async, returns job ID)
+brainbase enrich "Garry Tan" --tier 1
+
+# Force re-enrich (skip 7-day guard)
+brainbase enrich "Garry Tan" --force
+
+# Quick lookup (Tier 3 — OpenAI only, <5s)
+brainbase enrich "Jane Doe" --tier 3
 ```
 
-### Global Flags
+### Jobs
+
+```bash
+brainbase jobs                  # list all jobs
+brainbase jobs --status active  # filter by status
+brainbase jobs 42               # get specific job status
+```
+
+### API Keys
+
+```bash
+brainbase api-keys                           # list all keys
+brainbase api-keys --create "my-new-key"     # create (full key shown once!)
+brainbase api-keys --revoke key-id-123       # revoke
+```
+
+### Config
+
+```bash
+brainbase config set apiKey bb_live_...
+brainbase config set baseUrl https://brainbase.belweave.ai
+brainbase config set brainId <uuid>
+brainbase config get apiKey
+brainbase config list
+brainbase config unset brainId
+```
+
+## Global Flags
 
 | Flag | Description |
 |------|-------------|
-| `--brain-id <id>` | Target a specific brain |
+| `--api-key <key>` | Override API key |
+| `--brain-id <id>` | Override brain ID |
 | `--json` | Output raw JSON |
 | `--quiet` | Suppress non-error output |
 | `--verbose` | Enable verbose logging |
-| `-h, --help` | Show help |
-| `-V, --version` | Show version |
 
-## Examples
+## Override per command
 
 ```bash
-# Search with limit
-brainbase search "YC founders" --limit 10
-
-# List only people
-brainbase list --type person --limit 20
-
-# Traverse graph 3 levels deep
-brainbase traverse people/preetham-kyanam --depth 3 --direction both
-
-# Create a new page
-brainbase put-page ideas/new-product "My Product Idea" \
-  --type idea \
-  --content "This is a markdown description..."
-
-# Link two pages
-brainbase add-link people/preetham-kyanam companies/nous-research \
-  --type works_at
-
-# Add a timeline entry
-brainbase add-timeline people/garry-tan 2024-01-15 "Became YC CEO" \
-  --detail "Announced on Twitter" \
-  --source "https://twitter.com/garrytan/..."
-
-# Get everything as JSON for piping
-brainbase graph --json | jq '.nodes | length'
-brainbase search "AI" --json | jq '.[0].title'
+brainbase health --api-key bb_live_other --brain-id other-brain
 ```
 
-## First-Time Setup
-
-Instead of passing `--api-key` every time or exporting env vars in every shell:
-
-```bash
-# Store your API key securely in ~/.brainbase/config.json
-brainbase config set apiKey bb_live_xxxxxxxx
-
-# Store your default brain ID
-brainbase config set brainId <your-brain-uuid>
-
-# Store your endpoint (if not using localhost)
-brainbase config set baseUrl https://brainbase.belweave.ai
-
-# See what's configured
-brainbase config list
-
-# Remove a value
-brainbase config unset apiKey
-```
-
-Config file location: `~/.brainbase/config.json` (permissions: `600`)
-
-Priority (highest to lowest):
-1. CLI flags (`--api-key`, `--brain-id`)
-2. Environment variables (`BRAINBASE_API_KEY`, etc.)
-3. Config file (`~/.brainbase/config.json`)
-
-## Security
-
-- **API keys are never logged or displayed.** If an error leaks a key, it is redacted before output.
-- The CLI requires an API key for all remote endpoints. Localhost is exempt for development.
-- Config file is stored at `~/.brainbase/config.json` with `600` permissions (user read/write only).
-
-## Development
-
-```bash
-cd cli
-npm install
-npm run dev -- search "test"      # run without building
-npm test                          # run tests
-npm run test:watch                # watch mode
-npm run build                     # compile TypeScript
-npm run typecheck                 # check types
-```
+Priority: `--api-key` flag > `BRAINBASE_API_KEY` env var > `~/.brainbase/config.json`
 
 ## License
 
-MIT © [Preetham Kyanam](https://github.com/pkyanam)
+MIT

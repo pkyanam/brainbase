@@ -1,6 +1,7 @@
 import { queryOne, queryMany } from "./client";
 import { indexPageEmbeddings } from "../embeddings";
 import { runAutoExtract } from "../auto-extract";
+import { extractEntityRefs } from "../link-inference";
 import { runTriggers } from "../triggers";
 import { runActions } from "../actions";
 
@@ -21,6 +22,53 @@ export interface PutPageResult {
   frontmatter: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * Reconcile stale links for a page — remove auto-generated links
+ * whose target entities are no longer referenced in the current content.
+ * Only removes links with written_by = 'system' (not manually created ones).
+ */
+async function reconcileStaleLinks(brainId: string, slug: string, content: string): Promise<number> {
+  if (!content || content.trim().length === 0) return 0;
+
+  try {
+    // Extract all entity references from current content
+    const refs = extractEntityRefs(content);
+    const expectedTargets = new Set(refs.map(r => r.slug));
+
+    // Find auto-generated links whose targets are no longer referenced
+    const stale = await queryMany<{ link_id: string; to_slug: string }>(
+      `SELECT l.id::text as link_id, p2.slug as to_slug
+       FROM links l
+       JOIN pages p1 ON l.from_page_id = p1.id AND l.brain_id = p1.brain_id
+       JOIN pages p2 ON l.to_page_id = p2.id AND l.brain_id = p2.brain_id
+       WHERE l.brain_id = $1
+         AND p1.slug = $2
+         AND l.written_by = 'system'
+         AND l.link_type != 'semantic'`,
+      [brainId, slug]
+    );
+
+    let removed = 0;
+    for (const s of stale) {
+      if (!expectedTargets.has(s.to_slug)) {
+        await queryOne(
+          `DELETE FROM links WHERE brain_id = $1 AND id = $2::bigint`,
+          [brainId, s.link_id]
+        );
+        removed++;
+      }
+    }
+
+    if (removed > 0) {
+      console.log(`[brainbase] Stale link reconciliation for ${slug}: removed ${removed} stale links`);
+    }
+    return removed;
+  } catch (err) {
+    console.error(`[brainbase] Stale link reconciliation failed for ${slug}:`, err);
+    return 0;
+  }
 }
 
 export async function putPage(brainId: string, input: PutPageInput): Promise<PutPageResult> {
@@ -57,6 +105,9 @@ export async function putPage(brainId: string, input: PutPageInput): Promise<Put
     // Fire-and-forget: don't block the API response
     (async () => {
       try {
+        // 0. Stale link reconciliation — remove links to entities no longer referenced
+        await reconcileStaleLinks(brainId, input.slug, fullContent);
+
         // 1. Generate embeddings
         await indexPageEmbeddings(brainId, input.slug, fullContent);
 

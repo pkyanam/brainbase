@@ -25,7 +25,7 @@ describe("config", () => {
   describe("loadConfig", () => {
     it("returns defaults when no env vars are set", () => {
       const config = loadConfig();
-      expect(config.baseUrl).toBe("http://localhost:5174");
+      expect(config.baseUrl).toBe("https://brainbase.belweave.ai");
       expect(config.apiKey).toBe("");
       expect(config.brainId).toBeUndefined();
       expect(config.timeoutMs).toBe(30_000);
