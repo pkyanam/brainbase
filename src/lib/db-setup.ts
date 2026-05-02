@@ -517,6 +517,68 @@ export async function ensureDreamSchema(): Promise<void> {
   console.log("[brainbase] Dream schema ensured");
 }
 
+/**
+ * v0.5 — Raw Data Storage: provenance for enriched data.
+ * Stores raw API responses keyed by (brain_id, page_slug, source).
+ */
+export async function ensureRawDataSchema(): Promise<void> {
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS brain_raw_data (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        brain_id    UUID NOT NULL,
+        page_slug   TEXT NOT NULL,
+        source      TEXT NOT NULL,
+        data        JSONB NOT NULL,
+        fetched_at  TIMESTAMPTZ DEFAULT NOW(),
+        created_at  TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(brain_id, page_slug, source)
+      )
+    `);
+
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_raw_data_brain_page
+        ON brain_raw_data (brain_id, page_slug)
+    `);
+
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_raw_data_source
+        ON brain_raw_data (brain_id, source)
+    `);
+
+    console.log("[brainbase] Raw data schema ensured");
+  } catch (err) {
+    console.error("[brainbase] Raw data schema error:", err);
+  }
+}
+
+/**
+ * v0.5 — Tag Management: adds a TEXT[] tags column to pages.
+ * Uses Postgres array type for efficient storage and querying.
+ */
+export async function ensureTagsColumn(): Promise<void> {
+  try {
+    await query(`
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'pages') THEN
+          ALTER TABLE pages ADD COLUMN IF NOT EXISTS tags TEXT[];
+        END IF;
+      END $$;
+    `);
+
+    // GIN index for efficient array containment queries (find pages by tag)
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_pages_tags
+        ON pages USING GIN (tags)
+    `);
+
+    console.log("[brainbase] Tags column ensured");
+  } catch (err) {
+    console.error("[brainbase] Tags column error:", err);
+  }
+}
+
 export async function installBrainIdTriggers(): Promise<void> {
   try {
     const legacyBrainId = '00000000-0000-0000-0000-000000000001';
