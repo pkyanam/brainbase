@@ -7,6 +7,8 @@ import { useTheme } from "@/components/ThemeProvider";
 import EvalResultsTable from "@/components/eval/EvalResultsTable";
 import EvalCapturePanel from "@/components/eval/EvalCapturePanel";
 import EvalExportPanel from "@/components/eval/EvalExportPanel";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "convex/_generated/api";
 
 interface EvalRun {
   id: string;
@@ -38,20 +40,10 @@ export default function EvalDashboard() {
   const { user, isLoaded } = useUser();
   const { resolved: themeResolved, toggle: toggleTheme } = useTheme();
 
-  const [evals, setEvals] = useState<EvalRun[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>("results");
   const [runLoading, setRunLoading] = useState(false);
-  const [toast, setToast] = useState<{
-    message: string;
-    type: "success" | "error";
-  } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
-
-  // Capture tab state
-  const [candidates, setCandidates] = useState<EvalCandidate[]>([]);
-  const [captureLoading, setCaptureLoading] = useState(false);
   const [contributorMode, setContributorMode] = useState(false);
   const [piiScrub, setPiiScrub] = useState(true);
   const [captureFilters, setCaptureFilters] = useState({
@@ -73,81 +65,59 @@ export default function EvalDashboard() {
     }
   }, [toast]);
 
-  // Fetch evals list
-  useEffect(() => {
-    if (!isLoaded || !user) return;
-    setLoading(true);
-    setError(null);
-    fetch("/api/eval/list")
-      .then(async (r) => {
-        const body = await r.json().catch(() => ({}));
-        if (!r.ok) {
-          throw new Error(body.detail || body.error || `HTTP ${r.status}`);
-        }
-        // Map API response { runs } to frontend { evals } format
-        const mapped = (body.runs || []).map((run: any) => ({
-          id: run.id,
-          query: `Eval #${run.total_queries || 0} queries`,
-          mrr: run.avg_mrr ?? 0,
-          p_at_3: run.avg_p3 ?? 0,
-          p_at_5: run.avg_p5 ?? 0,
-          latency_ms: run.avg_latency_ms ?? 0,
-          date: run.created_at ?? "",
-          status: run.status === "completed" ? "pass" : run.status === "failed" ? "fail" : "pass",
-        }));
-        setEvals(mapped);
-        setLoading(false);
-      })
-      .catch((err) => {
-        setError(err.message || "Failed to load evals");
-        setLoading(false);
-      });
-  }, [isLoaded, user]);
+  // Get brainId from Convex (derived from Clerk session)
+  const brainId = useQuery(api.eval.getBrainId, {});
 
-  // Fetch capture candidates when capture tab is active
-  useEffect(() => {
-    if (activeTab !== "capture" || !isLoaded || !user) return;
-    setCaptureLoading(true);
-    fetch("/api/eval/candidates")
-      .then((r) => r.json())
-      .then((d) => {
-        setCandidates(d.candidates || []);
-        setCaptureLoading(false);
-      })
-      .catch(() => setCaptureLoading(false));
-  }, [activeTab, isLoaded, user]);
+  // Fetch evals list via Convex (real-time)
+  const convexRuns = useQuery(api.eval.listRuns, brainId ? { brainId } : "skip");
+
+  // Map Convex runs to UI format
+  const mappedRuns: EvalRun[] = (convexRuns || []).map((run: any) => ({
+    id: run._id,
+    query: `Eval #${run.totalQueries || 0} queries`,
+    mrr: run.avgMrr ?? 0,
+    p_at_3: run.avgP3 ?? 0,
+    p_at_5: run.avgP5 ?? 0,
+    latency_ms: run.avgLatencyMs ?? 0,
+    date: run._creationTime ? new Date(run._creationTime).toLocaleDateString() : "",
+    status: run.status === "completed" ? "pass" as const : "fail" as const,
+  }));
+
+  // Fetch candidates via Convex
+  const convexCandidates = useQuery(
+    api.eval.listCandidates,
+    activeTab === "capture" && brainId ? { brainId } : "skip"
+  );
+  const mappedCandidates: EvalCandidate[] = (convexCandidates || []).map((c: any) => ({
+    id: c._id,
+    query: c.queryText,
+    captured_at: c._creationTime ? new Date(c._creationTime).toLocaleString() : "",
+    source: c.tool || "search",
+  }));
+
+  // Derived state
+  const loading = brainId === undefined || convexRuns === undefined;
+  const captureLoading = activeTab === "capture" && convexCandidates === undefined;
+  const evals = mappedRuns;
+  const candidates = mappedCandidates;
+
+  const runEval = useMutation(api.eval.seedAndRun);
 
   const handleRunEval = useCallback(async () => {
+    if (!brainId) return;
     setRunLoading(true);
     try {
-      const r = await fetch("/api/eval/run", { method: "POST" });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data.detail || data.error || `HTTP ${r.status}`);
-      setToast({ message: "Eval run complete!", type: "success" });
-      // Refresh list immediately (processing is synchronous now)
-      const listR = await fetch("/api/eval/list");
-      const listData = await listR.json().catch(() => ({}));
-      const mapped = (listData.runs || []).map((run: any) => ({
-        id: run.id,
-        query: `Eval #${run.total_queries || 0} queries`,
-        mrr: run.avg_mrr ?? 0,
-        p_at_3: run.avg_p3 ?? 0,
-        p_at_5: run.avg_p5 ?? 0,
-        latency_ms: run.avg_latency_ms ?? 0,
-        date: run.created_at ?? "",
-        status: run.status === "completed" ? "pass" : run.status === "failed" ? "fail" : "pass",
-      }));
-      setEvals(mapped);
+      await runEval({ brainId });
+      setToast({ message: "Eval run started!", type: "success" });
     } catch (err: unknown) {
       setToast({
-        message:
-          err instanceof Error ? err.message : "Failed to start eval run",
+        message: err instanceof Error ? err.message : "Failed to start eval run",
         type: "error",
       });
     } finally {
       setRunLoading(false);
     }
-  }, []);
+  }, [brainId, runEval]);
 
   const handleSaveCaptureSettings = useCallback(async () => {
     setToast({ message: "Capture settings saved", type: "success" });
@@ -407,7 +377,7 @@ export default function EvalDashboard() {
             <EvalResultsTable
               evals={evals}
               loading={loading}
-              error={error}
+              error={null}
             />
           )}
 

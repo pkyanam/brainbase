@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import AuthProvider from "@/components/AuthProvider";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import ConvexClientProvider from "@/components/ConvexClientProvider";
 
 export const metadata: Metadata = {
   title: "Brainbase — AI Agent Memory",
@@ -37,7 +38,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="min-h-screen bg-bb-bg-primary text-bb-text-primary antialiased">
         <AuthProvider>
-          <ThemeProvider>{children}</ThemeProvider>
+          <ConvexClientProvider>
+            <ThemeProvider>{children}</ThemeProvider>
+          </ConvexClientProvider>
         </AuthProvider>
       </body>
     </html>
