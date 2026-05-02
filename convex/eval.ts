@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { query, mutation, action, internalMutation } from "./_generated/server";
+import { query, mutation, action, internalMutation, internalAction, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { Id, Doc } from "./_generated/dataModel";
 
@@ -70,7 +70,7 @@ export const seedAndRun = mutation({
       failed: 0,
     });
 
-    // Kick off background processing via action
+    // Kick off background processing via action (actions CAN use fetch!)
     await ctx.scheduler.runAfter(0, internal.eval.processRun, {
       runId,
       brainId: args.brainId,
@@ -80,33 +80,107 @@ export const seedAndRun = mutation({
   },
 });
 
-// ── Internal: actual eval processing ─────────────────────────────
+// ── Internal mutations (called by the action for DB writes) ──────
 
-export const processRun = internalMutation({
+export const saveResult = internalMutation({
+  args: {
+    runId: v.id("evalRuns"),
+    queryText: v.string(),
+    returnedSlugs: v.array(v.string()),
+    expectedSlugs: v.array(v.string()),
+    mrr: v.float64(),
+    p3: v.float64(),
+    p5: v.float64(),
+    passed: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.insert("evalResults", {
+      runId: args.runId,
+      queryText: args.queryText,
+      returnedSlugs: args.returnedSlugs,
+      expectedSlugs: args.expectedSlugs,
+      mrr: args.mrr,
+      p3: args.p3,
+      p5: args.p5,
+      latencyMs: 0,
+      passed: args.passed,
+    });
+
+    // Update run counters
+    const run = await ctx.db.get(args.runId);
+    if (run) {
+      await ctx.db.patch(args.runId, {
+        totalQueries: run.totalQueries + 1,
+        passed: args.passed ? run.passed + 1 : run.passed,
+        failed: args.passed ? run.failed : run.failed + 1,
+      });
+    }
+  },
+});
+
+export const failRun = internalMutation({
+  args: {
+    runId: v.id("evalRuns"),
+    error: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.runId, {
+      status: "failed",
+      meta: { error: args.error },
+      completedAt: Date.now(),
+    });
+  },
+});
+
+export const finalizeRun = internalMutation({
+  args: { runId: v.id("evalRuns") },
+  handler: async (ctx, args) => {
+    const results = await ctx.db
+      .query("evalResults")
+      .withIndex("by_run", (q) => q.eq("runId", args.runId))
+      .take(100);
+
+    let totalMrr = 0, totalP3 = 0, totalP5 = 0;
+    for (const r of results) {
+      totalMrr += r.mrr;
+      totalP3 += r.p3;
+      totalP5 += r.p5;
+    }
+    const n = results.length || 1;
+    await ctx.db.patch(args.runId, {
+      status: "completed",
+      avgMrr: totalMrr / n,
+      avgP3: totalP3 / n,
+      avgP5: totalP5 / n,
+      avgLatencyMs: 0,
+      completedAt: Date.now(),
+    });
+  },
+});
+
+// ── Internal: actual eval processing (ACTION — can use fetch!) ───
+
+export const processRun = internalAction({
   args: {
     runId: v.id("evalRuns"),
     brainId: v.string(),
   },
   handler: async (ctx, args) => {
     // Read candidates
-    const candidates = await ctx.db
-      .query("evalCandidates")
-      .withIndex("by_brain", (q) => q.eq("brainId", args.brainId))
-      .take(50);
+    const candidates = await ctx.runQuery(internal.eval.getCandidates, {
+      brainId: args.brainId,
+    });
 
     if (candidates.length === 0) {
-      await ctx.db.patch(args.runId, {
-        status: "failed",
-        meta: { error: "No candidates to evaluate" },
-        completedAt: Date.now(),
+      await ctx.runMutation(internal.eval.failRun, {
+        runId: args.runId,
+        error: "No candidates to evaluate",
       });
       return;
     }
 
-    // For each candidate, query the brainbase search API
-    // Convex mutations are transactions — limited to 16KB writes.
-    // We process one candidate per mutation invocation to stay within limits.
-    const candidate = candidates[0]; // process first candidate
+    const candidate = candidates[0];
+    const remaining = candidates.slice(1);
 
     try {
       const baseUrl = process.env.BRAINBASE_API_URL || "https://brainbase.belweave.ai";
@@ -129,7 +203,7 @@ export const processRun = internalMutation({
 
       const data = await res.json();
       const retSlugs: string[] = (data.results || []).map((r: any) => r.slug);
-      const expSlugs: string[] = candidate.topSlugs || [];
+      const expSlugs: string[] = (candidate.topSlugs as string[]) || [];
 
       // Compute metrics
       const mrr = computeMrr(retSlugs, expSlugs);
@@ -137,7 +211,7 @@ export const processRun = internalMutation({
       const p5 = precisionAt(retSlugs, expSlugs, 5);
       const passed = p3 >= 0.3;
 
-      await ctx.db.insert("evalResults", {
+      await ctx.runMutation(internal.eval.saveResult, {
         runId: args.runId,
         queryText: candidate.queryText,
         returnedSlugs: retSlugs,
@@ -145,59 +219,38 @@ export const processRun = internalMutation({
         mrr,
         p3,
         p5,
-        latencyMs: 0, // will update if we track latency
         passed,
       });
 
-      // Update run stats
-      const run = await ctx.db.get(args.runId);
-      if (run) {
-        await ctx.db.patch(args.runId, {
-          totalQueries: run.totalQueries + 1,
-          passed: passed ? run.passed + 1 : run.passed,
-          failed: passed ? run.failed : run.failed + 1,
-        });
-      }
-
-      // Schedule processing of next candidate
-      const remaining = candidates.slice(1);
+      // Process next or finalize
       if (remaining.length > 0) {
         await ctx.scheduler.runAfter(0, internal.eval.processRun, {
           runId: args.runId,
           brainId: args.brainId,
         });
       } else {
-        // All done — finalize
-        const results = await ctx.db
-          .query("evalResults")
-          .withIndex("by_run", (q) => q.eq("runId", args.runId))
-          .take(100);
-
-        let totalMrr = 0, totalP3 = 0, totalP5 = 0;
-        for (const r of results) {
-          totalMrr += r.mrr;
-          totalP3 += r.p3;
-          totalP5 += r.p5;
-        }
-        const n = results.length;
-        await ctx.db.patch(args.runId, {
-          status: "completed",
-          avgMrr: n > 0 ? totalMrr / n : 0,
-          avgP3: n > 0 ? totalP3 / n : 0,
-          avgP5: n > 0 ? totalP5 / n : 0,
-          avgLatencyMs: 0,
-          completedAt: Date.now(),
+        await ctx.runMutation(internal.eval.finalizeRun, {
+          runId: args.runId,
         });
       }
     } catch (err: any) {
       console.error("[eval] Candidate failed:", candidate.queryText, err.message);
-      // Mark run as failed and continue
-      await ctx.db.patch(args.runId, {
-        status: "failed",
-        meta: { error: err.message },
-        completedAt: Date.now(),
+      await ctx.runMutation(internal.eval.failRun, {
+        runId: args.runId,
+        error: `${candidate.queryText}: ${err.message}`,
       });
     }
+  },
+});
+
+// Helper query for the action to read candidates
+export const getCandidates = internalQuery({
+  args: { brainId: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("evalCandidates")
+      .withIndex("by_brain", (q) => q.eq("brainId", args.brainId))
+      .take(50);
   },
 });
 

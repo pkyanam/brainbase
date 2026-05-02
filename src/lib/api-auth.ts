@@ -12,9 +12,13 @@ export async function resolveApiAuth(
     const userId = "convex-eval-service";
     const requestedBrainId = req.headers.get("x-brain-id");
     if (requestedBrainId) {
+      // If X-Brain-Id looks like a Clerk user ID (user_*), resolve to brain UUID
+      if (requestedBrainId.startsWith("user_")) {
+        const brainId = await getOrCreateBrainForUser(requestedBrainId);
+        return { userId, brainId };
+      }
       return { userId, brainId: requestedBrainId };
     }
-    // Default to a known brain — for eval, use the header's brain id
     const defaultBrainId = process.env.CONVEX_EVAL_BRAIN_ID;
     if (defaultBrainId) return { userId, brainId: defaultBrainId };
   }
