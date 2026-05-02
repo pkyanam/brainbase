@@ -15,8 +15,10 @@ export async function ensureEvalSchema(): Promise<void> {
   // Idempotent column additions for tables that may exist from older deploys
   // (wrap in try/catch — tables won't exist on very first deploy, which is fine)
   try { await query(`ALTER TABLE eval_candidates ADD COLUMN IF NOT EXISTS brain_id UUID`); } catch {}
+  try { await query(`ALTER TABLE eval_candidates ADD COLUMN IF NOT EXISTS tool TEXT`); } catch {}
   try { await query(`ALTER TABLE eval_runs ADD COLUMN IF NOT EXISTS brain_id UUID`); } catch {}
   try { await query(`ALTER TABLE eval_capture_failures ADD COLUMN IF NOT EXISTS brain_id UUID`); } catch {}
+  try { await query(`ALTER TABLE eval_capture_failures ADD COLUMN IF NOT EXISTS tool TEXT`); } catch {}
 
   await query(`
     CREATE TABLE IF NOT EXISTS eval_candidates (

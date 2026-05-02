@@ -39,6 +39,7 @@ export const DEFAULT_RANKING_CONFIG: RankingConfig = {
     writing: 1.4,
     concept: 1.3,
     person: 1.2,
+    project: 1.35, // High-priority project pages (Brainbase, etc.)
     meeting: 1.1,
     decision: 1.1,
     tweet: 0.9,

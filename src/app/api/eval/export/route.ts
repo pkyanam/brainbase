@@ -29,6 +29,7 @@ export async function GET(req: NextRequest) {
           created_at TIMESTAMPTZ DEFAULT NOW()
         )
       `);
+      await query(`ALTER TABLE eval_candidates ADD COLUMN IF NOT EXISTS tool TEXT`);
     } catch (e) {
       console.error("[eval/export] Inline schema ensure failed:", e);
     }

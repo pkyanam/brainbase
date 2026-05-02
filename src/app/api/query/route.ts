@@ -59,25 +59,31 @@ export async function POST(req: NextRequest) {
 
   const limit = Math.min(Number(body.limit) || 20, 100);
 
-  // Classify intent (LLM with regex fallback)
-  const intent: QueryIntent = (await classifyIntentLLM(q, classifyIntent)) as QueryIntent;
+  const tStart = Date.now();
+
+  // ── Parallelize intent + expansion ─────────────────────────────────────────────────────────
+  // Start expansion EARLY in parallel with classification. If intent says skip,
+  // we discard the expansion result — the wasted LLM call is cheaper than the
+  // serial latency of waiting for classification first.
+  const intentPromise = classifyIntentLLM(q, classifyIntent);
+  const expansionPromise = expandQueries(q); // may be wasted; that's OK
+
+  const intent: QueryIntent = (await intentPromise) as QueryIntent;
   const detail = body.detail || detailForIntent(intent);
 
+  const SKIP_EXPAND_INTENTS = new Set(["entity", "tweet", "meeting"]);
+  const expand = body.expand !== false;
+  const shouldExpand = expand && detail !== "low" && !SKIP_EXPAND_INTENTS.has(intent);
+
+  let expandedQueries: string[];
+  if (shouldExpand) {
+    expandedQueries = await expansionPromise;
+  } else {
+    expandedQueries = [q];
+  }
+  const expansionApplied = expandedQueries.length > 1;
+
   try {
-    // ── Phase 0: Multi-query expansion (LLM-powered) ──────────
-    // Intent gating: skip LLM expansion for intents that have strong
-    // dedicated handlers (entity, tweet, meeting). LLM reformulation
-    // adds ~1.5s latency with minimal recall gain for these.
-    const SKIP_EXPAND_INTENTS = new Set(["entity", "tweet", "meeting"]);
-    const expand = body.expand !== false; // default true
-    const shouldExpand = expand && detail !== "low" && !SKIP_EXPAND_INTENTS.has(intent);
-    let expandedQueries: string[];
-    if (shouldExpand) {
-      expandedQueries = await expandQueries(q);
-    } else {
-      expandedQueries = [q]; // skip LLM for low-detail, explicit disable, or gated intents
-    }
-    const expansionApplied = expandedQueries.length > 1;
 
     // ── Phase 1: Search all expanded queries in PARALLEL ──────
     const keywordLimit = detail === "high" ? limit * 3 : limit * 2;
@@ -473,7 +479,63 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── Phase 7: Tweet-content retrieval fallback ────────────
+    // ── Phase 6.6: Relationship query handler ─────────────────────────────────────────────
+    // "sister", "brother", "mom", "dad", etc. → search person pages for that term
+    // and pin them above tweets. Prevents tweets mentioning "sister" from outranking
+    // the actual person page (e.g., Meghna's page).
+    const RELATIONSHIP_TERMS = new Set([
+      "sister", "brother", "mom", "mother", "dad", "father", "parent",
+      "cousin", "aunt", "uncle", "wife", "husband", "girlfriend", "boyfriend",
+      "partner", "grandmother", "grandfather", "grandma", "grandpa", "niece", "nephew",
+    ]);
+    const qLowerClean = q.toLowerCase().trim().replace(/\?+$/, "");
+    if (RELATIONSHIP_TERMS.has(qLowerClean)) {
+      console.log("[query] Relationship handler running for:", q);
+      try {
+        const relResults = await queryMany<{
+          slug: string; title: string; type: string; excerpt: string;
+        }>(
+          `SELECT p.slug, p.title, p.type,
+                  COALESCE(p.compiled_truth, '') as excerpt
+           FROM pages p
+           WHERE p.brain_id = $1
+             AND p.type = 'person'
+             AND (p.compiled_truth ILIKE $2 OR p.title ILIKE $2)
+           ORDER BY ts_rank_cd(to_tsvector('english', COALESCE(p.compiled_truth, '')), plainto_tsquery('english', $3)) DESC
+           LIMIT 5`,
+          [auth.brainId, `%${qLowerClean}%`, qLowerClean]
+        );
+        console.log("[query] Relationship results:", relResults.length, "rows");
+
+        const relScore = 98.0; // Just below exact-match pin (100)
+        for (const r of relResults) {
+          const existing = finalResults.find((fr) => fr.slug === r.slug);
+          if (existing) {
+            existing.score = Math.max(existing.score, relScore);
+            existing.excerpt = r.excerpt || existing.excerpt;
+            (existing as any).handler_path = "relationship";
+          } else {
+            finalResults.push({
+              slug: r.slug,
+              score: relScore,
+              excerpt: r.excerpt || "",
+              type: r.type,
+              source: "fts_and" as any,
+              title: r.title,
+              boost_factors: {
+                exact_match: relScore,
+                total: relScore,
+              } as BoostFactors,
+              handler_path: "relationship",
+            } as any);
+          }
+        }
+      } catch (err) {
+        console.error("[query] Relationship lookup error:", err);
+      }
+    }
+
+    // ── Phase 7: Tweet-content retrieval fallback ─────────────────
     // MUST run BEFORE tweet boost so fallback rows get the multiplier.
     // For non-tweet-intent queries where hybrid returns few/no tweets,
     // search tweet content directly and inject with tiered scoring.

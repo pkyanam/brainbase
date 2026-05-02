@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
         top_slugs TEXT[], meta JSONB,
         created_at TIMESTAMPTZ DEFAULT NOW()
       )`);
+      await query(`ALTER TABLE eval_candidates ADD COLUMN IF NOT EXISTS tool TEXT`);
       await query(`CREATE TABLE IF NOT EXISTS eval_runs (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         brain_id UUID NOT NULL, status TEXT NOT NULL DEFAULT 'running',

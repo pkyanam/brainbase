@@ -29,6 +29,7 @@ export async function GET(req: NextRequest) {
           created_at TIMESTAMPTZ DEFAULT NOW()
         )
       `);
+      await query(`ALTER TABLE eval_candidates ADD COLUMN IF NOT EXISTS tool TEXT`);
       await query(`CREATE INDEX IF NOT EXISTS idx_eval_candidates_brain_tool ON eval_candidates(brain_id, tool, created_at)`);
     } catch (e) {
       console.error("[eval/candidates] Inline schema ensure failed:", e);
