@@ -95,7 +95,13 @@ async function dispatch(brainId: string, method: string, params: Record<string, 
     case "traverse_graph": {
       const slug = params.slug as string;
       if (!slug) throw new Error("Missing 'slug' parameter");
-      return await traverseGraph(brainId, slug, (params.depth as number) ?? 2, (params.direction as "out" | "in" | "both") ?? "out", params.link_type as string | undefined);
+      const lt = params.link_type as string | undefined;
+      const result = await traverseGraph(brainId, slug, (params.depth as number) ?? 2, (params.direction as "out" | "in" | "both") ?? "out", lt);
+      // Attach _diag to verify filter passthrough
+      if (Array.isArray(result)) {
+        (result as any)._diag = { linkTypeRequested: lt || null, resultCount: result.length };
+      }
+      return result;
     }
     case "put_page": {
       const slug = params.slug as string;
