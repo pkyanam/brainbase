@@ -15,7 +15,27 @@ import { queryMany } from "@/lib/supabase/client";
 import { runAutoExtract } from "@/lib/auto-extract";
 
 export async function POST(req: NextRequest) {
-  const auth = await resolveApiAuth(req);
+  // Accept: API key (bb_live_*), Clerk session, Convex secret, OR cron secret
+  const authHeader = req.headers.get("authorization");
+  const bearer = authHeader ? authHeader.match(/^Bearer\s+(.+)$/i)?.[1] : null;
+  const isCron = bearer &&
+    (bearer === process.env.HERMES_CRON_SECRET ||
+     bearer === process.env.API_CRON_SECRET ||
+     bearer === process.env.CRON_SECRET);
+
+  let auth: { userId: string; brainId: string } | null = null;
+
+  if (isCron) {
+    // Cron auth — use default brain from env
+    const brainId = req.headers.get("x-brain-id") || process.env.CONVEX_EVAL_BRAIN_ID;
+    if (!brainId) {
+      return NextResponse.json({ error: "No brain ID configured for cron auth" }, { status: 400 });
+    }
+    auth = { userId: "cron-service", brainId };
+  } else {
+    auth = await resolveApiAuth(req);
+  }
+
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
