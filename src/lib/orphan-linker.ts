@@ -139,15 +139,21 @@ async function ftsLinkOrphans(
        SELECT
          o.id as orphan_id,
          c.id as target_id,
-         ts_rank(c.search_vector, o.search_vector) as rank,
+         ts_rank(c.search_vector, plainto_tsquery('english',
+           array_to_string(tsvector_to_array(o.search_vector), ' ')
+         )) as rank,
          ROW_NUMBER() OVER (
            PARTITION BY o.id
-           ORDER BY ts_rank(c.search_vector, o.search_vector) DESC
+           ORDER BY ts_rank(c.search_vector, plainto_tsquery('english',
+             array_to_string(tsvector_to_array(o.search_vector), ' ')
+           )) DESC
          ) as rn
        FROM orphans o
        CROSS JOIN connected c
        WHERE c.id != o.id
-         AND ts_rank(c.search_vector, o.search_vector) > $2
+         AND ts_rank(c.search_vector, plainto_tsquery('english',
+           array_to_string(tsvector_to_array(o.search_vector), ' ')
+         )) > $2
      )
      SELECT orphan_id, target_id, rank
      FROM ranked
