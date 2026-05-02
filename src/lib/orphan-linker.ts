@@ -28,120 +28,80 @@ interface LinkPair {
 async function vectorLinkOrphans(
   brainId: string
 ): Promise<{ linked: number; pairs: LinkPair[]; sampleScores: number[] }> {
-  // Get orphans that have at least one embedded chunk
-  const orphanRows = await queryMany<{ id: number; slug: string }>(
-    `SELECT p.id, p.slug
-     FROM pages p
-     WHERE p.brain_id = $1
-       AND EXISTS (SELECT 1 FROM content_chunks c WHERE c.page_id = p.id AND c.brain_id = $1 AND c.embedding IS NOT NULL)
-       AND NOT EXISTS (
-         SELECT 1 FROM links l
-         WHERE l.brain_id = $1
-           AND (l.from_page_id = p.id OR l.to_page_id = p.id)
-       )
-     LIMIT 500`,
-    [brainId]
+  // Single bulk query: compute avg embeddings for ALL orphans + targets,
+  // CROSS JOIN with cosine similarity, rank, and filter.
+  const rows = await queryMany<{
+    orphan_id: number;
+    target_id: number;
+    similarity: number;
+  }>(
+    `WITH orphan_avgs AS (
+       SELECT p.id as orphan_id,
+         AVG(c.embedding)::vector as emb
+       FROM pages p
+       JOIN content_chunks c ON c.page_id = p.id AND c.brain_id = p.brain_id
+       WHERE p.brain_id = $1
+         AND c.embedding IS NOT NULL
+         AND NOT EXISTS (
+           SELECT 1 FROM links l
+           WHERE l.brain_id = $1
+             AND (l.from_page_id = p.id OR l.to_page_id = p.id)
+         )
+       GROUP BY p.id
+       LIMIT 500
+     ),
+     target_avgs AS (
+       SELECT p.id as target_id,
+         AVG(c.embedding)::vector as emb
+       FROM pages p
+       JOIN content_chunks c ON c.page_id = p.id AND c.brain_id = p.brain_id
+       WHERE p.brain_id = $1
+         AND c.embedding IS NOT NULL
+         AND EXISTS (
+           SELECT 1 FROM links l
+           WHERE l.brain_id = $1
+             AND (l.from_page_id = p.id OR l.to_page_id = p.id)
+         )
+       GROUP BY p.id
+     ),
+     ranked AS (
+       SELECT
+         o.orphan_id,
+         t.target_id,
+         1 - (t.emb <=> o.emb) as similarity,
+         ROW_NUMBER() OVER (
+           PARTITION BY o.orphan_id
+           ORDER BY 1 - (t.emb <=> o.emb) DESC
+         ) as rn
+       FROM orphan_avgs o
+       CROSS JOIN target_avgs t
+       WHERE o.orphan_id != t.target_id
+         AND 1 - (t.emb <=> o.emb) > $2
+     )
+     SELECT orphan_id, target_id, similarity
+     FROM ranked
+     WHERE rn <= $3`,
+    [brainId, VECTOR_THRESHOLD, MAX_LINKS_PER_ORPHAN]
   );
 
-  if (orphanRows.length === 0) { console.log("[orphan-linker] No orphans with embeddings found"); return { linked: 0, pairs: [], sampleScores: [] }; }
-  console.log(`[orphan-linker] Found ${orphanRows.length} orphans with embeddings, checking vector similarity...`);
+  const pairs: LinkPair[] = rows.map((r) => ({
+    fromId: r.orphan_id,
+    toId: r.target_id,
+    similarity: r.similarity,
+    method: "vector" as const,
+  }));
 
-  const pairs: LinkPair[] = [];
-
-  // Diagnostic: sample a few raw similarity scores at lower threshold
-  let sampleScores: number[] = [];
-  if (orphanRows.length > 0) {
-    const sampleOrphan = orphanRows[0];
-    try {
-      const sampleMatches = await queryMany<{ similarity: number }>(
-        `WITH orphan_avg AS (
-           SELECT AVG(embedding)::vector as emb
-           FROM content_chunks
-           WHERE brain_id = $1 AND page_id = $2 AND embedding IS NOT NULL
-         ),
-         target_avgs AS (
-           SELECT p.id,
-             AVG(c.embedding)::vector as emb
-           FROM pages p
-           JOIN content_chunks c ON c.page_id = p.id AND c.brain_id = p.brain_id
-           WHERE p.brain_id = $1
-             AND p.id != $2
-             AND c.embedding IS NOT NULL
-             AND EXISTS (
-               SELECT 1 FROM links l
-               WHERE l.brain_id = $1
-                 AND (l.from_page_id = p.id OR l.to_page_id = p.id)
-             )
-           GROUP BY p.id
-         )
-         SELECT 1 - (t.emb <=> (SELECT emb FROM orphan_avg)) as similarity
-         FROM target_avgs t
-         ORDER BY similarity DESC
-         LIMIT 5`,
-        [brainId, sampleOrphan.id]
-      );
-      sampleScores = sampleMatches.map(m => m.similarity);
-      console.log(`[orphan-linker] Sample orphan ${sampleOrphan.slug}: top-5 similarities = [${sampleScores.join(', ')}]`);
-    } catch (err) {
-      console.error(`[orphan-linker] Sample query error:`, err);
-      sampleScores = [-99]; // sentinel for error
-    }
-  }
-  let checkedOrphans = 0;
-  let totalMatches = 0;
-  let topScores: number[] = [];
+  const uniqueOrphans = new Set(rows.map((r) => r.orphan_id)).size;
   
-  for (const orphan of orphanRows) {
-    // Find similar connected pages via vector
-    const matches = await queryMany<{ id: number; slug: string; similarity: number }>(
-      `WITH orphan_avg AS (
-         SELECT AVG(embedding)::vector as emb
-         FROM content_chunks
-         WHERE brain_id = $1 AND page_id = $2 AND embedding IS NOT NULL
-       ),
-       target_avgs AS (
-         SELECT p.id, p.slug,
-           AVG(c.embedding)::vector as emb
-         FROM pages p
-         JOIN content_chunks c ON c.page_id = p.id AND c.brain_id = p.brain_id
-         WHERE p.brain_id = $1
-           AND p.id != $2
-           AND c.embedding IS NOT NULL
-           AND EXISTS (
-             SELECT 1 FROM links l
-             WHERE l.brain_id = $1
-               AND (l.from_page_id = p.id OR l.to_page_id = p.id)
-           )
-         GROUP BY p.id, p.slug
-       )
-       SELECT t.id, t.slug,
-         1 - (t.emb <=> (SELECT emb FROM orphan_avg)) as similarity
-       FROM target_avgs t
-       WHERE 1 - (t.emb <=> (SELECT emb FROM orphan_avg)) > $3
-       ORDER BY similarity DESC
-       LIMIT $4`,
-      [brainId, orphan.id, VECTOR_THRESHOLD, MAX_LINKS_PER_ORPHAN]
-    );
-
-    checkedOrphans++;
-    totalMatches += matches.length;
-    if (matches.length > 0 && topScores.length < 10) {
-      topScores.push(matches[0].similarity);
-    }
-
-    for (const m of matches) {
-      pairs.push({
-        fromId: orphan.id,
-        toId: m.id,
-        similarity: m.similarity,
-        method: "vector",
-      });
-    }
-  }
+  // Sample top scores for diagnostics
+  const sampleScores = rows.slice(0, 5).map(r => r.similarity);
   
-  console.log(`[orphan-linker] Vector: checked ${checkedOrphans} orphans, found ${totalMatches} total matches, top scores: [${topScores.join(', ')}]`);
+  console.log(
+    `[orphan-linker] Bulk vector: ${uniqueOrphans} orphans matched, ` +
+    `${pairs.length} total pairs, sample scores: [${sampleScores.join(', ')}]`
+  );
 
-  return { linked: orphanRows.length, pairs, sampleScores };
+  return { linked: uniqueOrphans, pairs, sampleScores };
 }
 
 /**
