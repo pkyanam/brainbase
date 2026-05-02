@@ -58,6 +58,15 @@ export interface EnrichResult {
 
   /** Raw data entries stored */
   rawDataStored: number;
+
+  /** Internal diagnostics — web search key status, source health */
+  _diag?: {
+    braveKeyConfigured: boolean;
+    braveKeyLength: number;
+    braveCalled: boolean;
+    braveResults: number;
+    braveError?: string;
+  };
 }
 
 export interface EnrichError {

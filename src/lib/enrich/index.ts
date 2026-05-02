@@ -78,18 +78,36 @@ export async function enrichEntity(
   let researchData: string | null = null;
   const allSources: string[] = [];
   let rawDataStored = 0;
+  const diag = {
+    braveKeyConfigured: !!process.env.BRAVE_API_KEY,
+    braveKeyLength: (process.env.BRAVE_API_KEY || "").length,
+    braveCalled: false,
+    braveResults: 0,
+    braveError: undefined as string | undefined,
+  };
 
   if (useWebSearch) {
-    const brave = await fetchFromBrave(request.name, detectedType, tier, request.context);
-    if (brave) {
-      researchData = brave.content;
-      allSources.push("brave");
-      await putRawData(brainId, slug, "brave", {
-        prompt: { name: request.name, type: detectedType, tier },
-        raw: brave.content,
-        meta: brave.meta,
-      });
-      rawDataStored++;
+    diag.braveCalled = true;
+    try {
+      const brave = await fetchFromBrave(request.name, detectedType, tier, request.context);
+      if (brave) {
+        if (brave.content) {
+          researchData = brave.content;
+          allSources.push("brave");
+          diag.braveResults = (brave.meta?.resultCount as number) || 0;
+          await putRawData(brainId, slug, "brave", {
+            prompt: { name: request.name, type: detectedType, tier },
+            raw: brave.content,
+            meta: brave.meta,
+          });
+          rawDataStored++;
+        } else if (brave.meta?.error) {
+          diag.braveError = brave.meta.error as string;
+        }
+      }
+    } catch (err) {
+      diag.braveError = err instanceof Error ? err.message : String(err);
+      console.error("[enrich] Brave fetch exception:", err);
     }
   }
 
@@ -202,6 +220,7 @@ export async function enrichEntity(
     enrichedAt: new Date().toISOString(),
     linksCreated,
     rawDataStored,
+    _diag: diag,
   };
 }
 

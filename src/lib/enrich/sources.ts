@@ -40,6 +40,9 @@ export async function fetchFromBrave(
     return null;
   }
 
+  // Diagnostic: log key presence (not the key itself)
+  console.log(`[enrich] Brave key present (length=${BRAVE_API_KEY.length}), querying "${name}"`);
+
   const query = buildBraveQuery(name, type, context);
   const count = tier === 1 ? 10 : 5;
 
@@ -58,8 +61,15 @@ export async function fetchFromBrave(
 
     if (!res.ok) {
       const text = await res.text().catch(() => res.statusText);
-      console.error(`[enrich] Brave error (${res.status}):`, text.slice(0, 200));
-      return null;
+      const errMsg = `Brave API ${res.status}: ${text.slice(0, 300)}`;
+      console.error(`[enrich] ${errMsg}`);
+      // Return the error in a way the orchestrator can capture it
+      return {
+        content: "",
+        source: "brave",
+        fetchedAt: new Date().toISOString(),
+        meta: { error: errMsg, status: res.status },
+      } as EnrichSourceData;
     }
 
     const data = await res.json();
