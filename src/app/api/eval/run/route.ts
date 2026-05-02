@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
 
 async function runEvalCycle(brainId: string, runId: string, limit: number) {
   // Get candidates
-  const { rows: candidates } = await query<any>(
+  let { rows: candidates } = await query<any>(
     `SELECT id, brain_id, tool, query_text, result_count, top_slugs, meta
      FROM eval_candidates
      WHERE brain_id = $1 AND (tool = 'query' OR tool = 'search')
@@ -97,13 +97,49 @@ async function runEvalCycle(brainId: string, runId: string, limit: number) {
   );
 
   if (candidates.length === 0) {
-    await query(
-      `UPDATE eval_runs SET status = 'failed',
-       meta = jsonb_set(COALESCE(meta, '{}'), '{error}', to_jsonb('No captured candidates to evaluate')),
-       completed_at = NOW() WHERE id = $1`,
-      [runId]
+    // Auto-seed: run a few known queries through search to generate candidates
+    const seedQueries = [
+      "stripe",
+      "yc",
+      "hermes agent",
+      "tweets",
+      "preetham"
+    ];
+    console.log("[eval] No candidates — auto-seeding", seedQueries.length, "queries");
+
+    for (const sq of seedQueries) {
+      try {
+        const results = await searchBrain(brainId, sq);
+        await query(
+          `INSERT INTO eval_candidates (brain_id, tool, query_text, result_count, top_slugs, meta)
+           VALUES ($1, 'search', $2, $3, $4, $5)`,
+          [brainId, sq, results.length, results.slice(0, 5).map(r => r.slug), JSON.stringify({ seed: true })]
+        );
+      } catch (e) {
+        console.error("[eval] Seed query failed:", sq, e);
+      }
+    }
+
+    // Re-read candidates
+    const { rows: seeded } = await query<any>(
+      `SELECT id, brain_id, tool, query_text, result_count, top_slugs, meta
+       FROM eval_candidates
+       WHERE brain_id = $1 AND (tool = 'query' OR tool = 'search')
+       ORDER BY created_at DESC LIMIT $2`,
+      [brainId, limit]
     );
-    return;
+    if (seeded.length === 0) {
+      await query(
+        `UPDATE eval_runs SET status = 'failed',
+         meta = jsonb_set(COALESCE(meta, '{}'), '{error}', to_jsonb('No candidates and auto-seed failed')),
+         completed_at = NOW() WHERE id = $1`,
+        [runId]
+      );
+      return;
+    }
+    // Use seeded candidates
+    candidates.length = 0;
+    candidates.push(...seeded);
   }
 
   let totalMrr = 0, totalP3 = 0, totalP5 = 0, totalLatency = 0;
