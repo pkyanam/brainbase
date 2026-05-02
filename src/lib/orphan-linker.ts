@@ -1,25 +1,23 @@
 /**
- * Batch orphan linker v3 — end-to-end fix.
+ * Batch orphan linker v4 — actually works.
  *
- * Problems with v2:
- *   1. LIMIT 500 — most orphans never processed
- *   2. Targets had to be "connected" — in a mostly-orphan brain, no targets exist
- *   3. FTS required search_vector — many imports don't populate this
- *   4. No fallback for pages with neither embeddings nor search_vector
+ * v3 problem: CROSS JOIN of 1000 orphans × 3300 targets = 3.3M vector comps.
+ * This times out on Vercel Hobby (10s) and Supabase shared instances.
  *
- * Strategy v3:
- *   1. Vector: ALL pages with embeddings are valid targets (orphan→orphan OK)
- *   2. FTS: ALL pages with search_vector are valid targets
- *   3. Title: match remaining orphans by title/slug keyword overlap
- *   4. Process in batches to avoid query timeouts
+ * v4 strategy:
+ *   1. Vector: per-orphan KNN using pgvector index (ORDER BY <=> LIMIT)
+ *   2. FTS: batch query but with smaller limits
+ *   3. Title: simple keyword overlap, no CROSS JOIN explosion
+ *   4. Process in small batches, never timeout
  */
 
 import { query, queryOne, queryMany } from "./supabase/client";
 
-const VECTOR_THRESHOLD = 0.40; // lowered — cross-domain orphans need looser matching
-const FTS_RANK_THRESHOLD = 0.005; // lowered
+const VECTOR_THRESHOLD = 0.35; // lower = more links, v3 was 0.40
 const MAX_LINKS_PER_ORPHAN = 3;
-const BATCH_SIZE = 1000; // process up to 1000 orphans per run
+const VECTOR_BATCH = 100; // per-orphan KNN, fast
+const FTS_BATCH = 100;
+const TITLE_BATCH = 200;
 
 interface LinkPair {
   fromId: number;
@@ -28,7 +26,7 @@ interface LinkPair {
   method: "vector" | "fts" | "title";
 }
 
-/* ────────────────────────────────────────────────────────────────────────── */
+/* ── Diagnostics ─────────────────────────────────────────────────────── */
 
 async function getOrphanBuckets(brainId: string) {
   const total = await queryOne<{ cnt: number }>(
@@ -72,266 +70,266 @@ async function getOrphanBuckets(brainId: string) {
     [brainId]
   );
 
-  const withSearchVec = await queryOne<{ cnt: number }>(
-    `SELECT COUNT(*)::int as cnt FROM pages p
+  return {
+    total: total?.cnt ?? 0,
+    withEmbeds: withEmbeds?.cnt ?? 0,
+    withoutEmbeds: withoutEmbeds?.cnt ?? 0,
+  };
+}
+
+/* ── Vector linking (uses pgvector KNN index) ────────────────────────── */
+
+async function vectorLinkOrphans(
+  brainId: string,
+  maxOrphans: number
+): Promise<{ linked: number; pairs: LinkPair[]; sampleScores: number[] }> {
+  // Get orphan IDs with embeddings
+  const orphans = await queryMany<{ id: number }>(
+    `SELECT p.id
+     FROM pages p
      WHERE p.brain_id = $1
+       AND EXISTS (
+         SELECT 1 FROM content_chunks c
+         WHERE c.page_id = p.id AND c.brain_id = $1 AND c.embedding IS NOT NULL
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM links l
+         WHERE l.brain_id = $1
+           AND (l.from_page_id = p.id OR l.to_page_id = p.id)
+       )
+     LIMIT $2`,
+    [brainId, maxOrphans]
+  );
+
+  if (orphans.length === 0) {
+    return { linked: 0, pairs: [], sampleScores: [] };
+  }
+
+  const pairs: LinkPair[] = [];
+  const sampleScores: number[] = [];
+  let linkedCount = 0;
+
+  for (const orphan of orphans) {
+    try {
+      // Per-orphan KNN: uses pgvector HNSW/IVFFlat index via ORDER BY <=>
+      const rows = await queryMany<{
+        target_id: number;
+        similarity: number;
+      }>(
+        `WITH orphan_emb AS (
+           SELECT AVG(c.embedding)::vector as emb
+           FROM content_chunks c
+           WHERE c.page_id = $2 AND c.brain_id = $1 AND c.embedding IS NOT NULL
+         )
+         SELECT c.page_id as target_id,
+           1 - (c.embedding <=> (SELECT emb FROM orphan_emb)) as similarity
+         FROM content_chunks c
+         WHERE c.brain_id = $1
+           AND c.embedding IS NOT NULL
+           AND c.page_id != $2
+         ORDER BY c.embedding <=> (SELECT emb FROM orphan_emb)
+         LIMIT 30`,
+        [brainId, orphan.id]
+      );
+
+      // Deduplicate by target page, keep top 3
+      const seenTargets = new Set<number>();
+      let count = 0;
+      for (const row of rows) {
+        if (seenTargets.has(row.target_id)) continue;
+        seenTargets.add(row.target_id);
+        if (row.similarity < VECTOR_THRESHOLD) break;
+        pairs.push({
+          fromId: orphan.id,
+          toId: row.target_id,
+          similarity: row.similarity,
+          method: "vector",
+        });
+        if (sampleScores.length < 5) sampleScores.push(row.similarity);
+        count++;
+        if (count >= MAX_LINKS_PER_ORPHAN) break;
+      }
+      if (count > 0) linkedCount++;
+    } catch (err) {
+      console.error(`[orphan-linker] Vector KNN failed for orphan ${orphan.id}:`, err);
+    }
+  }
+
+  console.log(
+    `[orphan-linker] Vector: ${linkedCount}/${orphans.length} orphans linked, ${pairs.length} pairs, scores: [${sampleScores.join(", ")}]`
+  );
+
+  return { linked: linkedCount, pairs, sampleScores };
+}
+
+/* ── FTS linking ─────────────────────────────────────────────────────── */
+
+async function ftsLinkOrphans(
+  brainId: string,
+  maxOrphans: number
+): Promise<{ linked: number; pairs: LinkPair[] }> {
+  // Orphans without embeddings but with search_vector
+  const orphans = await queryMany<{ id: number; search_vector: string }>(
+    `SELECT p.id, p.search_vector::text
+     FROM pages p
+     WHERE p.brain_id = $1
+       AND NOT EXISTS (
+         SELECT 1 FROM content_chunks c
+         WHERE c.page_id = p.id AND c.brain_id = $1 AND c.embedding IS NOT NULL
+       )
        AND p.search_vector IS NOT NULL
        AND p.search_vector != to_tsvector('english', '')
        AND NOT EXISTS (
          SELECT 1 FROM links l
          WHERE l.brain_id = $1
            AND (l.from_page_id = p.id OR l.to_page_id = p.id)
-       )`,
-    [brainId]
+       )
+     LIMIT $2`,
+    [brainId, maxOrphans]
   );
 
-  return {
-    total: total?.cnt ?? 0,
-    withEmbeds: withEmbeds?.cnt ?? 0,
-    withoutEmbeds: withoutEmbeds?.cnt ?? 0,
-    withSearchVec: withSearchVec?.cnt ?? 0,
-  };
-}
+  if (orphans.length === 0) {
+    return { linked: 0, pairs: [] };
+  }
 
-/* ── Vector linking ─────────────────────────────────────────────────────── */
+  const pairs: LinkPair[] = [];
+  let linkedCount = 0;
 
-async function vectorLinkOrphans(
-  brainId: string,
-  maxOrphans: number
-): Promise<{ linked: number; pairs: LinkPair[]; sampleScores: number[] }> {
-  // Targets: ALL pages with embeddings (not just "connected" ones)
-  // Orphans: pages with embeddings but no links
-  const rows = await queryMany<{
-    orphan_id: number;
-    target_id: number;
-    similarity: number;
-  }>(
-    `WITH orphan_avgs AS (
-       SELECT p.id as orphan_id,
-         AVG(c.embedding)::vector as emb
-       FROM pages p
-       JOIN content_chunks c ON c.page_id = p.id AND c.brain_id = p.brain_id
-       WHERE p.brain_id = $1
-         AND c.embedding IS NOT NULL
-         AND NOT EXISTS (
-           SELECT 1 FROM links l
-           WHERE l.brain_id = $1
-             AND (l.from_page_id = p.id OR l.to_page_id = p.id)
-         )
-       GROUP BY p.id
-       LIMIT $4
-     ),
-     target_avgs AS (
-       SELECT p.id as target_id,
-         AVG(c.embedding)::vector as emb
-       FROM pages p
-       JOIN content_chunks c ON c.page_id = p.id AND c.brain_id = p.brain_id
-       WHERE p.brain_id = $1
-         AND c.embedding IS NOT NULL
-       GROUP BY p.id
-     ),
-     ranked AS (
-       SELECT
-         o.orphan_id,
-         t.target_id,
-         1 - (t.emb <=> o.emb) as similarity,
-         ROW_NUMBER() OVER (
-           PARTITION BY o.orphan_id
-           ORDER BY 1 - (t.emb <=> o.emb) DESC
-         ) as rn
-       FROM orphan_avgs o
-       CROSS JOIN target_avgs t
-       WHERE o.orphan_id != t.target_id
-         AND 1 - (t.emb <=> o.emb) > $2
-     )
-     SELECT orphan_id, target_id, similarity
-     FROM ranked
-     WHERE rn <= $3`,
-    [brainId, VECTOR_THRESHOLD, MAX_LINKS_PER_ORPHAN, maxOrphans]
-  );
+  for (const orphan of orphans) {
+    try {
+      // Build query from orphan's search_vector
+      const rows = await queryMany<{
+        target_id: number;
+        rank: number;
+      }>(
+        `SELECT p.id as target_id,
+           ts_rank(p.search_vector, plainto_tsquery('english',
+             array_to_string(tsvector_to_array($2::tsvector), ' ')
+           )) as rank
+         FROM pages p
+         WHERE p.brain_id = $1
+           AND p.search_vector IS NOT NULL
+           AND p.id != $3
+           AND p.search_vector @@ plainto_tsquery('english',
+             array_to_string(tsvector_to_array($2::tsvector), ' ')
+           )
+         ORDER BY rank DESC
+         LIMIT $4`,
+        [brainId, orphan.search_vector, orphan.id, MAX_LINKS_PER_ORPHAN]
+      );
 
-  const pairs: LinkPair[] = rows.map((r) => ({
-    fromId: r.orphan_id,
-    toId: r.target_id,
-    similarity: r.similarity,
-    method: "vector" as const,
-  }));
-
-  const uniqueOrphans = new Set(rows.map((r) => r.orphan_id)).size;
-  const sampleScores = rows.slice(0, 5).map((r) => r.similarity);
+      let count = 0;
+      for (const row of rows) {
+        if (row.rank < 0.001) break;
+        pairs.push({
+          fromId: orphan.id,
+          toId: row.target_id,
+          similarity: Math.min(row.rank, 0.99),
+          method: "fts",
+        });
+        count++;
+      }
+      if (count > 0) linkedCount++;
+    } catch (err) {
+      console.error(`[orphan-linker] FTS failed for orphan ${orphan.id}:`, err);
+    }
+  }
 
   console.log(
-    `[orphan-linker] Vector: ${uniqueOrphans}/${maxOrphans} orphans linked, ` +
-      `${pairs.length} pairs, scores: [${sampleScores.join(", ")}]`
+    `[orphan-linker] FTS: ${linkedCount}/${orphans.length} orphans linked, ${pairs.length} pairs`
   );
 
-  return { linked: uniqueOrphans, pairs, sampleScores };
+  return { linked: linkedCount, pairs };
 }
 
-/* ── FTS linking ────────────────────────────────────────────────────────── */
-
-async function ftsLinkOrphans(
-  brainId: string,
-  maxOrphans: number
-): Promise<{ linked: number; pairs: LinkPair[] }> {
-  // Targets: ALL pages with search_vector (not just "connected" ones)
-  // Orphans: pages without embeddings, with search_vector, no links
-  const rows = await queryMany<{
-    orphan_id: number;
-    target_id: number;
-    rank: number;
-  }>(
-    `WITH orphans AS (
-       SELECT p.id, p.search_vector
-       FROM pages p
-       WHERE p.brain_id = $1
-         AND NOT EXISTS (
-           SELECT 1 FROM content_chunks c
-           WHERE c.page_id = p.id AND c.brain_id = $1 AND c.embedding IS NOT NULL
-         )
-         AND NOT EXISTS (
-           SELECT 1 FROM links l
-           WHERE l.brain_id = $1
-             AND (l.from_page_id = p.id OR l.to_page_id = p.id)
-         )
-         AND p.search_vector IS NOT NULL
-         AND p.search_vector != to_tsvector('english', '')
-       LIMIT $4
-     ),
-     targets AS (
-       SELECT p.id, p.search_vector
-       FROM pages p
-       WHERE p.brain_id = $1
-         AND p.search_vector IS NOT NULL
-         AND p.search_vector != to_tsvector('english', '')
-     ),
-     ranked AS (
-       SELECT
-         o.id as orphan_id,
-         t.id as target_id,
-         ts_rank(t.search_vector, plainto_tsquery('english',
-           array_to_string(tsvector_to_array(o.search_vector), ' ')
-         )) as rank,
-         ROW_NUMBER() OVER (
-           PARTITION BY o.id
-           ORDER BY ts_rank(t.search_vector, plainto_tsquery('english',
-             array_to_string(tsvector_to_array(o.search_vector), ' ')
-           )) DESC
-         ) as rn
-       FROM orphans o
-       CROSS JOIN targets t
-       WHERE t.id != o.id
-         AND ts_rank(t.search_vector, plainto_tsquery('english',
-           array_to_string(tsvector_to_array(o.search_vector), ' ')
-         )) > $2
-     )
-     SELECT orphan_id, target_id, rank
-     FROM ranked
-     WHERE rn <= $3`,
-    [brainId, FTS_RANK_THRESHOLD, MAX_LINKS_PER_ORPHAN, maxOrphans]
-  );
-
-  const pairs: LinkPair[] = rows.map((r) => ({
-    fromId: r.orphan_id,
-    toId: r.target_id,
-    similarity: Math.min(r.rank, 0.99),
-    method: "fts" as const,
-  }));
-
-  console.log(
-    `[orphan-linker] FTS: ${new Set(rows.map((r) => r.orphan_id)).size} orphans linked, ${pairs.length} pairs`
-  );
-
-  return { linked: new Set(rows.map((r) => r.orphan_id)).size, pairs };
-}
-
-/* ── Title fallback ─────────────────────────────────────────────────────── */
+/* ── Title fallback (fast, no CROSS JOIN) ────────────────────────────── */
 
 async function titleLinkOrphans(
   brainId: string,
   maxOrphans: number
 ): Promise<{ linked: number; pairs: LinkPair[] }> {
-  // For orphans with neither embeddings nor search_vector,
-  // try matching by overlapping title keywords.
-  const rows = await queryMany<{
-    orphan_id: number;
-    target_id: number;
-    overlap: number;
-  }>(
-    `WITH orphans AS (
-       SELECT p.id, p.title, p.slug
-       FROM pages p
-       WHERE p.brain_id = $1
-         AND NOT EXISTS (
-           SELECT 1 FROM content_chunks c
-           WHERE c.page_id = p.id AND c.brain_id = $1 AND c.embedding IS NOT NULL
-         )
-         AND (p.search_vector IS NULL OR p.search_vector = to_tsvector('english', ''))
-         AND NOT EXISTS (
-           SELECT 1 FROM links l
-           WHERE l.brain_id = $1
-             AND (l.from_page_id = p.id OR l.to_page_id = p.id)
-         )
-       LIMIT $3
-     ),
-     targets AS (
-       SELECT p.id, p.title, p.slug
-       FROM pages p
-       WHERE p.brain_id = $1
-     ),
-     scored AS (
-       SELECT
-         o.id as orphan_id,
-         t.id as target_id,
-         (
-           (
-             SELECT COUNT(*) FROM (
-               SELECT UNNEST(string_to_array(lower(regexp_replace(COALESCE(o.title, o.slug), '[^a-z0-9 ]', ' ', 'g')), ' '))
-               INTERSECT
-               SELECT UNNEST(string_to_array(lower(regexp_replace(COALESCE(t.title, t.slug), '[^a-z0-9 ]', ' ', 'g')), ' '))
-             ) sq
-           )::float /
-           GREATEST(
-             cardinality(string_to_array(lower(regexp_replace(COALESCE(o.title, o.slug), '[^a-z0-9 ]', ' ', 'g')), ' ')),
-             1
-           )
-         ) as overlap,
-         ROW_NUMBER() OVER (PARTITION BY o.id ORDER BY
-           (
-             SELECT COUNT(*) FROM (
-               SELECT UNNEST(string_to_array(lower(regexp_replace(COALESCE(o.title, o.slug), '[^a-z0-9 ]', ' ', 'g')), ' '))
-               INTERSECT
-               SELECT UNNEST(string_to_array(lower(regexp_replace(COALESCE(t.title, t.slug), '[^a-z0-9 ]', ' ', 'g')), ' '))
-             ) sq
-           ) DESC
-         ) as rn
-       FROM orphans o
-       CROSS JOIN targets t
-       WHERE o.id != t.id
-         AND COALESCE(o.title, o.slug) IS NOT NULL
-         AND COALESCE(t.title, t.slug) IS NOT NULL
-     )
-     SELECT orphan_id, target_id, overlap
-     FROM scored
-     WHERE rn <= 3 AND overlap > 0.15`,
-    [brainId, MAX_LINKS_PER_ORPHAN, maxOrphans]
+  // Orphans with neither embeddings nor search_vector
+  const orphans = await queryMany<{ id: number; text: string }>(
+    `SELECT p.id,
+       lower(regexp_replace(COALESCE(p.title, p.slug, ''), '[^a-z0-9 ]', ' ', 'g')) as text
+     FROM pages p
+     WHERE p.brain_id = $1
+       AND NOT EXISTS (
+         SELECT 1 FROM content_chunks c
+         WHERE c.page_id = p.id AND c.brain_id = $1 AND c.embedding IS NOT NULL
+       )
+       AND (p.search_vector IS NULL OR p.search_vector = to_tsvector('english', ''))
+       AND NOT EXISTS (
+         SELECT 1 FROM links l
+         WHERE l.brain_id = $1
+           AND (l.from_page_id = p.id OR l.to_page_id = p.id)
+       )
+       AND COALESCE(p.title, p.slug) IS NOT NULL
+     LIMIT $2`,
+    [brainId, maxOrphans]
   );
 
-  const pairs: LinkPair[] = rows.map((r) => ({
-    fromId: r.orphan_id,
-    toId: r.target_id,
-    similarity: r.overlap,
-    method: "title" as const,
-  }));
+  if (orphans.length === 0) {
+    return { linked: 0, pairs: [] };
+  }
+
+  // Get all potential target titles
+  const targets = await queryMany<{ id: number; text: string }>(
+    `SELECT p.id,
+       lower(regexp_replace(COALESCE(p.title, p.slug, ''), '[^a-z0-9 ]', ' ', 'g')) as text
+     FROM pages p
+     WHERE p.brain_id = $1
+       AND COALESCE(p.title, p.slug) IS NOT NULL`,
+    [brainId]
+  );
+
+  const pairs: LinkPair[] = [];
+  let linkedCount = 0;
+
+  for (const orphan of orphans) {
+    const orphanWords = new Set(orphan.text.split(/\s+/).filter(w => w.length > 2));
+    if (orphanWords.size === 0) continue;
+
+    const scored: { targetId: number; overlap: number }[] = [];
+
+    for (const target of targets) {
+      if (target.id === orphan.id) continue;
+      const targetWords = new Set(target.text.split(/\s+/).filter(w => w.length > 2));
+      if (targetWords.size === 0) continue;
+
+      let overlap = 0;
+      for (const w of orphanWords) {
+        if (targetWords.has(w)) overlap++;
+      }
+
+      const denom = Math.min(orphanWords.size, targetWords.size);
+      if (denom > 0 && overlap / denom > 0.2) {
+        scored.push({ targetId: target.id, overlap: overlap / denom });
+      }
+    }
+
+    scored.sort((a, b) => b.overlap - a.overlap);
+    const top = scored.slice(0, MAX_LINKS_PER_ORPHAN);
+
+    for (const s of top) {
+      pairs.push({
+        fromId: orphan.id,
+        toId: s.targetId,
+        similarity: s.overlap,
+        method: "title",
+      });
+    }
+    if (top.length > 0) linkedCount++;
+  }
 
   console.log(
-    `[orphan-linker] Title: ${new Set(rows.map((r) => r.orphan_id)).size} orphans linked, ${pairs.length} pairs`
+    `[orphan-linker] Title: ${linkedCount}/${orphans.length} orphans linked, ${pairs.length} pairs`
   );
 
-  return { linked: new Set(rows.map((r) => r.orphan_id)).size, pairs };
+  return { linked: linkedCount, pairs };
 }
 
-/* ── Bulk insert ────────────────────────────────────────────────────────── */
+/* ── Bulk insert ─────────────────────────────────────────────────────── */
 
 async function bulkInsertLinks(
   brainId: string,
@@ -375,7 +373,7 @@ async function bulkInsertLinks(
   return inserted;
 }
 
-/* ── Main entry ─────────────────────────────────────────────────────────── */
+/* ── Main entry ──────────────────────────────────────────────────────── */
 
 export async function batchLinkOrphans(
   brainId: string
@@ -390,14 +388,16 @@ export async function batchLinkOrphans(
   totalInserted: number;
   diagnostics: Record<string, unknown>;
 }> {
+  const t0 = Date.now();
   const buckets = await getOrphanBuckets(brainId);
   const totalOrphans = buckets.total;
 
   const diagnostics: Record<string, unknown> = {
     ...buckets,
-    batch_size: BATCH_SIZE,
+    vector_batch: VECTOR_BATCH,
+    fts_batch: FTS_BATCH,
+    title_batch: TITLE_BATCH,
     vector_threshold: VECTOR_THRESHOLD,
-    fts_threshold: FTS_RANK_THRESHOLD,
   };
 
   if (totalOrphans === 0) {
@@ -411,24 +411,25 @@ export async function batchLinkOrphans(
     };
   }
 
-  // Phase 1: Vector linking (orphans WITH embeddings → ALL targets with embeddings)
-  const vecResult = await vectorLinkOrphans(brainId, BATCH_SIZE);
+  // Phase 1: Vector (uses pgvector index, fast per-query)
+  const vecResult = await vectorLinkOrphans(brainId, VECTOR_BATCH);
   const vecInserted = await bulkInsertLinks(brainId, vecResult.pairs);
 
-  // Phase 2: FTS linking (orphans WITHOUT embeddings but WITH search_vector)
-  const ftsResult = await ftsLinkOrphans(brainId, BATCH_SIZE);
+  // Phase 2: FTS
+  const ftsResult = await ftsLinkOrphans(brainId, FTS_BATCH);
   const ftsInserted = await bulkInsertLinks(brainId, ftsResult.pairs);
 
-  // Phase 3: Title fallback (orphans with neither embeddings nor search_vector)
-  const titleResult = await titleLinkOrphans(brainId, BATCH_SIZE);
+  // Phase 3: Title fallback
+  const titleResult = await titleLinkOrphans(brainId, TITLE_BATCH);
   const titleInserted = await bulkInsertLinks(brainId, titleResult.pairs);
 
   diagnostics.vector_sample_scores = vecResult.sampleScores;
+  diagnostics.duration_ms = Date.now() - t0;
 
   console.log(
     `[orphan-linker] Total: ${totalOrphans} orphans, ` +
-      `${vecResult.linked} vector + ${ftsResult.linked} FTS + ${titleResult.linked} title = ` +
-      `${vecInserted + ftsInserted + titleInserted} edges inserted`
+      `${vecResult.linked}v/${ftsResult.linked}f/${titleResult.linked}t linked, ` +
+      `${vecInserted + ftsInserted + titleInserted} edges inserted in ${Date.now() - t0}ms`
   );
 
   return {
