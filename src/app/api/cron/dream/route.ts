@@ -45,39 +45,56 @@ export async function GET(req: NextRequest) {
        ORDER BY COUNT(*) DESC`
     );
 
-    const results: Array<{ brain_id: string; status: string; totals: Record<string, number> }> = [];
+    const results: Array<{ brain_id: string; status: string; phases: Array<{ phase: string; status: string; summary: string; items_processed?: number; items_created?: number; duration_ms: number }>; totals: Record<string, number> }> = [];
 
     for (const brain of brains.slice(0, 10)) {
       try {
         const report = await runDreamCycle(brain.brain_id, false);
+        
+        // Aggregate per-phase metrics into totals
+        const totals: Record<string, number> = {
+          phases: report.phases.length,
+          duration_ms: report.total_duration_ms,
+        };
+        for (const phase of report.phases) {
+          if (phase.items_processed) totals[`${phase.phase}_processed`] = phase.items_processed;
+          if (phase.items_created) totals[`${phase.phase}_created`] = phase.items_created;
+        }
+        
         results.push({
           brain_id: brain.brain_id,
           status: "completed",
-          totals: {
-            phases: report.phases.length,
-            duration_ms: report.total_duration_ms,
-          },
+          phases: report.phases.map(p => ({
+            phase: p.phase,
+            status: p.status,
+            summary: p.summary,
+            items_processed: p.items_processed,
+            items_created: p.items_created,
+            duration_ms: p.duration_ms,
+          })),
+          totals,
         });
       } catch (err) {
         console.error(`[brainbase] Dream cycle failed for ${brain.brain_id}:`, err);
         results.push({
           brain_id: brain.brain_id,
           status: "failed",
+          phases: [],
           totals: {},
         });
       }
     }
 
-    const totalEmbedded = results.reduce((sum, r) => sum + (r.totals.chunks_embedded || 0), 0);
-    const totalLinked = results.reduce((sum, r) => sum + (r.totals.links_created || 0), 0);
-    const totalOrphans = results.reduce((sum, r) => sum + (r.totals.orphans_found || 0), 0);
+    const totalLinksCreated = results.reduce((sum, r) => sum + (r.totals.extract_links_created || 0) + (r.totals.tweet_author_link_created || 0) + (r.totals.link_orphans_created || 0), 0);
+    const totalEmbedded = results.reduce((sum, r) => sum + (r.totals.embed_processed || 0), 0);
+    const totalTweetsLinked = results.reduce((sum, r) => sum + (r.totals.tweet_author_link_created || 0), 0);
 
     return NextResponse.json({
       status: "ok",
       brains_processed: results.length,
+      total_links_created: totalLinksCreated,
       total_chunks_embedded: totalEmbedded,
-      total_links_created: totalLinked,
-      total_orphans_found: totalOrphans,
+      total_tweets_linked: totalTweetsLinked,
       results,
     });
   } catch (err) {
