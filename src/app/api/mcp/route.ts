@@ -31,7 +31,7 @@ const tools = [
   { name: "get_stats", description: "Get detailed brain statistics", inputSchema: { type: "object", properties: {} } },
   { name: "get_graph", description: "Get full graph data (nodes + edges)", inputSchema: { type: "object", properties: {} } },
   { name: "list_pages", description: "List all brain pages with metadata", inputSchema: { type: "object", properties: { type: { type: "string" }, written_by: { type: "string", description: "filter by author/agent" }, limit: { type: "number" }, offset: { type: "number" } } } },
-  { name: "traverse_graph", description: "Traverse the knowledge graph from a starting page", inputSchema: { type: "object", properties: { slug: { type: "string" }, depth: { type: "number" }, direction: { type: "string", enum: ["out", "in", "both"] } }, required: ["slug"] } },
+  { name: "traverse_graph", description: "Traverse the knowledge graph from a starting page with optional type filtering", inputSchema: { type: "object", properties: { slug: { type: "string" }, depth: { type: "number" }, direction: { type: "string", enum: ["out", "in", "both"] }, link_type: { type: "string", description: "Filter edges by link type (e.g. works_at, invested_in, founded)" } }, required: ["slug"] } },
   { name: "put_page", description: "Create or update a brain page", inputSchema: { type: "object", properties: { slug: { type: "string" }, title: { type: "string" }, type: { type: "string" }, content: { type: "string" }, frontmatter: { type: "object" }, written_by: { type: "string", description: "Agent or user identifier (e.g. 'lara', 'jarvis', 'user')" } }, required: ["slug", "title"] } },
   { name: "delete_page", description: "Delete a brain page by slug", inputSchema: { type: "object", properties: { slug: { type: "string" } }, required: ["slug"] } },
   { name: "add_link", description: "Create a typed link between two pages", inputSchema: { type: "object", properties: { from: { type: "string" }, to: { type: "string" }, link_type: { type: "string" }, written_by: { type: "string" } }, required: ["from", "to"] } },
@@ -95,7 +95,7 @@ async function dispatch(brainId: string, method: string, params: Record<string, 
     case "traverse_graph": {
       const slug = params.slug as string;
       if (!slug) throw new Error("Missing 'slug' parameter");
-      return await traverseGraph(brainId, slug, (params.depth as number) ?? 2, (params.direction as "out" | "in" | "both") ?? "out");
+      return await traverseGraph(brainId, slug, (params.depth as number) ?? 2, (params.direction as "out" | "in" | "both") ?? "out", params.link_type as string | undefined);
     }
     case "put_page": {
       const slug = params.slug as string;

@@ -184,12 +184,13 @@ class Brainbase {
     async listPages(options) {
         return (await this.mcp("list_pages", options || {}));
     }
-    /** Traverse the knowledge graph from a starting page. */
+    /** Traverse the knowledge graph from a starting page with optional type filtering. */
     async traverse(slug, options) {
         return (await this.mcp("traverse_graph", {
             slug,
             depth: options?.depth ?? 2,
             direction: options?.direction ?? "out",
+            link_type: options?.linkType,
         }));
     }
     /** Get version history for a page. */

@@ -283,10 +283,11 @@ export declare class Brainbase {
         limit?: number;
         offset?: number;
     }): Promise<PageListItem[] | null>;
-    /** Traverse the knowledge graph from a starting page. */
+    /** Traverse the knowledge graph from a starting page with optional type filtering. */
     traverse(slug: string, options?: {
         depth?: number;
         direction?: "out" | "in" | "both";
+        linkType?: string;
     }): Promise<TraversalResult[] | null>;
     /** Get version history for a page. */
     getVersions(slug: string): Promise<VersionEntry[] | null>;

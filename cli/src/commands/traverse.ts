@@ -11,6 +11,7 @@ import { buildSdkConfig, requireApiKey } from "../utils/config.js";
 export interface TraverseOptions extends GlobalOptions {
   depth?: number;
   direction?: "out" | "in" | "both";
+  linkType?: string;
 }
 
 export async function traverseCommand(
@@ -27,6 +28,7 @@ export async function traverseCommand(
     const results = await brain.traverse(slug, {
       depth: opts.depth ?? 2,
       direction: opts.direction ?? "out",
+      linkType: opts.linkType,
     });
 
     if (opts.json) {

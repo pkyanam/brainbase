@@ -136,6 +136,7 @@ program
   .command("traverse <slug>")
   .description("traverse the knowledge graph from a page")
   .option("-d, --depth <n>", "traversal depth", parseInt, 2)
+  .option("--link-type <type>", "filter edges by link type (e.g. works_at, invested_in)")
   .addOption(
     new Option("--direction <dir>", "link direction")
       .choices(["out", "in", "both"])
@@ -143,7 +144,7 @@ program
   )
   .action(async (slug, options) => {
     const config = getConfig();
-    await traverseCommand(slug, config, { ...program.opts(), depth: options.depth, direction: options.direction });
+    await traverseCommand(slug, config, { ...program.opts(), depth: options.depth, direction: options.direction, linkType: options.linkType });
   });
 
 program

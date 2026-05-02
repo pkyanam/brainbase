@@ -429,12 +429,13 @@ export class Brainbase {
     return (await this.mcp("list_pages", options || {})) as PageListItem[] | null;
   }
 
-  /** Traverse the knowledge graph from a starting page. */
-  async traverse(slug: string, options?: { depth?: number; direction?: "out" | "in" | "both" }): Promise<TraversalResult[] | null> {
+  /** Traverse the knowledge graph from a starting page with optional type filtering. */
+  async traverse(slug: string, options?: { depth?: number; direction?: "out" | "in" | "both"; linkType?: string }): Promise<TraversalResult[] | null> {
     return (await this.mcp("traverse_graph", {
       slug,
       depth: options?.depth ?? 2,
       direction: options?.direction ?? "out",
+      link_type: options?.linkType,
     })) as TraversalResult[] | null;
   }
 
