@@ -56,6 +56,7 @@ export default function EvalDashboard() {
   const [exportSince, setExportSince] = useState("");
   const [exportLimit, setExportLimit] = useState(100);
   const [exportLoading, setExportLoading] = useState(false);
+  const [showLara, setShowLara] = useState(false);
 
   // Toast auto-dismiss
   useEffect(() => {
@@ -71,8 +72,20 @@ export default function EvalDashboard() {
   // Fetch evals list via Convex (real-time)
   const convexRuns = useQuery(api.eval.listRuns, brainId ? { brainId } : "skip");
 
+  // ── Lara Eval hooks ──
+  const laraCandidates = useQuery(
+    api.eval_lara.listCandidates,
+    brainId ? { brainId } : "skip"
+  );
+  const laraRuns = useQuery(
+    api.eval_lara.listRuns,
+    brainId ? { brainId } : "skip"
+  );
+  const seedLaraEval = useMutation(api.eval_lara.seedLaraEval);
+  const runLaraEval = useMutation(api.eval_lara.runLaraEval);
+
   // Map Convex runs to UI format
-  const mappedRuns: EvalRun[] = (convexRuns || []).map((run: any) => ({
+  const mappedRuns: EvalRun[] = ((showLara ? laraRuns : convexRuns) || []).map((run: any) => ({
     id: run._id,
     query: `Eval #${run.totalQueries || 0} queries`,
     mrr: run.avgMrr ?? 0,
@@ -103,6 +116,11 @@ export default function EvalDashboard() {
 
   const runEval = useMutation(api.eval.seedAndRun);
 
+  const [laraRunLoading, setLaraRunLoading] = useState(false);
+  const [laraSeedLoading, setLaraSeedLoading] = useState(false);
+
+  const hasLaraCandidates = (laraCandidates?.length ?? 0) > 0;
+
   const handleRunEval = useCallback(async () => {
     if (!brainId) return;
     setRunLoading(true);
@@ -118,6 +136,42 @@ export default function EvalDashboard() {
       setRunLoading(false);
     }
   }, [brainId, runEval]);
+
+  const handleSeedLara = useCallback(async () => {
+    if (!brainId) return;
+    setLaraSeedLoading(true);
+    try {
+      const res = await seedLaraEval({ brainId });
+      if (res.seeded) {
+        setToast({ message: `Lara eval seeded: ${res.count} queries`, type: "success" });
+      } else {
+        setToast({ message: res.reason || "Already seeded", type: "error" });
+      }
+    } catch (err: unknown) {
+      setToast({
+        message: err instanceof Error ? err.message : "Failed to seed Lara eval",
+        type: "error",
+      });
+    } finally {
+      setLaraSeedLoading(false);
+    }
+  }, [brainId, seedLaraEval]);
+
+  const handleRunLara = useCallback(async () => {
+    if (!brainId) return;
+    setLaraRunLoading(true);
+    try {
+      await runLaraEval({ brainId });
+      setToast({ message: "Lara eval run started!", type: "success" });
+    } catch (err: unknown) {
+      setToast({
+        message: err instanceof Error ? err.message : "Failed to start Lara eval",
+        type: "error",
+      });
+    } finally {
+      setLaraRunLoading(false);
+    }
+  }, [brainId, runLaraEval]);
 
   const handleSaveCaptureSettings = useCallback(async () => {
     setToast({ message: "Capture settings saved", type: "success" });
@@ -314,40 +368,89 @@ export default function EvalDashboard() {
               Measure search quality with automated eval runs
             </p>
           </div>
-          <button
-            onClick={handleRunEval}
-            disabled={runLoading}
-            className="inline-flex items-center gap-2 h-11 px-5 bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {runLoading ? (
-              <>
-                <span className="w-4 h-4 border-2 border-bb-bg-primary/30 border-t-bb-bg-primary rounded-full animate-spin" />
-                Running...
-              </>
-            ) : (
-              <>
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-                  />
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-                Run Eval
-              </>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowLara(!showLara)}
+              className={`hidden md:inline-flex h-11 px-4 items-center gap-2 text-sm font-medium rounded-lg border transition-colors ${
+                showLara
+                  ? "bg-bb-accent/10 border-bb-accent text-bb-accent"
+                  : "border-bb-border text-bb-text-muted hover:text-bb-text-primary hover:border-bb-border-strong"
+              }`}
+            >
+              {showLara ? "Lara Eval" : "Arlan Eval"}
+            </button>
+            {showLara && !hasLaraCandidates && (
+              <button
+                onClick={handleSeedLara}
+                disabled={laraSeedLoading}
+                className="inline-flex items-center gap-2 h-11 px-4 bg-bb-surface hover:bg-bb-bg-primary text-bb-text-secondary text-sm font-medium rounded-lg border border-bb-border transition-colors disabled:opacity-50"
+              >
+                {laraSeedLoading ? (
+                  <span className="w-4 h-4 border-2 border-bb-text-muted/30 border-t-bb-text-muted rounded-full animate-spin" />
+                ) : (
+                  "Seed Lara Eval"
+                )}
+              </button>
             )}
-          </button>
+            {showLara && hasLaraCandidates && (
+              <button
+                onClick={handleRunLara}
+                disabled={laraRunLoading}
+                className="inline-flex items-center gap-2 h-11 px-5 bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {laraRunLoading ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-bb-bg-primary/30 border-t-bb-bg-primary rounded-full animate-spin" />
+                    Running...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Run Lara Eval
+                  </>
+                )}
+              </button>
+            )}
+            {!showLara && (
+              <button
+                onClick={handleRunEval}
+                disabled={runLoading}
+                className="inline-flex items-center gap-2 h-11 px-5 bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {runLoading ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-bb-bg-primary/30 border-t-bb-bg-primary rounded-full animate-spin" />
+                    Running...
+                  </>
+                ) : (
+                  <>
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+                      />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                    Run Eval
+                  </>
+                )}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Tabs */}
