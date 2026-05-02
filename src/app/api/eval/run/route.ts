@@ -97,29 +97,16 @@ async function runEvalCycle(brainId: string, runId: string, limit: number) {
   );
 
   if (candidates.length === 0) {
-    // Seed synthetic candidates directly (no searchBrain — that could timeout on Vercel Hobby)
-    const seedQueries = ["stripe", "yc", "hermes", "preetham"];
-    for (const sq of seedQueries) {
-      await query(
-        `INSERT INTO eval_candidates (brain_id, tool, query_text, result_count, top_slugs, meta)
-         VALUES ($1, 'search', $2, 0, $3, $4)`,
-        [brainId, sq, [], JSON.stringify({ seed: true })]
-      );
-    }
-
-    // Re-read
-    const { rows: seeded } = await query<any>(
-      `SELECT id, brain_id, tool, query_text, result_count, top_slugs, meta
-       FROM eval_candidates
-       WHERE brain_id = $1 AND (tool = 'query' OR tool = 'search')
-       ORDER BY created_at DESC LIMIT $2`,
-      [brainId, limit]
-    );
-    if (seeded.length === 0) {
-      await query(`UPDATE eval_runs SET status = 'failed', completed_at = NOW() WHERE id = $1`, [runId]);
-      return;
-    }
-    candidates = seeded;
+    // Create synthetic candidates in memory — bypass DB entirely
+    candidates = ["stripe", "yc", "hermes", "preetham"].map(q => ({
+      id: "seed-" + q,
+      brain_id: brainId,
+      tool: "search",
+      query_text: q,
+      result_count: 0,
+      top_slugs: [],
+      meta: { seed: true },
+    }));
   }
 
   let totalMrr = 0, totalP3 = 0, totalP5 = 0, totalLatency = 0;
