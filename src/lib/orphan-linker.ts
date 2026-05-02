@@ -27,7 +27,7 @@ interface LinkPair {
  */
 async function vectorLinkOrphans(
   brainId: string
-): Promise<{ linked: number; pairs: LinkPair[] }> {
+): Promise<{ linked: number; pairs: LinkPair[]; sampleScores: number[] }> {
   // Get orphans that have at least one embedded chunk
   const orphanRows = await queryMany<{ id: number; slug: string }>(
     `SELECT p.id, p.slug
@@ -43,12 +43,50 @@ async function vectorLinkOrphans(
     [brainId]
   );
 
-  if (orphanRows.length === 0) { console.log("[orphan-linker] No orphans with embeddings found"); return { linked: 0, pairs: [] }; }
+  if (orphanRows.length === 0) { console.log("[orphan-linker] No orphans with embeddings found"); return { linked: 0, pairs: [], sampleScores: [] }; }
   console.log(`[orphan-linker] Found ${orphanRows.length} orphans with embeddings, checking vector similarity...`);
 
   const pairs: LinkPair[] = [];
 
-  // Process in batches to avoid query complexity
+  // Diagnostic: sample a few raw similarity scores at lower threshold
+  let sampleScores: number[] = [];
+  if (orphanRows.length > 0) {
+    const sampleOrphan = orphanRows[0];
+    try {
+      const sampleMatches = await queryMany<{ similarity: number }>(
+        `WITH orphan_avg AS (
+           SELECT AVG(embedding)::vector as emb
+           FROM content_chunks
+           WHERE brain_id = $1 AND page_id = $2 AND embedding IS NOT NULL
+         ),
+         target_avgs AS (
+           SELECT p.id,
+             AVG(c.embedding)::vector as emb
+           FROM pages p
+           JOIN content_chunks c ON c.page_id = p.id AND c.brain_id = p.brain_id
+           WHERE p.brain_id = $1
+             AND p.id != $2
+             AND c.embedding IS NOT NULL
+             AND EXISTS (
+               SELECT 1 FROM links l
+               WHERE l.brain_id = $1
+                 AND (l.from_page_id = p.id OR l.to_page_id = p.id)
+             )
+           GROUP BY p.id
+         )
+         SELECT 1 - (t.emb <=> (SELECT emb FROM orphan_avg)) as similarity
+         FROM target_avgs t
+         ORDER BY similarity DESC
+         LIMIT 5`,
+        [brainId, sampleOrphan.id]
+      );
+      sampleScores = sampleMatches.map(m => m.similarity);
+      console.log(`[orphan-linker] Sample orphan ${sampleOrphan.slug}: top-5 similarities = [${sampleScores.join(', ')}]`);
+    } catch (err) {
+      console.error(`[orphan-linker] Sample query error:`, err);
+      sampleScores = [-99]; // sentinel for error
+    }
+  }
   let checkedOrphans = 0;
   let totalMatches = 0;
   let topScores: number[] = [];
@@ -103,7 +141,7 @@ async function vectorLinkOrphans(
   
   console.log(`[orphan-linker] Vector: checked ${checkedOrphans} orphans, found ${totalMatches} total matches, top scores: [${topScores.join(', ')}]`);
 
-  return { linked: orphanRows.length, pairs };
+  return { linked: orphanRows.length, pairs, sampleScores };
 }
 
 /**
@@ -307,6 +345,9 @@ export async function batchLinkOrphans(
     `${vecResult.linked} vector-linked (${vecInserted} edges), ` +
     `${ftsResult.linked} FTS-linked (${ftsInserted} edges)`
   );
+  
+  // Attach sample scores to diagnostics  
+  diagnostics.sample_scores = vecResult.sampleScores;
 
   return {
     orphansFound: totalOrphans,
