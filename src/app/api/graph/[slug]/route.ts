@@ -17,15 +17,13 @@ export async function GET(
   }
 
   const { searchParams } = new URL(req.url);
-  const depth = Math.min(parseInt(searchParams.get("depth") || "2", 10), 5);
-  const direction = (searchParams.get("direction") || "out") as
-    | "out"
-    | "in"
-    | "both";
+  const depth = Math.min(parseInt(searchParams.get("depth") || "2", 10), 10);
+  const direction = (searchParams.get("direction") || "out") as "out" | "in" | "both";
+  const linkType = searchParams.get("link_type") || undefined;
 
   try {
-    const results = await traverseGraph(auth.brainId, slug, depth, direction);
-    return NextResponse.json({ slug, depth, direction, results });
+    const results = await traverseGraph(auth.brainId, slug, depth, direction, linkType);
+    return NextResponse.json({ slug, depth, direction, linkType, results });
   } catch (err) {
     console.error("[brainbase] /api/graph/[slug] GET error:", err);
     return NextResponse.json(
