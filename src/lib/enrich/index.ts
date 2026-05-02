@@ -14,7 +14,7 @@
  */
 
 import { resolveEntity, suggestSlug, detectEntityType } from "./resolve";
-import { fetchFromPerplexity, formatWithOpenAI } from "./sources";
+import { fetchFromBrave, formatWithOpenAI } from "./sources";
 import { buildPersonPage, buildCompanyPage } from "./templates";
 import { putPage, addLink, deletePage } from "../supabase/write";
 import { putRawData } from "../supabase/raw-data";
@@ -72,22 +72,22 @@ export async function enrichEntity(
 
   // ── Step 2: Fetch external data ─────────────────────────────────────
   const config = TIER_CONFIGS[tier];
-  const usePerplexity = config.externalSources.includes("perplexity");
+  const useWebSearch = config.externalSources.includes("brave");
 
-  // Phase 2a: Web research via Perplexity (Tiers 1-2)
+  // Phase 2a: Web research via Brave (Tiers 1-2)
   let researchData: string | null = null;
   const allSources: string[] = [];
   let rawDataStored = 0;
 
-  if (usePerplexity) {
-    const pp = await fetchFromPerplexity(request.name, detectedType, tier, request.context);
-    if (pp) {
-      researchData = pp.content;
-      allSources.push("perplexity");
-      await putRawData(brainId, slug || suggestSlug(request.name, detectedType), "perplexity", {
+  if (useWebSearch) {
+    const brave = await fetchFromBrave(request.name, detectedType, tier, request.context);
+    if (brave) {
+      researchData = brave.content;
+      allSources.push("brave");
+      await putRawData(brainId, slug, "brave", {
         prompt: { name: request.name, type: detectedType, tier },
-        raw: pp.content,
-        meta: pp.meta,
+        raw: brave.content,
+        meta: brave.meta,
       });
       rawDataStored++;
     }

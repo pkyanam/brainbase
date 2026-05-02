@@ -84,7 +84,7 @@ export interface EnrichSourceData {
   /** Raw text response from the source */
   content: string;
 
-  /** Source identifier (e.g., "openai", "perplexity") */
+  /** Source identifier (e.g., "openai", "brave") */
   source: string;
 
   /** When the data was fetched */
@@ -118,14 +118,14 @@ export const TIER_CONFIGS: Record<EnrichTier, TierConfig> = {
   1: {
     model: "gpt-5.4-nano",
     maxTokens: 4096,
-    externalSources: ["perplexity", "openai"],
+    externalSources: ["brave", "openai"],
     sectionCount: 12,
     deepCrossRef: true,
   },
   2: {
     model: "gpt-5.4-nano",
     maxTokens: 2048,
-    externalSources: ["perplexity", "openai"],
+    externalSources: ["brave", "openai"],
     sectionCount: 6,
     deepCrossRef: false,
   },

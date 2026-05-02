@@ -2,12 +2,12 @@
  * Enrichment Sources — fetch external data about entities.
  *
  * Multi-source architecture:
- *   Perplexity → current web research with citations
- *   OpenAI     → structured template generation
+ *   Brave Search → current web search results (free, 2K queries/month)
+ *   OpenAI       → structured template generation
  *
  * Dispatch logic:
- *   Tier 1: Perplexity (sonar-pro) → OpenAI (full template, 12 sections)
- *   Tier 2: Perplexity (sonar) → OpenAI (core template, 6 sections)
+ *   Tier 1: Brave (10 results, deep) → OpenAI (full template, 12 sections)
+ *   Tier 2: Brave (5 results, quick) → OpenAI (core template, 6 sections)
  *   Tier 3: OpenAI only (LLM knowledge, 3 sections, no web search)
  */
 
@@ -15,140 +15,147 @@ import type { EnrichEntityType, EnrichTier, EnrichSourceData } from "./types";
 import { TIER_CONFIGS } from "./types";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY || "";
+const BRAVE_API_KEY = process.env.BRAVE_API_KEY || "";
 
-// ── Perplexity ──────────────────────────────────────────────────────────
+// ── Brave Search ───────────────────────────────────────────────────────
+
+interface BraveResult {
+  title: string;
+  url: string;
+  description: string;
+}
 
 /**
- * Research an entity via Perplexity (live web search).
- * Returns raw search results — unstructured but current and cited.
+ * Research an entity via Brave Search (free web search API).
+ * Returns search results formatted as structured text.
  */
-export async function fetchFromPerplexity(
+export async function fetchFromBrave(
   name: string,
   type: EnrichEntityType,
   tier: EnrichTier,
   context?: string
 ): Promise<EnrichSourceData | null> {
-  if (!PERPLEXITY_API_KEY) {
-    console.warn("[enrich] No PERPLEXITY_API_KEY configured — skipping web research");
+  if (!BRAVE_API_KEY) {
+    console.warn("[enrich] No BRAVE_API_KEY configured — skipping web research");
     return null;
   }
 
-  const model = tier === 1 ? "sonar-pro" : "sonar";
-  const prompt = buildPerplexityPrompt(name, type, tier, context);
+  const query = buildBraveQuery(name, type, context);
+  const count = tier === 1 ? 10 : 5;
 
   try {
-    const res = await fetch("https://api.perplexity.ai/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${PERPLEXITY_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a research analyst. Provide accurate, current information with specific dates, names, and metrics. Be thorough and factual.",
-          },
-          { role: "user", content: prompt },
-        ],
-        max_tokens: tier === 1 ? 4096 : 2048,
-        temperature: 0.1,
-        return_citations: true,
-      }),
-    });
+    const params = new URLSearchParams({ q: query, count: String(count) });
+    const res = await fetch(
+      `https://api.search.brave.com/res/v1/web/search?${params}`,
+      {
+        headers: {
+          Accept: "application/json",
+          "Accept-Encoding": "gzip",
+          "X-Subscription-Token": BRAVE_API_KEY,
+        },
+      }
+    );
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: { message: res.statusText } }));
-      console.error(`[enrich] Perplexity error (${res.status}):`, err.error?.message || res.statusText);
+      const text = await res.text().catch(() => res.statusText);
+      console.error(`[enrich] Brave error (${res.status}):`, text.slice(0, 200));
       return null;
     }
 
     const data = await res.json();
-    const content = data.choices?.[0]?.message?.content || null;
-    const citations = data.citations || [];
+    const results: BraveResult[] = data.web?.results || [];
 
-    if (!content) return null;
-
-    // Append citation URLs
-    let finalContent = content;
-    if (citations.length > 0) {
-      finalContent += "\n\n## Sources\n";
-      citations.forEach((url: string, i: number) => {
-        finalContent += `- [${i + 1}] ${url}`;
-      });
+    if (results.length === 0) {
+      console.warn(`[enrich] Brave returned 0 results for "${name}"`);
+      return null;
     }
 
+    // Format search results as structured research data
+    const content = formatBraveResults(name, results, type);
+
     return {
-      content: finalContent,
-      source: "perplexity",
+      content,
+      source: "brave",
       fetchedAt: new Date().toISOString(),
-      meta: { model, citationsCount: citations.length, tier, type },
+      meta: {
+        resultCount: results.length,
+        query,
+        tier,
+        type,
+      },
     };
   } catch (err) {
-    console.error("[enrich] Perplexity fetch error:", err);
+    console.error("[enrich] Brave fetch error:", err);
     return null;
   }
 }
 
-function buildPerplexityPrompt(
+function buildBraveQuery(
   name: string,
   type: EnrichEntityType,
-  tier: EnrichTier,
   context?: string
 ): string {
-  const contextLine = context
-    ? `\nAdditional context: ${context}\n`
-    : "";
-
-  const depth = tier === 1
-    ? "very thorough and detailed"
-    : "concise but informative";
-
   if (type === "person") {
-    return `Research ${name} and provide a ${depth} profile.${contextLine}
+    // Extract any company hint from context
+    const companyHint = context
+      ? extractCompanyFromContext(context)
+      : "";
+    const roleHint = companyHint ? ` ${companyHint}` : "";
+    return `${name}${roleHint} biography career profile`;
+  }
+  return `${name} company profile funding founders`;
+}
 
-Include (where available):
-- Current role, company, location
-- Career history and major achievements
-- Education background
-- Public statements, beliefs, or philosophy
-- Recent projects, launches, or initiatives
-- Public controversies or notable events
-- Social media presence and handle
-- Books, essays, or talks they've authored
-- Key professional relationships and network
-- Funding raised (if founder/investor)
-- Boards or advisory roles
+function extractCompanyFromContext(context: string): string {
+  // Quick heuristic: look for "at X" or "CEO of X" patterns
+  const atMatch = context.match(/\bat\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,2})/);
+  if (atMatch) return atMatch[1];
+  const ofMatch = context.match(/(?:CEO|CTO|founder|co-founder|VP|Head)\s+(?:of|at)\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,2})/i);
+  if (ofMatch) return ofMatch[1];
+  return "";
+}
 
-Format as a structured report. Include specific dates (YYYY-MM-DD) and verifiable facts. If information is uncertain or disputed, note that explicitly.`;
+function formatBraveResults(
+  name: string,
+  results: BraveResult[],
+  type: EnrichEntityType
+): string {
+  const lines: string[] = [
+    `Web search results for "${name}" (${type}):`,
+    "",
+  ];
+
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i];
+    lines.push(`[${i + 1}] ${r.title}`);
+    lines.push(`    URL: ${r.url}`);
+    if (r.description) {
+      // Clean up description — Brave often returns HTML entities
+      const cleanDesc = r.description
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&rsquo;/g, "'")
+        .replace(/&lsquo;/g, "'")
+        .replace(/&rdquo;/g, '"')
+        .replace(/&ldquo;/g, '"')
+        .replace(/&mdash;/g, "—")
+        .replace(/&ndash;/g, "–");
+      lines.push(`    ${cleanDesc}`);
+    }
+    lines.push("");
   }
 
-  return `Research ${name} (the company/organization) and provide a ${depth} profile.${contextLine}
-
-Include (where available):
-- What they do and their core product/service
-- Founding date, founders, and origin story
-- Funding history (rounds, amounts, investors, dates)
-- Current stage, headcount, and revenue estimates
-- Key executives and their backgrounds
-- Major product launches and milestones
-- Market position and primary competitors
-- Technology stack or technical approach
-- Recent news, pivots, or controversies
-- Business model and customer base
-- Notable partnerships or acquisitions
-
-Format as a structured report. Include specific dates (YYYY-MM-DD) and verifiable facts. If information is uncertain or disputed, note that explicitly.`;
+  return lines.join("\n");
 }
 
 // ── OpenAI (template formatting) ────────────────────────────────────────
 
 /**
  * Generate a structured brain page from research data.
- * Takes Perplexity output (or just entity name for Tier 3) and
+ * Takes Brave search results (or just entity name for Tier 3) and
  * formats it into the GBrain-style page template.
  */
 export async function formatWithOpenAI(
@@ -192,7 +199,7 @@ function buildFormatPrompt(
     : "";
 
   const researchBlock = researchData
-    ? `\nRESEARCH DATA (from live web search — use this as your primary source):\n${researchData}\n\nIMPORTANT: Use the research data above. It is current and sourced from the web. Prefer it over your training data when they conflict.\n`
+    ? `\nRESEARCH DATA (from live web search — use this as your primary source):\n${researchData}\n\nIMPORTANT: Use the research data above. These are current web search results with URLs. Prefer them over your training data when they conflict. Extract facts, dates, and names from these snippets.\n`
     : `\nNOTE: No live web research was available. Use your training knowledge for ${name}. Mark uncertain claims with [Unverified] and unknown info with [No data yet].\n`;
 
   const sectionSpec = type === "person"
@@ -214,8 +221,7 @@ RULES:
 - If uncertain, mark with [Unverified].
 - Include specific dates where known (YYYY-MM-DD format).
 - For the Timeline section, list key events in reverse chronological order.
-- Do NOT wrap in JSON or markdown code blocks. Just output sections with ## headers.
-- Keep the full response under ${type === "person" ? "8" : "5"} sections.`;
+- Do NOT wrap in JSON or markdown code blocks. Just output sections with ## headers.`;
 }
 
 // ── OpenAI API call ─────────────────────────────────────────────────────
@@ -266,7 +272,7 @@ async function callOpenAI(
   }
 }
 
-// ── Section specs (moved from old buildEnrichPrompt) ────────────────────
+// ── Section specs ───────────────────────────────────────────────────────
 
 function getPersonSectionSpec(tier: EnrichTier): string {
   const all = `## Executive Summary
