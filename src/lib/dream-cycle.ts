@@ -87,6 +87,7 @@ export async function runDreamCycle(
         summary: `${result.orphansFound} orphans found, ${result.totalInserted} semantic links created (${result.vectorPairs} vector + ${result.ftsPairs} FTS)`,
         items_processed: result.orphansFound,
         items_created: result.totalInserted,
+        details: result.diagnostics || {},
         duration_ms: Date.now() - p0,
       });
     } catch (err: any) {

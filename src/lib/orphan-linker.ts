@@ -43,11 +43,16 @@ async function vectorLinkOrphans(
     [brainId]
   );
 
-  if (orphanRows.length === 0) return { linked: 0, pairs: [] };
+  if (orphanRows.length === 0) { console.log("[orphan-linker] No orphans with embeddings found"); return { linked: 0, pairs: [] }; }
+  console.log(`[orphan-linker] Found ${orphanRows.length} orphans with embeddings, checking vector similarity...`);
 
   const pairs: LinkPair[] = [];
 
   // Process in batches to avoid query complexity
+  let checkedOrphans = 0;
+  let totalMatches = 0;
+  let topScores: number[] = [];
+  
   for (const orphan of orphanRows) {
     // Find similar connected pages via vector
     const matches = await queryMany<{ id: number; slug: string; similarity: number }>(
@@ -80,6 +85,12 @@ async function vectorLinkOrphans(
       [brainId, orphan.id, VECTOR_THRESHOLD, MAX_LINKS_PER_ORPHAN]
     );
 
+    checkedOrphans++;
+    totalMatches += matches.length;
+    if (matches.length > 0 && topScores.length < 10) {
+      topScores.push(matches[0].similarity);
+    }
+
     for (const m of matches) {
       pairs.push({
         fromId: orphan.id,
@@ -89,6 +100,8 @@ async function vectorLinkOrphans(
       });
     }
   }
+  
+  console.log(`[orphan-linker] Vector: checked ${checkedOrphans} orphans, found ${totalMatches} total matches, top scores: [${topScores.join(', ')}]`);
 
   return { linked: orphanRows.length, pairs };
 }
@@ -234,6 +247,7 @@ export async function batchLinkOrphans(
   ftsLinked: number;
   ftsPairs: number;
   totalInserted: number;
+  diagnostics?: Record<string, unknown>;
 }> {
   // Count total orphans
   const countRow = await queryOne<{ cnt: number }>(
@@ -246,6 +260,28 @@ export async function batchLinkOrphans(
        )`,
     [brainId]
   );
+  
+  // Diagnostic: count orphans with/without embeddings
+  const embedCount = await queryOne<{ cnt: number }>(
+    `SELECT COUNT(*)::int as cnt FROM pages p
+     WHERE p.brain_id = $1
+       AND EXISTS (SELECT 1 FROM content_chunks c WHERE c.page_id = p.id AND c.brain_id = $1 AND c.embedding IS NOT NULL)
+       AND NOT EXISTS (SELECT 1 FROM links l WHERE l.brain_id = $1 AND (l.from_page_id = p.id OR l.to_page_id = p.id))`,
+    [brainId]
+  );
+  const noEmbedCount = await queryOne<{ cnt: number }>(
+    `SELECT COUNT(*)::int as cnt FROM pages p
+     WHERE p.brain_id = $1
+       AND NOT EXISTS (SELECT 1 FROM content_chunks c WHERE c.page_id = p.id AND c.brain_id = $1 AND c.embedding IS NOT NULL)
+       AND NOT EXISTS (SELECT 1 FROM links l WHERE l.brain_id = $1 AND (l.from_page_id = p.id OR l.to_page_id = p.id))`,
+    [brainId]
+  );
+  
+  const diagnostics: Record<string, unknown> = {
+    total_orphans: countRow?.cnt || 0,
+    orphans_with_embeddings: embedCount?.cnt || 0,
+    orphans_without_embeddings: noEmbedCount?.cnt || 0,
+  };
 
   const totalOrphans = countRow?.cnt || 0;
   if (totalOrphans === 0) {
@@ -254,6 +290,7 @@ export async function batchLinkOrphans(
       vectorLinked: 0, vectorPairs: 0,
       ftsLinked: 0, ftsPairs: 0,
       totalInserted: 0,
+      diagnostics,
     };
   }
 
@@ -278,5 +315,6 @@ export async function batchLinkOrphans(
     ftsLinked: ftsResult.linked,
     ftsPairs: ftsInserted,
     totalInserted: vecInserted + ftsInserted,
+    diagnostics,
   };
 }
