@@ -70,6 +70,7 @@ export async function GET(req: NextRequest) {
             summary: p.summary,
             items_processed: p.items_processed,
             items_created: p.items_created,
+            details: p.details,
             duration_ms: p.duration_ms,
           })),
           totals,
