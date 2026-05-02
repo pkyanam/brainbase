@@ -10,8 +10,8 @@
 
 import { query, queryOne, queryMany } from "./supabase/client";
 
-const VECTOR_THRESHOLD = 0.65; // cosine similarity (lowered from 0.78)
-const FTS_RANK_THRESHOLD = 0.05; // ts_rank minimum
+const VECTOR_THRESHOLD = 0.45; // cosine similarity (lowered from 0.65 — too strict for cross-domain orphans)
+const FTS_RANK_THRESHOLD = 0.01; // ts_rank minimum (lowered from 0.05)
 const MAX_LINKS_PER_ORPHAN = 3;
 
 interface LinkPair {
