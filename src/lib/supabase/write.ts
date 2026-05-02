@@ -272,90 +272,68 @@ export async function traverseGraph(
 ): Promise<TraversalResult[]> {
   const depthCap = Math.min(depth, 10);
 
-  const typeFilter = linkType ? `AND l.link_type = $4` : "";
-  const typeParam = linkType ? [linkType] : [];
-  console.log(`[brainbase] traverseGraph: slug=${startSlug} depth=${depthCap} direction=${direction} linkType=${linkType || 'none'} typeFilter="${typeFilter}"`);
-
-  if (direction === "out") {
-    const sql = `WITH RECURSIVE traversal AS (
+  // Query without type filter — we'll filter in memory
+  // (PostgreSQL CTE parameter binding with dynamic JOIN conditions is fragile)
+  const sql = direction === "out"
+    ? `WITH RECURSIVE traversal AS (
         SELECT p.id, p.slug, p.title, p.type, 0 AS depth, ARRAY[p.id] AS path, NULL::text AS link_type
         FROM pages p WHERE p.brain_id = $1 AND p.slug = $2
-
         UNION ALL
-
         SELECT p.id, p.slug, p.title, p.type, t.depth + 1, t.path || p.id, l.link_type
         FROM traversal t
-        JOIN links l ON l.brain_id = $1 AND l.from_page_id = t.id${typeFilter}
+        JOIN links l ON l.brain_id = $1 AND l.from_page_id = t.id
         JOIN pages p ON p.brain_id = $1 AND p.id = l.to_page_id
         WHERE t.depth < $3 AND NOT p.id = ANY(t.path)
       )
-      SELECT slug, title, type, depth, link_type
-      FROM traversal
-      ORDER BY depth, title`;
-    const params = [brainId, startSlug, depthCap, ...typeParam];
-    console.log(`[brainbase] traverse out: params.length=${params.length} typeFilter="${typeFilter}"`);
-    try {
-      const rows = await queryMany<{slug: string; title: string; type: string; depth: number; link_type: string;}>(sql, params);
-      console.log(`[brainbase] traverse out: ${rows.length} rows returned`);
-      return rows.map(r => ({slug: r.slug, title: r.title, type: r.type, depth: r.depth, link_type: r.link_type || undefined}));
-    } catch (err) {
-      console.error(`[brainbase] traverse out SQL error:`, err);
-      throw err;
-    }
-  }
-
-  if (direction === "in") {
-    const rows = await queryMany<{
-      slug: string; title: string; type: string; depth: number; link_type: string;
-    }>(
-      `WITH RECURSIVE traversal AS (
+      SELECT slug, title, type, depth, link_type FROM traversal ORDER BY depth, title`
+    : direction === "in"
+    ? `WITH RECURSIVE traversal AS (
         SELECT p.id, p.slug, p.title, p.type, 0 AS depth, ARRAY[p.id] AS path, NULL::text AS link_type
         FROM pages p WHERE p.brain_id = $1 AND p.slug = $2
-
         UNION ALL
-
         SELECT p.id, p.slug, p.title, p.type, t.depth + 1, t.path || p.id, l.link_type
         FROM traversal t
-        JOIN links l ON l.brain_id = $1 AND l.to_page_id = t.id${typeFilter}
+        JOIN links l ON l.brain_id = $1 AND l.to_page_id = t.id
         JOIN pages p ON p.brain_id = $1 AND p.id = l.from_page_id
         WHERE t.depth < $3 AND NOT p.id = ANY(t.path)
       )
-      SELECT slug, title, type, depth, link_type
-      FROM traversal
-      ORDER BY depth, title`,
-      [brainId, startSlug, depthCap, ...typeParam]
-    );
-    return rows.map(r => ({
-      slug: r.slug, title: r.title, type: r.type, depth: r.depth,
-      link_type: r.link_type || undefined,
-    }));
-  }
+      SELECT slug, title, type, depth, link_type FROM traversal ORDER BY depth, title`
+    : `WITH RECURSIVE traversal AS (
+        SELECT p.id, p.slug, p.title, p.type, 0 AS depth, ARRAY[p.id] AS path, NULL::text AS link_type
+        FROM pages p WHERE p.brain_id = $1 AND p.slug = $2
+        UNION ALL
+        SELECT p.id, p.slug, p.title, p.type, t.depth + 1, t.path || p.id, l.link_type
+        FROM traversal t
+        JOIN links l ON l.brain_id = $1 AND (l.from_page_id = t.id OR l.to_page_id = t.id)
+        JOIN pages p ON p.brain_id = $1 AND p.id = CASE WHEN l.from_page_id = t.id THEN l.to_page_id ELSE l.from_page_id END
+        WHERE t.depth < $3 AND NOT p.id = ANY(t.path)
+      )
+      SELECT slug, title, type, depth, link_type FROM traversal ORDER BY depth, title`;
 
-  // "both" — bidirectional
-  const rows = await queryMany<{
-    slug: string; title: string; type: string; depth: number; link_type: string;
-  }>(
-    `WITH RECURSIVE traversal AS (
-      SELECT p.id, p.slug, p.title, p.type, 0 AS depth, ARRAY[p.id] AS path, NULL::text AS link_type
-      FROM pages p WHERE p.brain_id = $1 AND p.slug = $2
-
-      UNION ALL
-
-      SELECT p.id, p.slug, p.title, p.type, t.depth + 1, t.path || p.id, l.link_type
-      FROM traversal t
-      JOIN links l ON l.brain_id = $1 AND (l.from_page_id = t.id OR l.to_page_id = t.id)${typeFilter}
-      JOIN pages p ON p.brain_id = $1 AND p.id = CASE WHEN l.from_page_id = t.id THEN l.to_page_id ELSE l.from_page_id END
-      WHERE t.depth < $3 AND NOT p.id = ANY(t.path)
-    )
-    SELECT slug, title, type, depth, link_type
-    FROM traversal
-    ORDER BY depth, title`,
-    [brainId, startSlug, depthCap, ...typeParam]
+  const rows = await queryMany<{ slug: string; title: string; type: string; depth: number; link_type: string | null }>(
+    sql, [brainId, startSlug, depthCap]
   );
-  return rows.map(r => ({
-    slug: r.slug, title: r.title, type: r.type, depth: r.depth,
+
+  let results: TraversalResult[] = rows.map(r => ({
+    slug: r.slug,
+    title: r.title,
+    type: r.type,
+    depth: r.depth,
     link_type: r.link_type || undefined,
   }));
+
+  // Post-query type filtering — exclude the root node from filtering
+  if (linkType) {
+    const filtered: TraversalResult[] = [results[0]]; // Always keep root
+    for (let i = 1; i < results.length; i++) {
+      if (results[i].link_type === linkType || results[i].depth === 0) {
+        filtered.push(results[i]);
+      }
+    }
+    results = filtered;
+  }
+
+  return results;
 }
 
 export interface BrainStats {
