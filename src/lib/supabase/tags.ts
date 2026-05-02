@@ -84,9 +84,8 @@ export async function setTags(
   pageSlug: string,
   tags: string[]
 ): Promise<string[]> {
-  const normalized = [
-    ...new Set(tags.map(t => t.toLowerCase().trim()).filter(Boolean)),
-  ].sort();
+  const unique = Array.from(new Set(tags.map(t => t.toLowerCase().trim()).filter(Boolean)));
+  const normalized = unique.sort();
 
   const row = await queryOne<{ tags: string[] | null }>(
     `UPDATE pages

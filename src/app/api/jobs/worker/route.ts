@@ -20,12 +20,14 @@ import { syncHandler } from "@/lib/minions/handlers/sync";
 import { embedHandler } from "@/lib/minions/handlers/embed";
 import { extractHandler } from "@/lib/minions/handlers/extract";
 import { backlinksHandler } from "@/lib/minions/handlers/backlinks";
+import { enrichHandler } from "@/lib/minions/handlers/enrich";
 
 // Register at module load time
 register("sync", syncHandler);
 register("embed", embedHandler);
 register("extract", extractHandler);
 register("backlinks", backlinksHandler);
+register("enrich_entity", enrichHandler);
 
 export async function POST(req: NextRequest) {
   // Allow cron secret OR authenticated user
