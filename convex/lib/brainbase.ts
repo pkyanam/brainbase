@@ -6,8 +6,8 @@
 
 import { queryMany } from "./supabase";
 
-const BASE_URL = process.env.BRAINBASE_API_URL || "https://brainbase.belweave.ai";
-const CRON_SECRET = process.env.CRON_SECRET || "";
+const BASE_URL = process.env.BRAINBASE_API_URL || process.env.BRAINBASE_BASE_URL || "https://brainbase.belweave.ai";
+const CRON_SECRET = process.env.API_CRON_SECRET || process.env.CRON_SECRET || "";
 
 async function bbFetch(path: string, body?: unknown): Promise<any> {
   const res = await fetch(`${BASE_URL}${path}`, {

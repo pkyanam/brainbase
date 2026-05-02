@@ -18,13 +18,15 @@ type Phase = typeof PHASES[number];
 export async function POST(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
   const hermesSecret = process.env.HERMES_CRON_SECRET;
+  const apiCronSecret = process.env.API_CRON_SECRET;
   const authHeader = req.headers.get("authorization");
   const bearer = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1];
   const isDev = process.env.NODE_ENV === "development";
 
   const authorized = isDev ||
     (cronSecret && bearer === cronSecret) ||
-    (hermesSecret && bearer === hermesSecret);
+    (hermesSecret && bearer === hermesSecret) ||
+    (apiCronSecret && bearer === apiCronSecret);
 
   if (!authorized) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

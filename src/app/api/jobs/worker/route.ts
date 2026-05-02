@@ -30,11 +30,12 @@ register("backlinks", backlinksHandler);
 export async function POST(req: NextRequest) {
   // Allow cron secret OR authenticated user
   const cronSecret = process.env.CRON_SECRET;
+  const apiCronSecret = process.env.API_CRON_SECRET;
   const authHeader = req.headers.get("authorization");
 
-  if (cronSecret) {
+  if (cronSecret || apiCronSecret) {
     const provided = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1];
-    if (provided !== cronSecret) {
+    if (provided !== cronSecret && provided !== apiCronSecret) {
       // Fall back to Clerk auth
       const auth = await resolveApiAuth(req);
       if (!auth) {
