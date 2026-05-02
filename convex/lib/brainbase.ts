@@ -1,10 +1,11 @@
 "use node";
 /**
  * Brainbase API client for Convex actions.
- * Calls Vercel-hosted endpoints with service-to-service auth.
+ * Some operations proxy to Vercel endpoints; orphan linking runs directly on Supabase.
  */
 
 import { queryMany } from "./supabase";
+import { batchLinkOrphans } from "./orphanLinker";
 
 const BASE_URL = process.env.BRAINBASE_API_URL || process.env.BRAINBASE_BASE_URL || "https://brainbase.belweave.ai";
 const CRON_SECRET = process.env.API_CRON_SECRET || process.env.CRON_SECRET || "";
@@ -43,7 +44,7 @@ export async function listBrains(): Promise<Array<{ brain_id: string; page_count
   return rows;
 }
 
-/** Run one dream phase for one brain. */
+/** Run one dream phase for one brain (proxies to Vercel for most phases). */
 export async function runDreamPhase(brainId: string, phase: string, limit?: number): Promise<any> {
   return bbFetch("/api/cron/dream-phase", { brain_id: brainId, phase, limit });
 }
@@ -56,4 +57,9 @@ export async function embedBrainChunks(brainId: string, limit?: number): Promise
 /** Process one minion worker tick. */
 export async function runWorkerTick(queue: string = "default", batchSize: number = 5): Promise<any> {
   return bbFetch("/api/jobs/worker", { queue, batch: batchSize });
+}
+
+/** Link orphans directly on Supabase (runs on Convex, no Vercel proxy). */
+export async function linkOrphansDirectly(brainId: string): Promise<any> {
+  return batchLinkOrphans(brainId);
 }

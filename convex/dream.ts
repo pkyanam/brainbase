@@ -2,7 +2,7 @@
 import { v } from "convex/values";
 import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { listBrains, runDreamPhase, embedBrainChunks } from "./lib/brainbase";
+import { listBrains, runDreamPhase, embedBrainChunks, linkOrphansDirectly } from "./lib/brainbase";
 
 const PHASES = [
   "extract_links",
@@ -63,8 +63,25 @@ export const runBrainDreamCycle = internalAction({
     console.log(`[convex:dream] Running ${phase} for ${args.brainId}`);
 
     try {
-      const result = await runDreamPhase(args.brainId, phase);
-      console.log(`[convex:dream] ${phase} ok:`, JSON.stringify(result).slice(0, 200));
+      if (phase === "link_orphans") {
+        // Run orphan linker directly on Convex (Supabase pg), not via Vercel proxy
+        const result = await linkOrphansDirectly(args.brainId);
+        console.log(`[convex:dream] ${phase} ok: ${result.totalInserted} links created, ${result.orphansFound} orphans remaining`);
+        
+        // If we processed a batch but orphans remain, schedule another orphan pass before continuing
+        if (result.orphansFound > result.totalInserted && result.totalInserted > 0) {
+          console.log(`[convex:dream] ${result.orphansFound} orphans remain, scheduling another pass`);
+          // @ts-ignore — types regenerate after `npx convex dev`
+          await ctx.scheduler.runAfter(5_000, internal.dream.runBrainDreamCycle, {
+            brainId: args.brainId,
+            phaseIndex: idx, // stay on link_orphans
+          });
+          return { status: "running", brainId: args.brainId, phase, nextIndex: idx, orphansRemaining: result.orphansFound };
+        }
+      } else {
+        const result = await runDreamPhase(args.brainId, phase);
+        console.log(`[convex:dream] ${phase} ok:`, JSON.stringify(result).slice(0, 200));
+      }
     } catch (err: any) {
       console.error(`[convex:dream] ${phase} failed for ${args.brainId}:`, err.message);
     }

@@ -13,6 +13,7 @@ import type * as dream from "../dream.js";
 import type * as eval from "../eval.js";
 import type * as jobs from "../jobs.js";
 import type * as lib_brainbase from "../lib/brainbase.js";
+import type * as lib_orphanLinker from "../lib/orphanLinker.js";
 import type * as lib_supabase from "../lib/supabase.js";
 
 import type {
@@ -27,6 +28,7 @@ declare const fullApi: ApiFromModules<{
   eval: typeof eval;
   jobs: typeof jobs;
   "lib/brainbase": typeof lib_brainbase;
+  "lib/orphanLinker": typeof lib_orphanLinker;
   "lib/supabase": typeof lib_supabase;
 }>;
 
