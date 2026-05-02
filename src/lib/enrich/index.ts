@@ -62,6 +62,12 @@ export async function enrichEntity(
       enrichedAt: new Date().toISOString(),
       linksCreated: 0,
       rawDataStored: 0,
+      _diag: {
+        braveKeyConfigured: !!process.env.BRAVE_API_KEY,
+        braveKeyLength: (process.env.BRAVE_API_KEY || "").length,
+        braveCalled: false,
+        braveResults: 0,
+      },
     };
   }
 
