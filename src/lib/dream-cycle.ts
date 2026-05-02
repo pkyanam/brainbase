@@ -84,7 +84,7 @@ export async function runDreamCycle(
       phases.push({
         phase: "link_orphans",
         status: "completed",
-        summary: `${result.orphansFound} orphans found, ${result.totalInserted} semantic links created (${result.vectorPairs} vector + ${result.ftsPairs} FTS)`,
+        summary: `${result.orphansFound} orphans found, ${result.totalInserted} links created (v:${result.vectorPairs} fts:${result.ftsPairs} title:${result.titlePairs})`,
         items_processed: result.orphansFound,
         items_created: result.totalInserted,
         details: result.diagnostics || {},
