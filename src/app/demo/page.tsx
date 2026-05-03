@@ -337,14 +337,14 @@ export default function DemoPage() {
             Interactive Demo
           </div>
           <h1 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4">
-            See how AI agents{" "}
+            See how Brainbase{" "}
             <span className="bg-gradient-to-r from-bb-accent to-bb-accent-dim bg-clip-text text-transparent">
-              reason with company knowledge
+              extracts knowledge from your company data
             </span>
           </h1>
           <p className="text-lg text-bb-text-secondary max-w-2xl mx-auto">
-            Brainbase turns scattered Slack threads and docs into a structured knowledge graph.
-            Watch an AI agent traverse it in real-time.
+            The skills engine traverses a real knowledge graph to surface people,
+            rules, precedents, and implicit patterns — no LLMs, no hallucinations.
           </p>
         </div>
       </section>
@@ -409,7 +409,7 @@ export default function DemoPage() {
 
             {/* Reasoning Trace */}
             <div className="flex-1 p-4 rounded-2xl bg-bb-bg-secondary border border-bb-border min-h-[200px]">
-              <h3 className="text-sm font-semibold text-bb-text-secondary mb-3">Agent reasoning trace</h3>
+              <h3 className="text-sm font-semibold text-bb-text-secondary mb-3">Graph traversal trace (simulated visualization)</h3>
               {query ? (
                 <div className="space-y-3">
                   {query.steps.map((step, i) => (
@@ -436,7 +436,7 @@ export default function DemoPage() {
                 </div>
               ) : (
                 <p className="text-sm text-bb-text-muted italic">
-                  Select a query above to watch the agent reason through your company's brain.
+                  Select a query above to see the skills engine extract people, rules, and precedents from a public demo brain.
                 </p>
               )}
             </div>
@@ -459,12 +459,13 @@ export default function DemoPage() {
                       <code>{JSON.stringify(skillsFile, null, 2)}</code>
                     </pre>
                     <p className="text-xs text-bb-text-muted mt-2">
-                      Live output from GET /api/skills/demo — no auth, no signup required.
+                      Live output from public demo brain — powered by the real Brainbase skills engine. No auth, no signup.
                     </p>
                   </>
                 ) : (
                   <div className="text-xs text-bb-text-muted py-3">
-                    <p>Task not recognized in demo dataset. Try "pricing exceptions" or "refund policy".</p>
+                    <p>Demo brain returned no results for this query. Try "pricing exceptions" or "refund policy".</p>
+                    <p className="mt-1">If the demo brain hasn't been seeded, run: npx tsx scripts/seed-demo-brain.ts</p>
                   </div>
                 )}
               </div>
