@@ -55,10 +55,10 @@ export async function POST(req: NextRequest) {
 
     for (const page of pages) {
       await query(
-        `INSERT INTO pages (brain_id, slug, title, type, content, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+        `INSERT INTO pages (brain_id, slug, title, type, compiled_truth, search_vector, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, to_tsvector('english', $5), NOW(), NOW())
          ON CONFLICT (brain_id, slug) DO UPDATE
-         SET title = $3, type = $4, content = $5, updated_at = NOW()`,
+         SET title = $3, type = $4, compiled_truth = $5, search_vector = to_tsvector('english', $5), updated_at = NOW()`,
         [DEMO_BRAIN_ID, page.slug, page.title, page.type, page.content]
       );
     }
@@ -110,22 +110,6 @@ export async function POST(req: NextRequest) {
       );
     }
     results.push(`✅ ${timeline.length} timeline entries`);
-
-    // Seed content chunks for FTS
-    for (const page of pages) {
-      const texts = [page.title, page.content.slice(0, 500), page.content.slice(500, 1000)];
-      for (let i = 0; i < texts.length; i++) {
-        const text = texts[i];
-        if (!text.trim()) continue;
-        await query(
-          `INSERT INTO content_chunks (brain_id, page_slug, chunk_index, content, created_at)
-           VALUES ($1, $2, $3, $4, NOW())
-           ON CONFLICT DO NOTHING`,
-          [DEMO_BRAIN_ID, page.slug, i, text]
-        );
-      }
-    }
-    results.push("✅ content chunks");
 
     return NextResponse.json({ success: true, results });
   } catch (err) {

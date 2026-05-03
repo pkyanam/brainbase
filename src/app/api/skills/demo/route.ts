@@ -170,10 +170,10 @@ CS handles initial triage for all refund requests. Standard refunds (under $10K)
 
   for (const page of pages) {
     await query(
-      `INSERT INTO pages (brain_id, slug, title, type, content, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+      `INSERT INTO pages (brain_id, slug, title, type, compiled_truth, search_vector, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, to_tsvector('english', $5), NOW(), NOW())
        ON CONFLICT (brain_id, slug) DO UPDATE
-       SET title = $3, type = $4, content = $5, updated_at = NOW()`,
+       SET title = $3, type = $4, compiled_truth = $5, search_vector = to_tsvector('english', $5), updated_at = NOW()`,
       [DEMO_BRAIN_ID, page.slug, page.title, page.type, page.content]
     );
   }
@@ -221,24 +221,6 @@ CS handles initial triage for all refund requests. Standard refunds (under $10K)
        ON CONFLICT DO NOTHING`,
       [DEMO_BRAIN_ID, t.slug, t.date, t.summary, t.source]
     );
-  }
-
-  // Seed content chunks for FTS search
-  for (const page of pages) {
-    const chunks = [
-      { text: page.title, index: 0 },
-      { text: page.content.slice(0, 500), index: 1 },
-      { text: page.content.slice(500, 1000), index: 2 },
-    ].filter(c => c.text.trim());
-
-    for (const chunk of chunks) {
-      await query(
-        `INSERT INTO content_chunks (brain_id, page_slug, chunk_index, content, created_at)
-         VALUES ($1, $2, $3, $4, NOW())
-         ON CONFLICT DO NOTHING`,
-        [DEMO_BRAIN_ID, page.slug, chunk.index, chunk.text]
-      );
-    }
   }
 
   seeded = true;
