@@ -178,53 +178,8 @@ CS handles initial triage for all refund requests. Standard refunds (under $10K)
     );
   }
 
-  // Seed links
-  const links = [
-    ["pricing-exceptions", "alice-chen", "involves"],
-    ["pricing-exceptions", "bob-martinez", "involves"],
-    ["pricing-exceptions", "carol-white", "involves"],
-    ["pricing-exceptions", "enterprise-tier", "related_to"],
-    ["alice-chen", "pricing-exceptions", "works_on"],
-    ["bob-martinez", "pricing-exceptions", "works_on"],
-    ["refund-policy", "carol-white", "involves"],
-    ["refund-policy", "customer-success", "handled_by"],
-    ["carol-white", "refund-policy", "works_on"],
-    ["enterprise-tier", "pricing-exceptions", "has_override"],
-  ];
-
-  for (const [from, to, type] of links) {
-    await query(
-      `INSERT INTO links (brain_id, from_slug, to_slug, link_type, created_at)
-       VALUES ($1, $2, $3, $4, NOW())
-       ON CONFLICT DO NOTHING`,
-      [DEMO_BRAIN_ID, from, to, type]
-    );
-  }
-
-  // Seed timeline entries (precedents)
-  const timeline = [
-    { slug: "pricing-exceptions", date: "2026-03-15", summary: "Acme Corp $45K deal — Alice approved same day under standard process", source: "slack/pricing-decisions/march-2026" },
-    { slug: "pricing-exceptions", date: "2026-03-22", summary: "Beta Inc $120K deal — escalated to Bob for Legal review, VP sign-off required", source: "slack/pricing-decisions/march-2026" },
-    { slug: "pricing-exceptions", date: "2026-04-01", summary: "Gamma LLC $38K deal — standard Sales Manager approval by Alice", source: "slack/pricing-decisions/april-2026" },
-    { slug: "pricing-exceptions", date: "2026-04-10", summary: "Delta Co $150K deal — Legal review by Bob + Finance check by Carol, approved after escalation", source: "slack/pricing-decisions/april-2026" },
-    { slug: "pricing-exceptions", date: "2026-04-22", summary: "Epsilon Inc $75K deal — fell in undocumented gap between $50K-$100K, handled ad-hoc by Alice", source: "slack/pricing-decisions/april-2026" },
-    { slug: "refund-policy", date: "2026-01-10", summary: "Standard $200 refund — CS approved same day", source: "slack/refunds/q1-2026" },
-    { slug: "refund-policy", date: "2026-02-05", summary: "$15K partial refund — Carol approved after Finance review", source: "slack/refunds/q1-2026" },
-    { slug: "refund-policy", date: "2026-03-18", summary: "$30K refund request — escalated to Carol + VP, approved with conditions", source: "slack/refunds/q1-2026" },
-    { slug: "refund-policy", date: "2026-04-05", summary: "Enterprise customer annual refund — full refund within 30-day window, no questions asked", source: "docs/refund-policy" },
-  ];
-
-  for (const t of timeline) {
-    await query(
-      `INSERT INTO timeline_entries (brain_id, page_slug, date, summary, source, created_at)
-       VALUES ($1, $2, $3, $4, $5, NOW())
-       ON CONFLICT DO NOTHING`,
-      [DEMO_BRAIN_ID, t.slug, t.date, t.summary, t.source]
-    );
-  }
-
   seeded = true;
-  console.log(`[brainbase] ✅ Demo brain seeded — ${pages.length} pages, ${links.length} links, ${timeline.length} timeline entries`);
+  console.log(`[brainbase] ✅ Demo brain seeded — ${pages.length} pages`);
 }
 
 export async function GET(req: NextRequest) {
