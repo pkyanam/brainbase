@@ -257,6 +257,10 @@ export default function DemoPage() {
   const [activeNodes, setActiveNodes] = useState<Set<string>>(new Set());
   const [activeEdges, setActiveEdges] = useState<Set<string>>(new Set());
   const [typedText, setTypedText] = useState("");
+  const [customQuery, setCustomQuery] = useState("");
+  const [customRunning, setCustomRunning] = useState(false);
+  const [customTrace, setCustomTrace] = useState<string[]>([]);
+  const [customTraceIdx, setCustomTraceIdx] = useState(0);
   const timeoutsRef = useRef<number[]>([]);
 
   const query = selectedQuery !== null ? DEMO_QUERIES[selectedQuery] : null;
@@ -320,6 +324,52 @@ export default function DemoPage() {
     }, accumulatedDelay + 400);
     timeoutsRef.current.push(t2);
   }, [clearTimeouts]);
+
+  const runCustomQuery = useCallback(() => {
+    const q = customQuery.trim();
+    if (!q || customRunning) return;
+    clearTimeouts();
+    setSelectedQuery(null);
+    setIsRunning(false);
+    setCustomRunning(true);
+    setShowSkillsFile(false);
+    setSkillsFile(null);
+    setSkillsLoading(false);
+    setActiveNodes(new Set());
+    setActiveEdges(new Set());
+    setCustomTraceIdx(0);
+
+    const steps = [
+      `Searching demo brain for "${q}"...`,
+      `Traversing knowledge graph for related pages...`,
+      `Extracting people, rules, and patterns...`,
+      `Computing confidence scores...`,
+    ];
+    setCustomTrace(steps);
+
+    let acc = 0;
+    steps.forEach((_, i) => {
+      const t = window.setTimeout(() => setCustomTraceIdx(i + 1), acc);
+      timeoutsRef.current.push(t);
+      acc += 500;
+    });
+
+    const t2 = window.setTimeout(() => {
+      setSkillsLoading(true);
+      fetch(`/api/skills/demo?task=${encodeURIComponent(q)}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (!data.error) setSkillsFile(data);
+        })
+        .catch(() => {})
+        .finally(() => {
+          setSkillsLoading(false);
+          setCustomRunning(false);
+          setShowSkillsFile(true);
+        });
+    }, acc + 200);
+    timeoutsRef.current.push(t2);
+  }, [customQuery, customRunning, clearTimeouts]);
 
   useEffect(() => {
     return () => clearTimeouts();
@@ -405,12 +455,54 @@ export default function DemoPage() {
                   </button>
                 ))}
               </div>
+              {/* Divider */}
+              <div className="flex items-center gap-2 my-3">
+                <div className="flex-1 h-px bg-bb-border" />
+                <span className="text-[10px] text-bb-text-muted uppercase tracking-wider">or try your own</span>
+                <div className="flex-1 h-px bg-bb-border" />
+              </div>
+              {/* Custom query input */}
+              <form
+                onSubmit={(e) => { e.preventDefault(); runCustomQuery(); }}
+                className="flex gap-2"
+              >
+                <input
+                  type="text"
+                  value={customQuery}
+                  onChange={(e) => setCustomQuery(e.target.value)}
+                  placeholder="e.g. enterprise tier, alice chen, bob martinez..."
+                  disabled={customRunning}
+                  className="flex-1 px-3 py-2 text-sm bg-bb-bg-primary border border-bb-border rounded-lg text-bb-text-primary placeholder:text-bb-text-muted focus:outline-none focus:border-bb-accent/50 disabled:opacity-50"
+                />
+                <button
+                  type="submit"
+                  disabled={!customQuery.trim() || customRunning}
+                  className="px-4 py-2 text-sm bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary font-medium rounded-lg transition-colors disabled:opacity-40 shrink-0"
+                >
+                  {customRunning ? (
+                    <span className="inline-block w-3 h-3 border-2 border-bb-bg-primary/30 border-t-bb-bg-primary rounded-full animate-spin" />
+                  ) : (
+                    "Ask"
+                  )}
+                </button>
+              </form>
             </div>
 
             {/* Reasoning Trace */}
             <div className="flex-1 p-4 rounded-2xl bg-bb-bg-secondary border border-bb-border min-h-[200px]">
               <h3 className="text-sm font-semibold text-bb-text-secondary mb-3">Graph traversal trace (simulated visualization)</h3>
-              {query ? (
+              {customRunning && customTrace.length > 0 ? (
+                <div className="space-y-3">
+                  {customTrace.map((step, i) => (
+                    <div key={i} className={`flex gap-3 transition-opacity duration-300 ${i < customTraceIdx ? "opacity-50" : i === customTraceIdx - 1 ? "opacity-100" : "opacity-0"}`}>
+                      <div className={`mt-1 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${i < customTraceIdx - 1 ? "bg-bb-accent/20 text-bb-accent" : i === customTraceIdx - 1 ? "bg-bb-accent text-bb-bg-primary animate-pulse" : "bg-bb-bg-tertiary text-bb-text-muted"}`}>
+                        {i < customTraceIdx - 1 ? "✓" : i + 1}
+                      </div>
+                      <p className="text-sm text-bb-text-secondary leading-relaxed">{step}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : query ? (
                 <div className="space-y-3">
                   {query.steps.map((step, i) => (
                     <div
@@ -442,7 +534,7 @@ export default function DemoPage() {
             </div>
 
             {/* Skills File Output */}
-            {showSkillsFile && query && (
+            {showSkillsFile && (
               <div className="p-4 rounded-2xl bg-bb-bg-secondary border border-bb-accent/20 animate-fade-in">
                 <div className="flex items-center gap-2 mb-3">
                   <span className="text-bb-accent text-lg">⚡</span>
