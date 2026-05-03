@@ -551,7 +551,7 @@ export default function DemoPage() {
                       <code>{JSON.stringify(skillsFile, null, 2)}</code>
                     </pre>
                     <p className="text-xs text-bb-text-muted mt-2">
-                      Live output from public demo brain — powered by the real Brainbase skills engine. No auth, no signup.
+                      Live output from public demo brain — powered by the real Brainbase skills engine, fully isolated from user data. No auth, no signup.
                     </p>
                   </>
                 ) : (
