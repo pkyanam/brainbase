@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
 
   const results: string[] = [];
   const BAD_ID = "00000000-0000-0000-0000-000000000001";
-  const NEW_DEMO_ID = "d3m00000-0000-4000-a000-000000000001";
+  const NEW_DEMO_ID = "d3e00000-0000-4000-a000-000000000001";
 
   try {
     // 1. Find the real brain that got renamed
