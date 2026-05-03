@@ -12,7 +12,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { queryMany } from "@/lib/supabase/client";
 
-const PHASES = ["extract_links", "tweet_link", "link_orphans", "synthesize", "patterns", "embed"] as const;
+const PHASES = ["extract_links", "tweet_link", "link_orphans", "synthesize", "patterns", "embed", "graph_sync"] as const;
 type Phase = typeof PHASES[number];
 
 export async function POST(req: NextRequest) {
@@ -81,6 +81,15 @@ export async function POST(req: NextRequest) {
         } else {
           result = { chunks_embedded: 0, total_chunks: 0, skipped: true };
         }
+        break;
+      }
+      case "graph_sync": {
+        const { syncBrainGraph } = await import("@/lib/neo4j/sync");
+        // `limit` doubles as the per-batch cap; `forceFull` triggered by passing limit=0.
+        result = await syncBrainGraph(brainId, {
+          forceFull: limit === 0,
+          limit: limit && limit > 0 ? limit : undefined,
+        });
         break;
       }
     }

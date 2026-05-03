@@ -216,6 +216,8 @@ export async function ensureSchema(): Promise<void> {
     // v0.5 — Ensure new tables/columns exist (idempotent)
     await ensureRawDataSchema();
     await ensureTagsColumn();
+    // v0.6 — Public wiki schema
+    await ensureWikiSchema();
   } catch (err) {
     console.error("[brainbase] Schema setup error:", err);
   }
@@ -553,6 +555,40 @@ export async function ensureRawDataSchema(): Promise<void> {
     console.log("[brainbase] Raw data schema ensured");
   } catch (err) {
     console.error("[brainbase] Raw data schema error:", err);
+  }
+}
+
+/**
+ * v0.6 — Public wiki: per-page public flag and brain-level wiki toggle.
+ * Idempotent. Safe to call repeatedly.
+ */
+export async function ensureWikiSchema(): Promise<void> {
+  try {
+    await query(`
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'pages') THEN
+          ALTER TABLE pages ADD COLUMN IF NOT EXISTS public BOOLEAN NOT NULL DEFAULT FALSE;
+        END IF;
+      END $$;
+    `);
+    await query(`
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'brains') THEN
+          ALTER TABLE brains ADD COLUMN IF NOT EXISTS wiki_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+          ALTER TABLE brains ADD COLUMN IF NOT EXISTS wiki_title TEXT;
+          ALTER TABLE brains ADD COLUMN IF NOT EXISTS wiki_tagline TEXT;
+        END IF;
+      END $$;
+    `);
+    // Filtered index: only pages flagged public, fastest path for the wiki list query
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_pages_public_brain
+        ON pages(brain_id, slug) WHERE public = TRUE
+    `);
+  } catch (err) {
+    console.error("[brainbase] Wiki schema error:", err);
   }
 }
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getGraphData } from "@/lib/supabase/graph";
+import { getGraphData } from "@/lib/graph-router";
 import { requireBrainAccess } from "@/lib/auth-guard";
 
 export async function GET(req: NextRequest) {
@@ -7,8 +7,8 @@ export async function GET(req: NextRequest) {
   if (auth instanceof Response) return auth;
 
   try {
-    const data = await getGraphData(auth.brainId);
-    return NextResponse.json(data);
+    const { data, backend, fellBack } = await getGraphData(auth.brainId);
+    return NextResponse.json({ ...data, _backend: backend, _fell_back: fellBack });
   } catch (err) {
     console.error("[brainbase] Graph endpoint error:", err);
     return NextResponse.json(

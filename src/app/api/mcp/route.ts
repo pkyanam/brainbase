@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { searchBrain } from "@/lib/supabase/search";
 import { getPage, getPageLinks, getTimeline } from "@/lib/supabase/pages";
 import { getHealth } from "@/lib/supabase/health";
-import { getGraphData } from "@/lib/supabase/graph";
 import {
   putPage, deletePage, addLink, removeLink, addTimelineEntry,
-  listPages, traverseGraph, getStats,
+  listPages, getStats,
 } from "@/lib/supabase/write";
+import { traverseGraph as routedTraverseGraph, getGraphData as routedGetGraphData } from "@/lib/graph-router";
 import { validateApiKey } from "@/lib/api-keys";
 import { canAccessBrain } from "@/lib/brain-context";
 import { requireQuota } from "@/lib/usage";
@@ -40,6 +40,10 @@ const tools = [
   { name: "upsert_trigger", description: "Create or update a trigger rule", inputSchema: { type: "object", properties: { id: { type: "string" }, name: { type: "string" }, description: { type: "string" }, conditions: { type: "object" }, actions: { type: "array" }, enabled: { type: "boolean" }, cooldown_minutes: { type: "number" } }, required: ["name", "conditions", "actions"] } },
   { name: "list_triggers", description: "List active trigger rules", inputSchema: { type: "object", properties: {} } },
   { name: "run_triggers", description: "Manually run triggers against a page", inputSchema: { type: "object", properties: { slug: { type: "string" }, title: { type: "string" }, type: { type: "string" }, content: { type: "string" } }, required: ["slug", "title"] } },
+  { name: "pagerank", description: "Top-N most central pages in the brain via PageRank (Neo4j GDS, with degree-centrality fallback). Use this to find the most important entities.", inputSchema: { type: "object", properties: { limit: { type: "number", description: "Max results (default 25)" } } } },
+  { name: "communities", description: "Detect natural clusters in the brain via Louvain community detection. Returns each page tagged with a community id. Requires Neo4j GDS.", inputSchema: { type: "object", properties: { limit: { type: "number", description: "Max nodes returned (default 500)" } } } },
+  { name: "shortest_path", description: "Find the shortest chain of links between two pages — 'how is A connected to B?' Always available when Neo4j is configured.", inputSchema: { type: "object", properties: { from: { type: "string" }, to: { type: "string" }, max_depth: { type: "number", description: "Max hops to search (default 6, cap 10)" } }, required: ["from", "to"] } },
+  { name: "similar_pages", description: "Find pages structurally similar to a given page based on shared neighbors. Graph-structural similarity (not text). Uses GDS node-similarity with Jaccard fallback.", inputSchema: { type: "object", properties: { slug: { type: "string" }, limit: { type: "number", description: "Max results (default 10)" } }, required: ["slug"] } },
 ];
 
 async function dispatch(brainId: string, method: string, params: Record<string, unknown> = {}): Promise<unknown> {
@@ -77,8 +81,10 @@ async function dispatch(brainId: string, method: string, params: Record<string, 
       return await getHealth(brainId);
     case "get_stats":
       return await getStats(brainId);
-    case "get_graph":
-      return await getGraphData(brainId);
+    case "get_graph": {
+      const { data } = await routedGetGraphData(brainId);
+      return data;
+    }
     case "query": {
       const question = params.question as string;
       if (!question) throw new Error("Missing 'question' parameter");
@@ -96,10 +102,16 @@ async function dispatch(brainId: string, method: string, params: Record<string, 
       const slug = params.slug as string;
       if (!slug) throw new Error("Missing 'slug' parameter");
       const lt = params.link_type as string | undefined;
-      const result = await traverseGraph(brainId, slug, (params.depth as number) ?? 2, (params.direction as "out" | "in" | "both") ?? "out", lt);
+      const { data: result, backend } = await routedTraverseGraph(
+        brainId,
+        slug,
+        (params.depth as number) ?? 2,
+        (params.direction as "out" | "in" | "both") ?? "out",
+        lt
+      );
       // Attach _diag to verify filter passthrough
       if (Array.isArray(result)) {
-        (result as any)._diag = { linkTypeRequested: lt || null, resultCount: result.length };
+        (result as any)._diag = { linkTypeRequested: lt || null, resultCount: result.length, backend };
       }
       return result;
     }
@@ -182,6 +194,31 @@ async function dispatch(brainId: string, method: string, params: Record<string, 
         });
       }
       return { fired: fired.length, rules: fired.map(f => f.ruleName) };
+    }
+    case "pagerank": {
+      if (!process.env.NEO4J_URI) return { error: "neo4j_not_configured" };
+      const { pageRank } = await import("@/lib/neo4j/intel");
+      return await pageRank(brainId, (params.limit as number) ?? 25);
+    }
+    case "communities": {
+      if (!process.env.NEO4J_URI) return { error: "neo4j_not_configured" };
+      const { communities } = await import("@/lib/neo4j/intel");
+      return await communities(brainId, (params.limit as number) ?? 500);
+    }
+    case "shortest_path": {
+      if (!process.env.NEO4J_URI) return { error: "neo4j_not_configured" };
+      const from = params.from as string;
+      const to = params.to as string;
+      if (!from || !to) throw new Error("Missing 'from' or 'to' parameter");
+      const { shortestPath } = await import("@/lib/neo4j/intel");
+      return await shortestPath(brainId, from, to, (params.max_depth as number) ?? 6);
+    }
+    case "similar_pages": {
+      if (!process.env.NEO4J_URI) return { error: "neo4j_not_configured" };
+      const slug = params.slug as string;
+      if (!slug) throw new Error("Missing 'slug' parameter");
+      const { similarPages } = await import("@/lib/neo4j/intel");
+      return await similarPages(brainId, slug, (params.limit as number) ?? 10);
     }
     default:
       throw new Error(`Unknown tool: ${method}`);

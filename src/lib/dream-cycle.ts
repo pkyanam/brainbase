@@ -181,6 +181,42 @@ export async function runDreamCycle(
     }
   }
 
+  // ── Phase 6: Sync graph projection to Neo4j ───────────────
+  // This must run last — it depends on links/orphans/extract being current.
+  // No-ops gracefully when NEO4J_URI is unset.
+  {
+    const p0 = Date.now();
+    try {
+      const { syncBrainGraph } = await import("./neo4j/sync");
+      const result = await syncBrainGraph(brainId, { forceFull: false });
+      phases.push({
+        phase: "graph_sync",
+        status: result.status,
+        summary:
+          result.status === "skipped"
+            ? `skipped — ${result.reason}`
+            : `${result.pages_synced} pages, ${result.edges_synced} edges` +
+              (result.watermark_after ? ` (watermark → ${result.watermark_after})` : ""),
+        items_processed: result.pages_synced,
+        items_created: result.edges_synced,
+        details: {
+          watermark_before: result.watermark_before,
+          watermark_after: result.watermark_after,
+          reason: result.reason,
+        },
+        error: result.status === "failed" ? result.reason : undefined,
+        duration_ms: Date.now() - p0,
+      });
+    } catch (err: any) {
+      phases.push({
+        phase: "graph_sync",
+        status: "failed",
+        summary: err.message,
+        duration_ms: Date.now() - p0,
+      });
+    }
+  }
+
   return {
     phases,
     total_duration_ms: Date.now() - t0,
