@@ -76,7 +76,6 @@ async function reconcileStaleLinks(brainId: string, slug: string, content: strin
 export async function putPage(brainId: string, input: PutPageInput): Promise<PutPageResult> {
   // Build query dynamically based on whether public is provided
   const includePublic = input.public !== undefined;
-  const publicParam = includePublic ? (input.public ? 'TRUE' : 'FALSE') : 'FALSE';
 
   const row = await queryOne<{
     slug: string;

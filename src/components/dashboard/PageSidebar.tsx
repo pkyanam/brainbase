@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface PageDetail {
   slug: string;
@@ -30,10 +30,12 @@ export default function PageSidebar({
   const [savingPublic, setSavingPublic] = useState(false);
   const [publicError, setPublicError] = useState<string | null>(null);
 
-  // Sync local state when page changes
-  if (page && publicFlag !== (page.public ?? false) && !savingPublic) {
-    setPublicFlag(page.public ?? false);
-  }
+  // Sync local state when page changes (use proper useEffect pattern)
+  useEffect(() => {
+    if (page && !savingPublic) {
+      setPublicFlag(page.public ?? false);
+    }
+  }, [page?.public, page?.slug, savingPublic]);
 
   async function togglePublic(newValue: boolean) {
     if (!page) return;
