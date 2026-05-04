@@ -10,9 +10,7 @@ export default function Home() {
           HERO — Asymmetric diagonal split
          ═══════════════════════════════════════════════════════ */}
       <section className="relative -mt-[1px] border-b border-bb-border">
-        {/* Background accent */}
         <div className="absolute inset-0 pointer-events-none">
-          {/* Diagonal slash through the hero */}
           <div
             className="absolute top-0 right-0 w-[60%] h-full opacity-[0.03]"
             style={{
@@ -24,30 +22,30 @@ export default function Home() {
         </div>
 
         <div className="relative max-w-6xl mx-auto px-5 md:px-6 pt-24 md:pt-36 pb-20 md:pb-28">
-          {/* Asymmetric layout: left text block + right floating element */}
           <div className="grid md:grid-cols-[1.2fr_0.8fr] gap-8 md:gap-12 items-center">
-            {/* Left: headline block — offset vertically from center */}
             <div className="space-y-6 md:-translate-y-4">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-bb-surface border border-bb-border text-xs text-bb-text-muted select-none">
                 <span className="w-1.5 h-1.5 rounded-full bg-bb-accent animate-pulse" />
-                Memory layer for AI agents
+                Shared context for AI agents
               </div>
 
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.0]">
                 <span className="block text-bb-text-primary">
-                  Your company&apos;s
+                  One API call.
                 </span>
                 <span className="block text-bb-text-primary">
-                  brain, structured
+                  Every agent in your stack
                 </span>
                 <span className="block bg-gradient-to-r from-bb-accent via-bb-accent-strong to-bb-accent bg-clip-text text-transparent">
-                  for AI agents
+                  remembers everything.
                 </span>
               </h1>
 
               <p className="text-base md:text-lg text-bb-text-secondary max-w-lg leading-relaxed">
-                A self-enriching knowledge graph that gives every AI agent in your
-                stack persistent, queryable memory. Postgres-backed. MCP-native.
+                A self-enriching knowledge graph that lets Claude Code, OpenCode,
+                Cursor, and Hermes share context — typed links, graph intelligence,
+                and autonomous enrichment. Polyglot storage: Postgres + Neo4j.
+                MCP-native. 23 tools.
               </p>
 
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 pt-2">
@@ -79,9 +77,8 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Right: floating stat/feature cluster — breaks grid */}
             <div className="relative space-y-4 md:space-y-5 md:translate-y-6">
-              {/* Floating card 1 — offset left into gap */}
+              {/* Floating card 1 — Search pipeline */}
               <div className="relative ml-0 md:-ml-8 bg-bb-bg-secondary/90 backdrop-blur border border-bb-border rounded-2xl p-5 shadow-lg rotate-[0.5deg] hover:rotate-0 transition-transform">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 rounded-xl bg-bb-accent-glow border border-bb-accent/20 flex items-center justify-center shrink-0">
@@ -123,7 +120,7 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Floating card 2 — offset right */}
+              {/* Floating card 2 — Graph Intelligence */}
               <div className="relative mr-0 md:mr-6 bg-bb-bg-secondary/90 backdrop-blur border border-bb-border rounded-2xl p-5 shadow-lg -rotate-[0.5deg] hover:rotate-0 transition-transform">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 rounded-xl bg-bb-accent-glow border border-bb-accent/20 flex items-center justify-center shrink-0">
@@ -148,30 +145,30 @@ export default function Home() {
                   </div>
                   <div>
                     <div className="text-xs text-bb-text-muted uppercase tracking-wider">
-                      Dream Cycle
+                      Graph Intelligence
                     </div>
                     <div className="text-sm font-semibold text-bb-text-primary">
-                      Autonomous enrichment
+                      Neo4j + GDS plugins
                     </div>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-1.5 text-xs text-bb-text-muted font-mono">
                   <span className="px-1.5 py-0.5 rounded bg-bb-bg-tertiary border border-bb-border">
-                    extract
+                    PageRank
                   </span>
                   <span className="px-1.5 py-0.5 rounded bg-bb-bg-tertiary border border-bb-border">
-                    embed
+                    Louvain
                   </span>
                   <span className="px-1.5 py-0.5 rounded bg-bb-bg-tertiary border border-bb-border">
-                    orphans
+                    shortest path
                   </span>
                   <span className="px-1.5 py-0.5 rounded bg-bb-bg-tertiary border border-bb-border">
-                    patterns
+                    similarity
                   </span>
                 </div>
               </div>
 
-              {/* Floating card 3 — shadow of stats */}
+              {/* Floating card 3 — interfaces */}
               <div className="relative ml-0 md:ml-4 bg-bb-bg-secondary/70 backdrop-blur border border-bb-border rounded-2xl p-4 text-center rotate-[0.25deg] hover:rotate-0 transition-transform max-w-[280px] mx-auto md:mx-0">
                 <div className="text-[10px] uppercase tracking-widest text-bb-text-muted mb-1">
                   Every interface
@@ -195,7 +192,7 @@ export default function Home() {
                     <span className="font-bold text-bb-accent font-mono text-base">
                       MCP
                     </span>
-                    <span className="text-bb-text-muted">12 tools</span>
+                    <span className="text-bb-text-muted">23 tools</span>
                   </div>
                 </div>
               </div>
@@ -215,9 +212,7 @@ export default function Home() {
         }}
       >
         <div className="max-w-6xl mx-auto px-5 md:px-6">
-          {/* Asymmetric two-panel: left narrow, right wide */}
           <div className="grid md:grid-cols-[0.55fr_1fr] gap-8 md:gap-16 items-start">
-            {/* Left: stripped-down label + provocative question */}
             <div className="md:sticky md:top-24 space-y-4">
               <div className="flex items-center gap-2">
                 <span className="w-8 h-px bg-bb-accent" />
@@ -226,30 +221,27 @@ export default function Home() {
                 </span>
               </div>
               <h2 className="text-2xl md:text-3xl font-bold tracking-tight leading-tight">
-                AI agents don&apos;t
+                Every AI agent
                 <br />
-                operate on vibes
+                starts from zero
               </h2>
             </div>
 
-            {/* Right: the real meat */}
             <div className="space-y-8">
               <div className="space-y-5">
                 <p className="text-base md:text-lg text-bb-text-secondary leading-relaxed">
-                  Your company runs because <em>humans</em> remember: who handles
-                  refunds, which pricing tiers need legal review, what was decided
-                  in that Slack thread three months ago.
+                  You run five agents: Claude Code builds features, OpenCode
+                  reviews PRs, Cursor edits frontend, Hermes handles ops. None
+                  of them know what the others built, decided, or learned.
                 </p>
                 <p className="text-base text-bb-text-secondary leading-relaxed">
-                  AI agents don&apos;t have that memory. Feed them raw Slack or
-                  docs and they drown in noise. They need structured, attributed,
-                  queryable knowledge — not another RAG pile.
+                  The result: you&apos;re the copy-paste layer. Repeating context.
+                  Re-explaining decisions. Watching agents rediscover things
+                  another agent already figured out yesterday.
                 </p>
               </div>
 
-              {/* Comparison block — asymmetric stacking */}
               <div className="space-y-3">
-                {/* Fail case — offset right */}
                 <div className="relative ml-4 md:ml-12 bg-bb-bg-primary/80 border border-bb-danger/20 rounded-xl p-4 max-w-md">
                   <div className="flex items-start gap-3">
                     <span className="text-bb-danger text-sm font-mono mt-0.5">
@@ -257,16 +249,16 @@ export default function Home() {
                     </span>
                     <div>
                       <div className="text-sm font-medium text-bb-danger mb-0.5">
-                        RAG over Slack
+                        One agent per task
                       </div>
                       <div className="text-xs text-bb-text-muted">
-                        47 irrelevant threads. Zero context about who decided what.
+                        Each agent is an island. No shared context. No
+                        awareness of what&apos;s already been solved.
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Fail case — offset left */}
                 <div className="relative mr-4 md:mr-12 ml-8 md:ml-0 bg-bb-bg-primary/80 border border-bb-warning/20 rounded-xl p-4 max-w-md">
                   <div className="flex items-start gap-3">
                     <span className="text-bb-warning text-sm font-mono mt-0.5">
@@ -274,16 +266,17 @@ export default function Home() {
                     </span>
                     <div>
                       <div className="text-sm font-medium text-bb-warning mb-0.5">
-                        Company wiki
+                        Vector DB "memory"
                       </div>
                       <div className="text-xs text-bb-text-muted">
-                        Outdated. Three different versions. No one maintains it.
+                        Dumping embeddings into a vector store gives you
+                        retrieval — not understanding. No typed relationships.
+                        No graph structure.
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Win case — full width-ish, accent-border */}
                 <div className="relative bg-bb-surface border border-bb-accent/30 rounded-xl p-4 max-w-lg">
                   <div className="flex items-start gap-3">
                     <span className="text-bb-accent text-sm font-mono mt-0.5">
@@ -294,8 +287,9 @@ export default function Home() {
                         Brainbase
                       </div>
                       <div className="text-xs text-bb-text-secondary leading-relaxed">
-                        4 people involved · 12 precedent decisions · 1 unwritten
-                        rule surfaced · Confidence scored · Source-attributed
+                        Every agent reads from and writes to the same knowledge
+                        graph. Typed links connect people, projects, and decisions.
+                        Graph intelligence surfaces what matters. No manual sync.
                       </div>
                     </div>
                   </div>
@@ -310,7 +304,6 @@ export default function Home() {
           THREE WAYS IN — Asymmetric cluster
          ═══════════════════════════════════════════════════════ */}
       <section className="relative py-24 md:py-32 border-b border-bb-border">
-        {/* Diagonal background slash */}
         <div
           className="absolute inset-0 pointer-events-none opacity-[0.02]"
           style={{
@@ -340,9 +333,8 @@ export default function Home() {
             </p>
           </div>
 
-          {/* Asymmetric card cluster — NOT a grid, intentionally offset */}
           <div className="relative space-y-6 md:space-y-0 md:grid md:grid-cols-3 md:gap-6">
-            {/* Card 1: SDK — top */}
+            {/* Card 1: SDK */}
             <div className="relative bg-bb-bg-secondary border border-bb-border rounded-2xl p-6 hover:border-bb-border-hover transition-colors md:-translate-y-4 group">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-xl bg-bb-accent-glow border border-bb-accent/20 flex items-center justify-center">
@@ -367,7 +359,7 @@ export default function Home() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-bb-text-primary">SDK</h3>
-                  <p className="text-xs text-bb-text-muted">npm install</p>
+                  <p className="text-xs text-bb-text-muted">npm install brainbase-sdk</p>
                 </div>
               </div>
               <pre className="text-xs text-bb-text-secondary bg-bb-bg-primary rounded-lg p-3 overflow-x-auto font-mono leading-relaxed border border-bb-border group-hover:border-bb-accent/20 transition-colors">
@@ -377,20 +369,21 @@ const brain = new Brainbase({
   apiKey: "bb_live_..."
 });
 
-// Natural language query
+// Search + graph traversal
 const results = await brain
-  .query("who handles refunds?");
-
-// Read a page
+  .search("Garry Tan");
 const page = await brain
   .getPage("people/garry-tan");
 
-// Brain health stats
-const health = await brain.health();`}</code>
+// Graph intelligence (Neo4j)
+const ranks = await brain
+  .pageRank(25);
+const path = await brain
+  .shortestPath("people/a", "people/b");`}</code>
               </pre>
             </div>
 
-            {/* Card 2: CLI — middle, no offset */}
+            {/* Card 2: CLI */}
             <div className="relative bg-bb-bg-secondary border border-bb-border rounded-2xl p-6 hover:border-bb-border-hover transition-colors group z-10">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-xl bg-bb-accent-glow border border-bb-accent/20 flex items-center justify-center">
@@ -414,21 +407,24 @@ const health = await brain.health();`}</code>
                 </div>
               </div>
               <pre className="text-xs text-bb-text-secondary bg-bb-bg-primary rounded-lg p-3 overflow-x-auto font-mono leading-relaxed border border-bb-border group-hover:border-bb-accent/20 transition-colors">
-                <code>{`$ brainbase search "pricing exceptions"
+                <code>{`$ npm install -g brainbase-cli
+$ brainbase config set apiKey bb_live_...
 
+$ brainbase search "Garry Tan"
 $ brainbase health
-  Pages:  3,383    Links:   2,891
-  Embed:  97.4%    Score:      87
-
 $ brainbase page people/garry-tan
+$ brainbase links people/garry-tan
+$ brainbase graph
 
-$ brainbase links people/julian-assange
-
-$ brainbase graph`}</code>
+# Graph intelligence (Neo4j)
+$ brainbase pagerank --limit 25
+$ brainbase communities
+$ brainbase shortest-path a b
+$ brainbase similar people/garry-tan`}</code>
               </pre>
             </div>
 
-            {/* Card 3: MCP — bottom */}
+            {/* Card 3: MCP */}
             <div className="relative bg-bb-bg-secondary border border-bb-border rounded-2xl p-6 hover:border-bb-border-hover transition-colors md:translate-y-4 group">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-xl bg-bb-accent-glow border border-bb-accent/20 flex items-center justify-center">
@@ -448,27 +444,41 @@ $ brainbase graph`}</code>
                 </div>
                 <div>
                   <h3 className="font-semibold text-bb-text-primary">MCP</h3>
-                  <p className="text-xs text-bb-text-muted">12 JSON-RPC tools</p>
+                  <p className="text-xs text-bb-text-muted">23 JSON-RPC tools</p>
                 </div>
               </div>
               <pre className="text-xs text-bb-text-secondary bg-bb-bg-primary rounded-lg p-3 overflow-x-auto font-mono leading-relaxed border border-bb-border group-hover:border-bb-accent/20 transition-colors">
                 <code>{`// Drop into Claude Code, Cursor,
-// OpenCode, or ChatGPT Desktop
+// OpenCode, or Hermes
 {
   "mcpServers": {
     "brainbase": {
+      "type": "http",
       "url": "https://brainbase
-        .belweave.ai/api/mcp"
+        .belweave.ai/api/mcp",
+      "headers": {
+        "Authorization":
+          "Bearer bb_live_..."
+      }
     }
   }
 }
 
-Tools: search, query, get_page,
-get_links, get_backlinks,
-get_timeline, get_health,
-get_stats, get_graph,
-list_pages, traverse_graph,
-list_triggers`}</code>
+Read: search, query, get_page,
+  get_links, get_backlinks,
+  get_timeline, get_health,
+  get_stats, get_graph,
+  list_pages, traverse_graph
+
+Write: put_page, delete_page,
+  add_link, remove_link,
+  add_timeline_entry
+
+Graph: pagerank, communities,
+  shortest_path, similar_pages
+
+Triggers: upsert_trigger,
+  list_triggers, run_triggers`}</code>
               </pre>
             </div>
           </div>
@@ -488,17 +498,16 @@ list_triggers`}</code>
               </span>
             </div>
             <h2 className="text-2xl md:text-3xl font-bold tracking-tight">
-              Postgres at the core.
+              Polyglot storage.
               <br />
               <span className="text-bb-text-secondary">
-                AI agents at the edge.
+                Postgres for records. Neo4j for intelligence.
               </span>
             </h2>
           </div>
 
-          {/* Asymmetric block stack — each layer progressively indented */}
           <div className="space-y-4 max-w-3xl">
-            {/* Clients — offset right */}
+            {/* Clients */}
             <div className="ml-0 sm:ml-8 md:ml-16 bg-bb-bg-secondary border border-bb-border rounded-xl p-5 hover:border-bb-border-hover transition-colors">
               <div className="flex items-center gap-3 mb-3">
                 <span className="text-[10px] font-bold text-bb-text-muted uppercase tracking-widest w-12 shrink-0">
@@ -508,10 +517,10 @@ list_triggers`}</code>
               </div>
               <div className="flex flex-wrap gap-2 text-xs">
                 <span className="px-2 py-1 rounded-md bg-bb-accent-glow border border-bb-accent/20 text-bb-accent font-mono">
-                  Web UI
+                  AI Agents (MCP)
                 </span>
                 <span className="px-2 py-1 rounded-md bg-bb-bg-tertiary border border-bb-border text-bb-text-secondary font-mono">
-                  AI Agents (MCP)
+                  Web UI
                 </span>
                 <span className="px-2 py-1 rounded-md bg-bb-bg-tertiary border border-bb-border text-bb-text-secondary font-mono">
                   CLI (brainbase)
@@ -522,7 +531,7 @@ list_triggers`}</code>
               </div>
             </div>
 
-            {/* API — offset left */}
+            {/* API */}
             <div className="mr-0 sm:mr-8 md:mr-16 ml-0 bg-bb-bg-secondary border border-bb-border rounded-xl p-5 hover:border-bb-border-hover transition-colors">
               <div className="flex items-center gap-3 mb-3">
                 <span className="text-[10px] font-bold text-bb-text-muted uppercase tracking-widest w-12 shrink-0">
@@ -531,11 +540,11 @@ list_triggers`}</code>
                 <span className="h-px flex-1 bg-bb-border" />
               </div>
               <div className="flex flex-wrap gap-2 text-xs">
+                <span className="px-2 py-1 rounded-md bg-bb-accent-glow border border-bb-accent/20 text-bb-accent font-mono">
+                  MCP (23 tools)
+                </span>
                 <span className="px-2 py-1 rounded-md bg-bb-bg-tertiary border border-bb-border text-bb-text-secondary font-mono">
                   REST
-                </span>
-                <span className="px-2 py-1 rounded-md bg-bb-accent-glow border border-bb-accent/20 text-bb-accent font-mono">
-                  MCP (12 tools)
                 </span>
                 <span className="px-2 py-1 rounded-md bg-bb-bg-tertiary border border-bb-border text-bb-text-secondary font-mono">
                   Cron
@@ -546,37 +555,63 @@ list_triggers`}</code>
               </div>
             </div>
 
-            {/* Database — offset right */}
+            {/* Database — Polyglot */}
             <div className="ml-0 sm:ml-12 md:ml-24 bg-bb-bg-secondary border border-bb-accent/20 rounded-xl p-5 hover:border-bb-accent/30 transition-colors">
               <div className="flex items-center gap-3 mb-3">
                 <span className="text-[10px] font-bold text-bb-text-muted uppercase tracking-widest w-12 shrink-0">
-                  DB
+                  Storage
                 </span>
                 <span className="h-px flex-1 bg-bb-border" />
               </div>
-              <div className="flex flex-wrap gap-2 text-xs">
-                <span className="px-2 py-1 rounded-md bg-bb-accent-glow border border-bb-accent/20 text-bb-accent font-mono">
-                  Supabase Postgres
-                </span>
-                <span className="px-2 py-1 rounded-md bg-bb-bg-tertiary border border-bb-border text-bb-text-secondary font-mono">
-                  pgvector
-                </span>
-                <span className="px-2 py-1 rounded-md bg-bb-bg-tertiary border border-bb-border text-bb-text-secondary font-mono">
-                  pages
-                </span>
-                <span className="px-2 py-1 rounded-md bg-bb-bg-tertiary border border-bb-border text-bb-text-secondary font-mono">
-                  links
-                </span>
-                <span className="px-2 py-1 rounded-md bg-bb-bg-tertiary border border-bb-border text-bb-text-secondary font-mono">
-                  content_chunks
-                </span>
-                <span className="px-2 py-1 rounded-md bg-bb-bg-tertiary border border-bb-border text-bb-text-secondary font-mono">
-                  timeline_entries
-                </span>
+              <div className="space-y-3">
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-bb-text-muted mb-1.5">
+                    System of Record
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <span className="px-2 py-1 rounded-md bg-bb-accent-glow border border-bb-accent/20 text-bb-accent font-mono">
+                      Supabase Postgres
+                    </span>
+                    <span className="px-2 py-1 rounded-md bg-bb-bg-tertiary border border-bb-border text-bb-text-secondary font-mono">
+                      pgvector
+                    </span>
+                    <span className="px-2 py-1 rounded-md bg-bb-bg-tertiary border border-bb-border text-bb-text-secondary font-mono">
+                      pages
+                    </span>
+                    <span className="px-2 py-1 rounded-md bg-bb-bg-tertiary border border-bb-border text-bb-text-secondary font-mono">
+                      links
+                    </span>
+                    <span className="px-2 py-1 rounded-md bg-bb-bg-tertiary border border-bb-border text-bb-text-secondary font-mono">
+                      chunks
+                    </span>
+                    <span className="px-2 py-1 rounded-md bg-bb-bg-tertiary border border-bb-border text-bb-text-secondary font-mono">
+                      timeline
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-bb-text-muted mb-1.5">
+                    Graph Projection
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <span className="px-2 py-1 rounded-md bg-bb-accent/10 border border-bb-accent/20 text-bb-accent font-mono">
+                      Neo4j
+                    </span>
+                    <span className="px-2 py-1 rounded-md bg-bb-bg-tertiary border border-bb-border text-bb-text-secondary font-mono">
+                      GDS PageRank
+                    </span>
+                    <span className="px-2 py-1 rounded-md bg-bb-bg-tertiary border border-bb-border text-bb-text-secondary font-mono">
+                      GDS Louvain
+                    </span>
+                    <span className="px-2 py-1 rounded-md bg-bb-bg-tertiary border border-bb-border text-bb-text-secondary font-mono">
+                      similarity
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Dream Cycle — offset left, accent */}
+            {/* Dream Cycle */}
             <div className="mr-0 sm:mr-8 md:mr-16 ml-4 sm:ml-16 md:ml-32 bg-bb-accent-glow border border-bb-accent/30 rounded-xl p-5">
               <div className="flex items-center gap-3 mb-3">
                 <span className="text-[10px] font-bold text-bb-accent uppercase tracking-widest w-12 shrink-0">
@@ -600,11 +635,14 @@ list_triggers`}</code>
                 <span className="px-2 py-1 rounded-md bg-bb-accent/10 border border-bb-accent/20 text-bb-accent font-mono">
                   entity tiers
                 </span>
+                <span className="px-2 py-1 rounded-md bg-bb-accent/10 border border-bb-accent/20 text-bb-accent font-mono">
+                  graph sync
+                </span>
               </div>
               <p className="text-xs text-bb-accent/70 mt-3 leading-relaxed">
                 Nightly autonomous cycle. Extracts wikilinks + timelines,
-                generates embeddings, reconnects orphans, escalates entities.
-                Runs without any human input.
+                generates embeddings, reconnects orphans, escalates entities,
+                syncs to Neo4j graph projection. Runs without any human input.
               </p>
             </div>
           </div>
@@ -615,7 +653,6 @@ list_triggers`}</code>
           FEATURES — Staggered vertical rhythm
          ═══════════════════════════════════════════════════════ */}
       <section className="relative py-24 md:py-32 border-b border-bb-border">
-        {/* Subtle diagonal lines */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-[0.015]">
           <div className="absolute top-0 left-0 w-[200%] h-0.5 bg-bb-accent -rotate-[15deg] origin-top-left" />
           <div className="absolute top-[33%] left-0 w-[200%] h-0.5 bg-bb-accent -rotate-[15deg] origin-top-left" />
@@ -631,13 +668,12 @@ list_triggers`}</code>
               </span>
             </div>
             <h2 className="text-2xl md:text-3xl font-bold tracking-tight">
-              Everything your agents need
+              Built for multi-agent teams
             </h2>
           </div>
 
-          {/* Staggered feature rows — alternating indent */}
           <div className="space-y-12 md:space-y-20">
-            {/* Feature 1: Hybrid Search — left-aligned */}
+            {/* Feature 1: Hybrid Search */}
             <div className="grid md:grid-cols-[1fr_1.3fr] gap-6 md:gap-10 items-start">
               <div>
                 <div className="text-xs font-mono text-bb-accent mb-2">
@@ -645,10 +681,11 @@ list_triggers`}</code>
                 </div>
                 <h3 className="text-xl font-bold mb-2">Hybrid search</h3>
                 <p className="text-sm text-bb-text-secondary leading-relaxed">
-                  Not just keyword, not just vector. A 7-stage gated pipeline:
-                  full-text search → pgvector similarity → reciprocal rank fusion
-                  → compiled truth boost → backlink boost → intent-aware
-                  re-ranking → structured query handlers.
+                  A 7-stage gated pipeline: full-text search → pgvector
+                  similarity → reciprocal rank fusion → compiled truth boost
+                  → backlink boost → intent-aware re-ranking → structured
+                  query handlers. Agents find what they need, not what&apos;s
+                  vaguely similar.
                 </p>
               </div>
               <div className="bg-bb-bg-secondary border border-bb-border rounded-xl overflow-hidden">
@@ -693,7 +730,7 @@ list_triggers`}</code>
               </div>
             </div>
 
-            {/* Feature 2: Typed Links — offset right */}
+            {/* Feature 2: Typed Knowledge Graph */}
             <div className="grid md:grid-cols-[1.3fr_1fr] gap-6 md:gap-10 items-start">
               <div className="md:order-2">
                 <div className="text-xs font-mono text-bb-accent mb-2">
@@ -704,7 +741,8 @@ list_triggers`}</code>
                   Every connection has semantic meaning — not just &ldquo;related
                   to.&rdquo; People have roles. Companies have investments.
                   Projects have owners. Decisions have preconditions. The graph
-                  knows the difference.
+                  knows the difference, and agents can traverse it with
+                  type-aware queries.
                 </p>
               </div>
               <div className="md:order-1 bg-bb-bg-secondary border border-bb-border rounded-xl p-3">
@@ -712,13 +750,13 @@ list_triggers`}</code>
                   {[
                     "invested_in",
                     "works_at",
-                    "owned_by",
+                    "founded",
+                    "owns",
                     "reports_to",
                     "depends_on",
                     "conflicts_with",
                     "supersedes",
                     "mentions",
-                    "authored_by",
                   ].map((t) => (
                     <span
                       key={t}
@@ -734,92 +772,73 @@ list_triggers`}</code>
               </div>
             </div>
 
-            {/* Feature 3: Integrations — left-aligned */}
+            {/* Feature 3: Graph Intelligence (Neo4j) */}
             <div className="grid md:grid-cols-[1fr_1.3fr] gap-6 md:gap-10 items-start">
               <div>
                 <div className="text-xs font-mono text-bb-accent mb-2">
                   03
                 </div>
-                <h3 className="text-xl font-bold mb-2">Ingest from anywhere</h3>
+                <h3 className="text-xl font-bold mb-2">Graph intelligence</h3>
                 <p className="text-sm text-bb-text-secondary leading-relaxed">
-                  Connect Slack and your agents extract entities, links, and
-                  decisions automatically. GitHub ingestion pulls in code,
-                  issues, and PR context. More integrations on the roadmap.
+                  PageRank surfaces your most central entities. Louvain community
+                  detection finds natural clusters. Shortest path traces how any
+                  two nodes connect. Node similarity discovers structural twins.
+                  All powered by Neo4j GDS with automatic Postgres fallback.
                 </p>
               </div>
-              <div className="bg-bb-bg-secondary border border-bb-border rounded-xl p-4 flex items-center gap-4">
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#4A154B]/10 border border-[#4A154B]/20 text-xs">
-                  <svg
-                    className="w-4 h-4"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                  >
-                    <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312z" />
-                  </svg>
-                  <span>Slack</span>
+              <div className="bg-bb-bg-secondary border border-bb-border rounded-xl p-4">
+                <div className="space-y-2 text-xs font-mono">
+                  {[
+                    { name: "pagerank", desc: "Most central pages", algo: "GDS / degree fallback" },
+                    { name: "communities", desc: "Natural clusters", algo: "GDS Louvain" },
+                    { name: "shortest_path", desc: "How A connects to B", algo: "Pure Cypher" },
+                    { name: "similar_pages", desc: "Structural twins", algo: "GDS / Jaccard fallback" },
+                  ].map((g) => (
+                    <div key={g.name} className="flex items-center justify-between py-2 px-3 rounded-lg bg-bb-bg-primary border border-bb-border">
+                      <div>
+                        <span className="text-bb-accent">{g.name}</span>
+                        <span className="text-bb-text-muted ml-2">{g.desc}</span>
+                      </div>
+                      <span className="text-bb-border-strong">{g.algo}</span>
+                    </div>
+                  ))}
                 </div>
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-bb-bg-tertiary border border-bb-border text-xs">
-                  <svg
-                    className="w-4 h-4"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                  >
-                    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
-                  </svg>
-                  <span>GitHub</span>
-                </div>
-                <span className="text-xs text-bb-text-muted italic">
-                  More coming
-                </span>
               </div>
             </div>
 
-            {/* Feature 4: Skills Files — offset right */}
+            {/* Feature 4: Dream Cycle */}
             <div className="grid md:grid-cols-[1.3fr_1fr] gap-6 md:gap-10 items-start">
               <div className="md:order-2">
                 <div className="text-xs font-mono text-bb-accent mb-2">
                   04
                 </div>
-                <h3 className="text-xl font-bold mb-2">Skills file export</h3>
+                <h3 className="text-xl font-bold mb-2">Autonomous enrichment</h3>
                 <p className="text-sm text-bb-text-secondary leading-relaxed">
-                  Export scoped, attributed, confidence-scored knowledge to any
-                  AI agent. Each skills file includes sources, precedents,
-                  relevant people, and tasks — so your agents make correct
-                  decisions the first time.
+                  The dream cycle runs nightly without any human input. It extracts
+                  wikilinks and timelines from page content, generates OpenAI
+                  embeddings for new chunks, reconnects orphan pages via semantic
+                  similarity, detects cross-page patterns, escalates important
+                  entities, and syncs everything to the Neo4j graph projection.
                 </p>
               </div>
-              <div className="md:order-1 bg-bb-bg-secondary border border-bb-border rounded-xl overflow-hidden">
-                <div className="flex items-center gap-2 px-3 py-2 border-b border-bb-border">
-                  <div className="flex gap-1">
-                    <span className="w-2 h-2 rounded-full bg-bb-border-strong" />
-                    <span className="w-2 h-2 rounded-full bg-bb-border-strong" />
-                    <span className="w-2 h-2 rounded-full bg-bb-border-strong" />
-                  </div>
-                  <span className="text-[10px] font-mono text-bb-text-muted">
-                    skills-file.json
-                  </span>
+              <div className="md:order-1 bg-bb-bg-secondary border border-bb-border rounded-xl p-4">
+                <div className="space-y-1.5 text-xs">
+                  {[
+                    { step: "extract", desc: "Wikilinks + timeline from content" },
+                    { step: "embed", desc: "OpenAI text-embedding-3-small" },
+                    { step: "orphans", desc: "Auto-link via semantic similarity" },
+                    { step: "patterns", desc: "Cross-page co-occurrence" },
+                    { step: "tiers", desc: "Entity importance escalation" },
+                    { step: "graph sync", desc: "Postgres → Neo4j projection" },
+                  ].map((s) => (
+                    <div key={s.step} className="flex items-center gap-3 py-2 px-3 rounded-lg bg-bb-bg-primary border border-bb-border">
+                      <span className="text-bb-accent font-mono font-medium w-20 shrink-0">
+                        {s.step}
+                      </span>
+                      <span className="text-bb-text-muted">{s.desc}</span>
+                    </div>
+                  ))}
                 </div>
-                <pre className="p-3 text-[10px] text-bb-text-secondary leading-relaxed font-mono overflow-x-auto">
-                  <code>{`{
-  "task": "pricing_exception",
-  "confidence": 0.94,
-  "rules": [
-    {
-      "condition": "deal < $50K",
-      "owner": "sales_manager",
-      "precedents": 23
-    },
-    {
-      "condition": "deal >= $100K",
-      "owner": "legal",
-      "escalation_required": true
-    }
-  ],
-  "people": ["Alice (Sales)",
-             "Bob (Legal)"],
-  "sources": ["slack", "linear"]
-}`}</code>
-                </pre>
               </div>
             </div>
           </div>
@@ -833,11 +852,8 @@ list_triggers`}</code>
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_50%_50%_at_50%_100%,var(--bb-accent-glow),transparent_60%)] pointer-events-none opacity-50" />
 
         <div className="relative max-w-6xl mx-auto px-5 md:px-6">
-          {/* Asymmetric split: big image ref left, CTA right */}
           <div className="grid md:grid-cols-[1.1fr_0.9fr] gap-8 md:gap-16 items-center">
-            {/* Left: demo preview reference */}
             <div className="relative order-2 md:order-1">
-              {/* Fake browser chrome — representing the 3D graph */}
               <div className="bg-bb-bg-secondary border border-bb-border rounded-2xl overflow-hidden shadow-2xl rotate-[-0.5deg] hover:rotate-0 transition-transform">
                 <div className="flex items-center gap-2 px-4 py-3 border-b border-bb-border">
                   <div className="flex gap-1.5">
@@ -850,7 +866,6 @@ list_triggers`}</code>
                   </span>
                 </div>
                 <div className="p-6 md:p-8 space-y-4">
-                  {/* Abstract graph representation */}
                   <div className="relative h-48 md:h-56 rounded-xl bg-bb-bg-primary border border-bb-border overflow-hidden">
                     <div className="absolute inset-0 flex items-center justify-center">
                       <div className="space-y-3 text-center">
@@ -875,15 +890,14 @@ list_triggers`}</code>
                             Interactive 3D Knowledge Graph
                           </p>
                           <p className="text-xs text-bb-text-muted mt-1">
-                            Watch an AI agent reason through company knowledge
-                            in real-time
+                            Explore a real brain: search pages, traverse links,
+                            see the graph structure live
                           </p>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Mini trace */}
                   <div className="flex items-center gap-2 text-xs">
                     <div className="flex-1 h-1 rounded-full bg-bb-bg-tertiary overflow-hidden">
                       <div className="w-3/4 h-full rounded-full bg-bb-accent" />
@@ -897,13 +911,11 @@ list_triggers`}</code>
                 </div>
               </div>
 
-              {/* Floating badge */}
               <div className="absolute -bottom-4 -right-4 md:right-auto md:left-[60%] bg-bb-accent text-bb-bg-primary text-xs font-bold px-3 py-1.5 rounded-full shadow-lg rotate-[4deg] select-none">
                 No signup required
               </div>
             </div>
 
-            {/* Right: CTA */}
             <div className="order-1 md:order-2 space-y-6">
               <div className="flex items-center gap-2">
                 <span className="w-8 h-px bg-bb-accent" />
@@ -912,17 +924,16 @@ list_triggers`}</code>
                 </span>
               </div>
               <h2 className="text-2xl md:text-3xl font-bold tracking-tight leading-tight">
-                Watch an agent reason
+                Try it with
                 <br />
                 <span className="text-bb-text-secondary">
-                  through a live brain
+                  your own API key
                 </span>
               </h2>
               <p className="text-bb-text-secondary leading-relaxed max-w-sm">
-                Our interactive demo shows how Brainbase ingests knowledge,
-                builds a typed graph, and generates executable skills files for
-                AI agents. Public endpoint — no auth, no signup, just the raw
-                brain at work.
+                The interactive demo shows a real knowledge graph — search pages,
+                explore typed links, and run graph intelligence queries. Then grab
+                an API key from the dashboard and connect your agents.
               </p>
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 pt-2">
                 <a
@@ -952,29 +963,28 @@ list_triggers`}</code>
                 </a>
               </div>
 
-              {/* Stats */}
               <div className="flex flex-wrap gap-x-6 gap-y-2 pt-2">
                 <div>
                   <div className="text-lg font-bold text-bb-accent font-mono">
-                    3,383+
-                  </div>
-                  <div className="text-xs text-bb-text-muted">
-                    pages in production
-                  </div>
-                </div>
-                <div>
-                  <div className="text-lg font-bold text-bb-text-primary font-mono">
-                    97.4%
-                  </div>
-                  <div className="text-xs text-bb-text-muted">
-                    embed coverage
-                  </div>
-                </div>
-                <div>
-                  <div className="text-lg font-bold text-bb-text-primary font-mono">
-                    12
+                    23
                   </div>
                   <div className="text-xs text-bb-text-muted">MCP tools</div>
+                </div>
+                <div>
+                  <div className="text-lg font-bold text-bb-text-primary font-mono">
+                    SDK + CLI
+                  </div>
+                  <div className="text-xs text-bb-text-muted">
+                    + MCP
+                  </div>
+                </div>
+                <div>
+                  <div className="text-lg font-bold text-bb-text-primary font-mono">
+                    Polyglot
+                  </div>
+                  <div className="text-xs text-bb-text-muted">
+                    PG + Neo4j
+                  </div>
                 </div>
               </div>
             </div>
