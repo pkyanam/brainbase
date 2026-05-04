@@ -194,23 +194,16 @@ export async function communities(brainId: string, limit = 500): Promise<Communi
       { graphName, nodeCypher, relCypher }
     );
 
-    // Use mutate mode for Louvain (more stable than stream in GDS 2.x)
-    await runQuery(
-      brainId,
-      `CALL gds.louvain.mutate($graphName, { mutateProperty: 'community' })
-       YIELD communities, ranIterations`,
-      { graphName }
-    );
-
-    // Read the community IDs from the mutated nodes
+    // Use stream mode for Louvain
     const rows = await runQuery(
       brainId,
-      `MATCH (p:Page${single ? " {brain_id: $brainId}" : ""})
-       WHERE p.community IS NOT NULL
-       RETURN p.slug AS slug, p.title AS title, p.type AS type, p.community AS community_id
-       ORDER BY p.community, p.slug
+      `CALL gds.louvain.stream($graphName)
+       YIELD nodeId, communityId
+       WITH gds.util.asNode(nodeId) AS n, communityId
+       RETURN n.slug AS slug, n.title AS title, n.type AS type, communityId AS community_id
+       ORDER BY communityId, n.slug
        LIMIT toInteger($limit)`,
-      { limit }
+      { graphName, limit }
     );
 
     const ids = new Set<number>();
