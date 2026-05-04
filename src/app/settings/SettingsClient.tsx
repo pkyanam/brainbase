@@ -4,6 +4,8 @@ import { useState, useEffect, FormEvent } from "react";
 import { useUser } from "@clerk/nextjs";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
+import WikiSettingsCard from "@/components/dashboard/WikiSettingsCard";
+import WebhooksCard from "@/components/dashboard/WebhooksCard";
 
 function useBaseUrl() {
   const [baseUrl, setBaseUrl] = useState("https://brainbase.belweave.ai");
@@ -408,6 +410,15 @@ export default function SettingsClient() {
                 ))}
               </div>
             )}
+          </Section>
+
+          {/* Public wiki + Webhooks (consolidation v0.6) */}
+          <Section title="Public wiki" description="Publish selected pages as a Wikipedia-style read-only site.">
+            <WikiSettingsCard />
+          </Section>
+
+          <Section title="Webhooks" description="Subscribe an external URL to brain events.">
+            <WebhooksCard />
           </Section>
 
           {/* Quick reference */}

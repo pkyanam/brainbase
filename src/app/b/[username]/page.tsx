@@ -6,14 +6,14 @@ import Footer from "@/components/Footer";
 export const revalidate = 30;
 export const dynamic = "force-dynamic";
 
-type Params = { brainSlug: string };
+type Params = { username: string };
 
 export default async function WikiHome({ params }: { params: Promise<Params> }) {
-  const { brainSlug } = await params;
-  const brain = await loadWikiBrain(brainSlug);
+  const { username } = await params;
+  const brain = await loadWikiBrain(username);
   if (!brain) notFound();
 
-  const pages = await listWikiPages(brainSlug, { limit: 500 });
+  const pages = await listWikiPages(username, { limit: 500 });
 
   // Group pages by type for the directory view
   const byType = new Map<string, typeof pages>();
@@ -62,7 +62,7 @@ export default async function WikiHome({ params }: { params: Promise<Params> }) 
                     {list.map((p) => (
                       <li key={p.slug}>
                         <Link
-                          href={`/b/${brainSlug}/${p.slug}`}
+                          href={`/b/${username}/${p.slug}`}
                           className="block py-1.5 text-bb-text-primary hover:text-bb-accent transition-colors"
                         >
                           {p.title}

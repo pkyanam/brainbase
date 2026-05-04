@@ -4,6 +4,7 @@ import { runAutoExtract } from "../auto-extract";
 import { extractEntityRefs } from "../link-inference";
 import { runTriggers } from "../triggers";
 import { runActions } from "../actions";
+import { emitEvent } from "../webhooks";
 
 export interface PutPageInput {
   slug: string;
@@ -92,11 +93,18 @@ export async function putPage(brainId: string, input: PutPageInput): Promise<Put
        search_vector = to_tsvector('english', COALESCE(EXCLUDED.compiled_truth, '')),
        written_by = COALESCE(EXCLUDED.written_by, pages.written_by),
        updated_at = NOW()
-     RETURNING slug, title, type, compiled_truth, frontmatter, written_by, created_at::text, updated_at::text`,
+     RETURNING slug, title, type, compiled_truth, frontmatter, written_by, created_at::text, updated_at::text, (xmax = 0) AS created`,
     [brainId, input.slug, input.title, input.type || null, input.content || null, JSON.stringify(input.frontmatter || {}), input.written_by || null]
   );
 
   if (!row) throw new Error("Failed to put page");
+
+  emitEvent(brainId, (row as any).created ? "page.created" : "page.updated", {
+    slug: row.slug,
+    title: row.title,
+    type: row.type,
+    written_by: row.written_by,
+  });
 
   // ── Post-write pipeline: embeddings → auto-extract (wikilinks + dates + semantic links) → triggers → actions ──
   const fullContent = input.content || "";
@@ -150,6 +158,7 @@ export async function deletePage(brainId: string, slug: string): Promise<boolean
     `DELETE FROM pages WHERE brain_id = $1 AND slug = $2 RETURNING slug`,
     [brainId, slug]
   );
+  if (result) emitEvent(brainId, "page.deleted", { slug: result.slug });
   return !!result;
 }
 
@@ -173,6 +182,14 @@ export async function addLink(
      RETURNING id`,
     [brainId, fromSlug, toSlug, linkType || null, writtenBy || null]
   );
+  if (result) {
+    emitEvent(brainId, "link.created", {
+      from: fromSlug,
+      to: toSlug,
+      link_type: linkType || "related",
+      written_by: writtenBy,
+    });
+  }
   return !!result;
 }
 
@@ -189,6 +206,7 @@ export async function removeLink(
      RETURNING id`,
     [brainId, fromSlug, toSlug]
   );
+  if (result) emitEvent(brainId, "link.deleted", { from: fromSlug, to: toSlug });
   return !!result;
 }
 
@@ -217,6 +235,11 @@ export async function addTimelineEntry(
   );
 
   if (!row) throw new Error("Failed to add timeline entry");
+  emitEvent(brainId, "timeline.created", {
+    slug: input.slug,
+    date: input.date,
+    summary: input.summary,
+  });
   return { id: row.id };
 }
 

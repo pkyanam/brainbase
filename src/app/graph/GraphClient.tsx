@@ -5,6 +5,7 @@ import { useUser } from "@clerk/nextjs";
 import nextDynamic from "next/dynamic";
 import Link from "next/link";
 import type { GraphNode, GraphEdge } from "@/lib/supabase/graph";
+import IntelPanel from "@/components/dashboard/IntelPanel";
 
 const BrainGalaxy = nextDynamic(() => import("@/components/BrainGalaxy"), {
   ssr: false,
@@ -38,6 +39,7 @@ export default function GraphClient() {
   const [filter, setFilter] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [intelOpen, setIntelOpen] = useState(false);
 
   const fetchGraph = useCallback(async () => {
     try {
@@ -116,6 +118,19 @@ export default function GraphClient() {
               {filtered.nodes.length} nodes
             </span>
           )}
+
+          <button
+            onClick={() => setIntelOpen((v) => !v)}
+            className={`h-7 px-2.5 rounded text-[11px] font-medium transition-colors border ${
+              intelOpen
+                ? "bg-bb-accent text-bb-bg-primary border-bb-accent"
+                : "bg-bb-surface text-bb-text-secondary hover:text-bb-text-primary border-bb-border"
+            }`}
+            aria-pressed={intelOpen}
+            title="Graph intelligence: PageRank, communities, shortest path, similarity"
+          >
+            Intel
+          </button>
         </div>
       </header>
 
@@ -158,6 +173,27 @@ export default function GraphClient() {
               setSidebarOpen(true);
             }}
           />
+        )}
+
+        {/* Graph-intelligence panel — left side, doesn't fight the node detail sidebar */}
+        {intelOpen && (
+          <aside className="absolute inset-y-0 left-0 z-30 w-[88vw] max-w-sm bg-bb-bg-secondary border-r border-bb-border flex flex-col shadow-2xl">
+            <button
+              onClick={() => setIntelOpen(false)}
+              aria-label="Close intel panel"
+              className="absolute top-2 right-2 w-8 h-8 inline-flex items-center justify-center rounded-md text-bb-text-muted hover:text-bb-text-primary hover:bg-bb-surface transition-colors z-10"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <IntelPanel
+              onSelectNode={(slug) => {
+                setSelectedId(slug);
+                setSidebarOpen(true);
+              }}
+            />
+          </aside>
         )}
 
         {/* Node detail sidebar */}

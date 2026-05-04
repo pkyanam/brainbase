@@ -11,16 +11,16 @@ import Footer from "@/components/Footer";
 export const revalidate = 30;
 export const dynamic = "force-dynamic";
 
-type Params = { brainSlug: string; slug: string[] };
+type Params = { username: string; slug: string[] };
 
 export default async function WikiPageView({ params }: { params: Promise<Params> }) {
-  const { brainSlug, slug: slugSegments } = await params;
+  const { username, slug: slugSegments } = await params;
   const pageSlug = slugSegments.join("/");
 
-  const brain = await loadWikiBrain(brainSlug);
+  const brain = await loadWikiBrain(username);
   if (!brain) notFound();
 
-  const page = await loadWikiPage(brainSlug, pageSlug);
+  const page = await loadWikiPage(username, pageSlug);
   if (!page) notFound();
 
   const [{ outgoing, incoming }, timeline] = await Promise.all([
@@ -41,7 +41,7 @@ export default async function WikiPageView({ params }: { params: Promise<Params>
       <header className="border-b border-bb-border">
         <div className="max-w-6xl mx-auto px-5 md:px-6 py-5 flex items-baseline justify-between">
           <Link
-            href={`/b/${brainSlug}`}
+            href={`/b/${username}`}
             className="text-sm text-bb-text-muted hover:text-bb-text-primary"
           >
             ← {brain.wiki_title || brain.name}
@@ -89,7 +89,7 @@ export default async function WikiPageView({ params }: { params: Promise<Params>
                 {incoming.map((b) => (
                   <li key={`${b.slug}-${b.link_type}`} className="text-sm">
                     <Link
-                      href={`/b/${brainSlug}/${b.slug}`}
+                      href={`/b/${username}/${b.slug}`}
                       className="text-bb-text-primary hover:text-bb-accent"
                     >
                       {b.title}
@@ -128,7 +128,7 @@ export default async function WikiPageView({ params }: { params: Promise<Params>
                       {list.map((e) => (
                         <li key={e.slug}>
                           <Link
-                            href={`/b/${brainSlug}/${e.slug}`}
+                            href={`/b/${username}/${e.slug}`}
                             className="text-bb-text-primary hover:text-bb-accent"
                           >
                             {e.title}

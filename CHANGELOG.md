@@ -9,6 +9,18 @@
 - Engine is wired but inert: nothing in the request path uses it yet. Phase 2 introduces the graph-sync dream phase that populates it from Postgres
 - New env vars: `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`, `NEO4J_SINGLE_DB`
 
+### Consolidation Phase 8 — Import / export + webhooks
+- `GET /api/brain/export` — full brain dump as `brainbase.v1` JSON (pages, links, timeline, brain metadata). Owner-only. `Content-Disposition` set so it downloads as a file.
+- `POST /api/brain/import` — accepts the same shape. Two modes: `merge` (idempotent upsert by slug) and `replace` (wipes the destination first). Wrapped in a single transaction.
+- Webhooks: `webhooks` table, `src/lib/webhooks.ts` (HMAC-SHA256 signing, fire-and-forget delivery, telemetry on the row), `/api/brain/webhooks` CRUD route. Events: `page.{created,updated,deleted}`, `link.{created,deleted}`, `timeline.created`, `dream.completed`, plus `*` wildcard.
+- Trigger points wired in `supabase/write.ts` (page upsert detects insert vs update via `xmax`) and `dream-cycle.ts`. Delivery never blocks the originating request.
+- Cross-brain linking deferred — needs a federation design pass before schema changes.
+
+### Consolidation v0.6 — Dashboard UI for graph-intel + wiki + webhooks
+- `src/components/dashboard/IntelPanel.tsx` — four-tab side panel (PageRank, Communities, Shortest path, Similar) wired into `/graph` behind a new "Intel" toggle button. Selected nodes from results open the existing node-detail sidebar.
+- `src/components/dashboard/WikiSettingsCard.tsx` — owner toggle for `wiki_enabled`, title/tagline editor, public URL display, public/total page counts. Slotted into `/settings`.
+- `src/components/dashboard/WebhooksCard.tsx` — list, create (with one-time secret reveal), delete; per-webhook delivery telemetry. Slotted into `/settings`.
+
 ### Consolidation Phase 6 — Public wiki
 - Schema: `pages.public BOOLEAN`, `brains.wiki_enabled`, `brains.wiki_title`, `brains.wiki_tagline` (all idempotent via `ensureWikiSchema()`)
 - Filtered index `idx_pages_public_brain` on `(brain_id, slug) WHERE public = TRUE` — wiki list query is one B-tree seek

@@ -1,5 +1,5 @@
 /**
- * GET /api/wiki/<brainSlug>/page/<...slug>
+ * GET /api/wiki/<username>/page/<...slug>
  * Anonymous public read. Returns 404 if either:
  *   - the wiki isn't enabled,
  *   - or the page isn't flagged public.
@@ -16,21 +16,21 @@ import {
   loadWikiTimeline,
 } from "@/lib/wiki";
 
-type Params = { brainSlug: string; slug: string[] };
+type Params = { username: string; slug: string[] };
 
 export async function GET(
   _req: Request,
   { params }: { params: Promise<Params> }
 ) {
-  const { brainSlug, slug } = await params;
+  const { username, slug } = await params;
   const pageSlug = slug.join("/");
 
-  const brain = await loadWikiBrain(brainSlug);
+  const brain = await loadWikiBrain(username);
   if (!brain) {
     return NextResponse.json({ error: "wiki_not_found" }, { status: 404 });
   }
 
-  const page = await loadWikiPage(brainSlug, pageSlug);
+  const page = await loadWikiPage(username, pageSlug);
   if (!page) {
     return NextResponse.json({ error: "page_not_found_or_private" }, { status: 404 });
   }

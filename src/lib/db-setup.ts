@@ -218,6 +218,8 @@ export async function ensureSchema(): Promise<void> {
     await ensureTagsColumn();
     // v0.6 — Public wiki schema
     await ensureWikiSchema();
+    // v0.6 — Webhooks
+    await ensureWebhooksSchema();
   } catch (err) {
     console.error("[brainbase] Schema setup error:", err);
   }
@@ -555,6 +557,36 @@ export async function ensureRawDataSchema(): Promise<void> {
     console.log("[brainbase] Raw data schema ensured");
   } catch (err) {
     console.error("[brainbase] Raw data schema error:", err);
+  }
+}
+
+/**
+ * v0.6 — Webhooks: per-brain subscriptions to brain events.
+ * Idempotent. Safe to call repeatedly.
+ */
+export async function ensureWebhooksSchema(): Promise<void> {
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS webhooks (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        brain_id UUID NOT NULL,
+        url TEXT NOT NULL,
+        secret TEXT NOT NULL,
+        events TEXT[] NOT NULL DEFAULT '{}',
+        enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        description TEXT,
+        last_delivery_at TIMESTAMPTZ,
+        last_delivery_status INTEGER,
+        last_delivery_error TEXT,
+        delivery_count BIGINT NOT NULL DEFAULT 0,
+        failure_count BIGINT NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await query(`CREATE INDEX IF NOT EXISTS idx_webhooks_brain ON webhooks(brain_id) WHERE enabled = TRUE`);
+  } catch (err) {
+    console.error("[brainbase] Webhooks schema error:", err);
   }
 }
 

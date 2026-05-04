@@ -1,5 +1,7 @@
 /** Shared types for the Dream Cycle pipeline. */
 
+import { emitEvent } from "./webhooks";
+
 export interface DreamPhaseResult {
   phase: string;
   status: "completed" | "failed" | "skipped";
@@ -217,8 +219,21 @@ export async function runDreamCycle(
     }
   }
 
-  return {
+  const result: DreamCycleResult = {
     phases,
     total_duration_ms: Date.now() - t0,
   };
+
+  emitEvent(brainId, "dream.completed", {
+    total_duration_ms: result.total_duration_ms,
+    phase_count: phases.length,
+    phases: phases.map((p) => ({
+      phase: p.phase,
+      status: p.status,
+      items_processed: p.items_processed ?? 0,
+      items_created: p.items_created ?? 0,
+    })),
+  });
+
+  return result;
 }
