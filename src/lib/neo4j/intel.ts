@@ -23,7 +23,9 @@ export async function isGdsAvailable(): Promise<boolean> {
   try {
     const rows = await runQuery("neo4j", `RETURN gds.version() AS v`);
     _gdsAvailable = !!rows[0]?.v;
-  } catch {
+    console.log("[brainbase/neo4j] GDS detection:", { available: _gdsAvailable, result: rows[0] });
+  } catch (err: any) {
+    console.error("[brainbase/neo4j] GDS detection failed:", err?.message || String(err));
     _gdsAvailable = false;
   }
   return _gdsAvailable;
