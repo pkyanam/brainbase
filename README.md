@@ -62,8 +62,8 @@ Drop this into any MCP-compatible agent (Claude Code, Cursor, OpenCode, ChatGPT 
 {
   "mcpServers": {
     "brainbase": {
+      "type": "http",
       "url": "https://brainbase.belweave.ai/api/mcp",
-      "transport": "http",
       "headers": {
         "Authorization": "Bearer bb_live_..."
       }
@@ -72,7 +72,7 @@ Drop this into any MCP-compatible agent (Claude Code, Cursor, OpenCode, ChatGPT 
 }
 ```
 
-23 tools available: `search`, `query`, `get_page`, `get_links`, `get_backlinks`, `get_timeline`, `get_health`, `get_stats`, `get_graph`, `list_pages`, `traverse_graph`, `list_triggers`, `pagerank`, `communities`, `shortest_path`, `similar_pages`, `get_raw_data`, `graph_sync`, and more.
+23 tools available: `search`, `query`, `get_page`, `get_links`, `get_backlinks`, `get_timeline`, `get_health`, `get_stats`, `get_graph`, `list_pages`, `traverse_graph`, `put_page`, `delete_page`, `add_link`, `remove_link`, `add_timeline_entry`, `list_triggers`, `upsert_trigger`, `run_triggers`, `pagerank`, `communities`, `shortest_path`, `similar_pages`.
 
 ### CLI
 
