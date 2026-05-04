@@ -17,6 +17,11 @@ import { timelineCommand } from "./commands/timeline.js";
 import { listCommand } from "./commands/list.js";
 import { traverseCommand } from "./commands/traverse.js";
 import { graphCommand } from "./commands/graph.js";
+import { pageRankCommand } from "./commands/pagerank.js";
+import { communitiesCommand } from "./commands/communities.js";
+import { shortestPathCommand } from "./commands/shortest-path.js";
+import { similarCommand } from "./commands/similar.js";
+import { graphSyncCommand } from "./commands/graph-sync.js";
 import { putPageCommand } from "./commands/put-page.js";
 import { deletePageCommand } from "./commands/delete-page.js";
 import { addLinkCommand } from "./commands/add-link.js";
@@ -153,6 +158,52 @@ program
   .action(async () => {
     const config = getConfig();
     await graphCommand(config, program.opts());
+  });
+
+// ── Graph Intelligence (Neo4j) ───────────────────────────────────
+
+program
+  .command("pagerank")
+  .description("show top pages by PageRank centrality")
+  .option("-l, --limit <n>", "max results", parseInt, 25)
+  .action(async (options) => {
+    const config = getConfig();
+    await pageRankCommand(config, { ...program.opts(), limit: options.limit });
+  });
+
+program
+  .command("communities")
+  .description("detect communities using Louvain algorithm")
+  .option("-l, --limit <n>", "max results", parseInt, 500)
+  .action(async (options) => {
+    const config = getConfig();
+    await communitiesCommand(config, { ...program.opts(), limit: options.limit });
+  });
+
+program
+  .command("shortest-path <from> <to>")
+  .description("find the shortest path between two pages")
+  .option("-d, --max-depth <n>", "maximum traversal depth", parseInt, 6)
+  .action(async (from, to, options) => {
+    const config = getConfig();
+    await shortestPathCommand(config, from, to, { ...program.opts(), maxDepth: options.maxDepth });
+  });
+
+program
+  .command("similar <slug>")
+  .description("find pages similar to a given page")
+  .option("-l, --limit <n>", "max results", parseInt, 10)
+  .action(async (slug, options) => {
+    const config = getConfig();
+    await similarCommand(config, slug, { ...program.opts(), limit: options.limit });
+  });
+
+program
+  .command("graph-sync")
+  .description("trigger Postgres → Neo4j graph synchronization")
+  .action(async () => {
+    const config = getConfig();
+    await graphSyncCommand(config, program.opts());
   });
 
 // ── Write operations ────────────────────────────────────────────

@@ -1,7 +1,7 @@
 {
   "name": "brainbase-cli",
-  "version": "0.2.0",
-  "description": "Official CLI for Brainbase — query and manage your knowledge graph from the terminal",
+  "version": "0.3.0",
+  "description": "Official CLI for Brainbase — query and manage your knowledge graph with Neo4j graph intelligence",
   "keywords": [
     "brainbase",
     "cli",

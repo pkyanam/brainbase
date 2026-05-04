@@ -1,6 +1,6 @@
 # Brainbase CLI
 
-Terminal-native CLI for [Brainbase](https://brainbase.belweave.ai) — query and manage your knowledge graph.
+Terminal-native CLI for [Brainbase](https://brainbase.belweave.ai) — query and manage your knowledge graph with support for graph intelligence via Neo4j.
 
 ## Install
 
@@ -59,6 +59,29 @@ brainbase tags people/garry-tan --remove founder
 # Provenance data
 brainbase raw-data people/satya-nadella
 brainbase raw-data people/satya-nadella --source brave
+```
+
+### Graph Intelligence (Neo4j)
+
+```bash
+# PageRank centrality
+brainbase pagerank
+brainbase pagerank --limit 50
+
+# Community detection (Louvain)
+brainbase communities
+brainbase communities --limit 1000
+
+# Shortest path between two pages
+brainbase shortest-path people/garry-tan companies/y-combinator
+brainbase shortest-path people/garry-tan companies/y-combinator --max-depth 4
+
+# Similar pages by link structure
+brainbase similar people/garry-tan
+brainbase similar people/garry-tan --limit 20
+
+# Sync Postgres → Neo4j projection
+brainbase graph-sync
 ```
 
 ### Write

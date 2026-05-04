@@ -314,6 +314,53 @@ class Brainbase {
     async revokeApiKey(keyId) {
         return this.rest("DELETE", `/api/keys?id=${encodeURIComponent(keyId)}`);
     }
+    // ── Graph Intelligence ─────────────────────────────────────────────
+    /**
+     * Get PageRank centrality scores for the top pages in your brain.
+     * Uses Neo4j GDS when available, falls back to degree centrality.
+     */
+    async pageRank(limit = 25) {
+        const params = new URLSearchParams();
+        params.set("limit", String(limit));
+        return this.rest("GET", `/api/brain/intel/pagerank?${params}`);
+    }
+    /**
+     * Detect communities in your brain using Louvain algorithm.
+     * Requires Neo4j GDS plugin.
+     */
+    async communities(limit = 500) {
+        const params = new URLSearchParams();
+        params.set("limit", String(limit));
+        return this.rest("GET", `/api/brain/intel/communities?${params}`);
+    }
+    /**
+     * Find the shortest path between two pages.
+     * Always available (pure Cypher, no plugin required).
+     */
+    async shortestPath(fromSlug, toSlug, maxDepth = 6) {
+        const params = new URLSearchParams();
+        params.set("from", fromSlug);
+        params.set("to", toSlug);
+        params.set("maxDepth", String(maxDepth));
+        return this.rest("GET", `/api/brain/intel/shortest-path?${params}`);
+    }
+    /**
+     * Find pages similar to a given page based on link structure.
+     * Uses Neo4j GDS when available, falls back to Jaccard similarity.
+     */
+    async similarPages(slug, limit = 10) {
+        const params = new URLSearchParams();
+        params.set("slug", slug);
+        params.set("limit", String(limit));
+        return this.rest("GET", `/api/brain/intel/similar?${params}`);
+    }
+    /**
+     * Trigger Postgres → Neo4j graph synchronization.
+     * Ensures the Neo4j projection is up-to-date with Postgres data.
+     */
+    async graphSync() {
+        return this.rest("POST", "/api/brain/graph-sync");
+    }
 }
 exports.Brainbase = Brainbase;
 // ── Error class ─────────────────────────────────────────────────────────

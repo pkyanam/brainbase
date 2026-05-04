@@ -99,11 +99,22 @@ Usage:
   brainbase list [--type person] [--limit 20]
   brainbase traverse "people/preetham-kyanam" [--depth 2] [--direction out]
   brainbase graph
+
+Graph Intelligence (Neo4j):
+  brainbase pagerank [--limit 25]
+  brainbase communities [--limit 500]
+  brainbase shortest-path <from-slug> <to-slug> [--max-depth 6]
+  brainbase similar <slug> [--limit 10]
+  brainbase graph-sync
+
+Write operations:
   brainbase put-page "ideas/new-idea" "My New Idea" [--type idea] [--content "..."]
   brainbase delete-page "ideas/old-idea"
   brainbase add-link "people/preetham-kyanam" "companies/nous-research" [--type works_at]
   brainbase remove-link "people/preetham-kyanam" "companies/nous-research"
   brainbase add-timeline "people/garry-tan" "2024-01-15" "Met at YC" [--detail "..."] [--source "..."]
+
+Other:
   brainbase mcp-url
 
 Global flags:
@@ -253,6 +264,104 @@ Environment:
     case "graph": {
       const graph = await mcp("get_graph", {});
       console.log(JSON.stringify(graph));
+      break;
+    }
+
+    // ── Graph Intelligence (Neo4j) ────────────────────────────────
+
+    case "pagerank": {
+      const limitFlag = args.indexOf("--limit");
+      const limit = limitFlag >= 0 ? parseInt(args[limitFlag + 1], 10) : 25;
+      const result = await rest("GET", `/api/brain/intel/pagerank?limit=${limit}`);
+      if (!result.available) {
+        console.log(`\x1b[33m⚠ ${result.reason || "Graph intelligence not available"}\x1b[0m`);
+        break;
+      }
+      console.log(`\x1b[1mPageRank (${result.algorithm}):\x1b[0m`);
+      for (const r of result.results.slice(0, 20)) {
+        console.log(`  ${r.score.toFixed(4)} \x1b[1m${r.title}\x1b[0m \x1b[90m(${r.slug})\x1b[0m`);
+      }
+      break;
+    }
+
+    case "communities": {
+      const limitFlag = args.indexOf("--limit");
+      const limit = limitFlag >= 0 ? parseInt(args[limitFlag + 1], 10) : 500;
+      const result = await rest("GET", `/api/brain/intel/communities?limit=${limit}`);
+      if (!result.available) {
+        console.log(`\x1b[33m⚠ ${result.reason || "Graph intelligence not available"}\x1b[0m`);
+        break;
+      }
+      console.log(`\x1b[1mCommunities (${result.community_count} found, ${result.algorithm}):\x1b[0m`);
+      const byCommunity: Record<number, typeof result.results> = {};
+      for (const r of result.results) {
+        if (!byCommunity[r.community_id]) byCommunity[r.community_id] = [];
+        byCommunity[r.community_id].push(r);
+      }
+      for (const [id, members] of Object.entries(byCommunity).sort((a, b) => b[1].length - a[1].length)) {
+        console.log(`\n\x1b[1mCommunity ${id} (${members.length} members):\x1b[0m`);
+        for (const m of members.slice(0, 5)) {
+          console.log(`  ${m.title} \x1b[90m(${m.slug})\x1b[0m`);
+        }
+        if (members.length > 5) console.log(`  \x1b[90m...and ${members.length - 5} more\x1b[0m`);
+      }
+      break;
+    }
+
+    case "shortest-path": {
+      const from = args[1];
+      const to = args[2];
+      if (!from || !to) { console.error("Usage: brainbase shortest-path <from-slug> <to-slug> [--max-depth 6]"); process.exit(1); }
+      const depthFlag = args.indexOf("--max-depth");
+      const maxDepth = depthFlag >= 0 ? parseInt(args[depthFlag + 1], 10) : 6;
+      const params = new URLSearchParams({ from, to, maxDepth: String(maxDepth) });
+      const result = await rest("GET", `/api/brain/intel/shortest-path?${params}`);
+      if (!result.available) {
+        console.log(`\x1b[33m⚠ ${result.reason || "Graph intelligence not available"}\x1b[0m`);
+        break;
+      }
+      if (!result.found) {
+        console.log(`\x1b[33m⚠ No path found between "${from}" and "${to}"\x1b[0m`);
+        break;
+      }
+      console.log(`\x1b[1mShortest path (${result.length} hops):\x1b[0m`);
+      for (let i = 0; i < result.hops.length; i++) {
+        const h = result.hops[i];
+        const arrow = i < result.hops.length - 1 ? ` \x1b[90m[${h.link_type || "linked"}]\x1b[0m →` : "";
+        console.log(`  ${i + 1}. \x1b[1m${h.title}\x1b[0m \x1b[90m(${h.slug})\x1b[0m${arrow}`);
+      }
+      break;
+    }
+
+    case "similar": {
+      const slug = args[1];
+      if (!slug) { console.error("Usage: brainbase similar <slug> [--limit 10]"); process.exit(1); }
+      const limitFlag = args.indexOf("--limit");
+      const limit = limitFlag >= 0 ? parseInt(args[limitFlag + 1], 10) : 10;
+      const params = new URLSearchParams({ slug, limit: String(limit) });
+      const result = await rest("GET", `/api/brain/intel/similar?${params}`);
+      if (!result.available) {
+        console.log(`\x1b[33m⚠ ${result.reason || "Graph intelligence not available"}\x1b[0m`);
+        break;
+      }
+      console.log(`\x1b[1mPages similar to "${slug}" (${result.algorithm}):\x1b[0m`);
+      for (const r of result.results) {
+        console.log(`  ${r.similarity.toFixed(3)} \x1b[1m${r.title}\x1b[0m \x1b[90m(${r.slug})\x1b[0m`);
+      }
+      break;
+    }
+
+    case "graph-sync": {
+      const result = await rest("POST", "/api/brain/graph-sync");
+      if (result.synced) {
+        console.log(`\x1b[32m✓ Graph sync complete\x1b[0m`);
+        console.log(`  Backend:   ${result.backend}`);
+        console.log(`  Pages:     ${result.pages_synced}`);
+        console.log(`  Edges:     ${result.edges_synced}`);
+        console.log(`  Duration:  ${result.duration_ms}ms`);
+      } else {
+        console.log(`\x1b[33m⚠ Sync not available: ${result.reason || "unknown"}\x1b[0m`);
+      }
       break;
     }
 

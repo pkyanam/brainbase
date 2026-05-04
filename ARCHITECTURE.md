@@ -1,21 +1,25 @@
 # Brainbase — Architecture
 
-> **Current state:** April 30, 2026. This reflects what's actually deployed.
+> **Current state:** May 3, 2026. This reflects what's actually deployed.
 
 ## Stack
 
 | Layer | Technology | Status |
 |-------|-----------|--------|
 | Frontend | Next.js 16 (App Router) + React 19 + Tailwind CSS v4 | ✅ Deployed |
-| Database | Supabase Postgres + pgvector | ✅ Production |
+| Database | Polyglot: Supabase Postgres + pgvector + Neo4j | ✅ Production |
 | Auth | Clerk v7 (GitHub OAuth) | ✅ Active |
 | 3D Graph | Three.js + @react-three/fiber | ✅ Deployed |
 | Search | Hybrid (RRF fusion: FTS + pgvector) | ✅ Deployed |
-| MCP | JSON-RPC 2.0, 12 tools | ✅ Deployed |
-| Background Jobs | Minions queue (Postgres-native) + Dream Cycle crons | ✅ Deployed |
+| Graph Intelligence | Neo4j GDS: PageRank, Louvain, shortest path, similarity | ✅ Deployed |
+| Graph Router | Auto-selection Neo4j → Postgres fallback | ✅ Deployed |
+| MCP | JSON-RPC 2.0, 23 tools | ✅ Deployed |
+| Background Jobs | Minions queue (Postgres-native) + Dream Cycle crons + graph-sync | ✅ Deployed |
 | Embedding | OpenAI text-embedding-3-small | ✅ Active |
 | SDK | TypeScript (`brainbase-sdk`) | ✅ Published |
 | CLI | `brainbase` command | ✅ Published |
+| Provisioning | Self-service via `/api/provision` | ✅ Deployed |
+| Public Wiki | Per-brain public wikis | ✅ Deployed |
 
 ## Architecture
 
@@ -23,25 +27,43 @@
 Clients
 ├── Web UI (Three.js 3D graph, dashboard, search)
 ├── AI Agents (MCP JSON-RPC, REST API)
-├── CLI (brainbase query, health, page, graph)
+├── CLI (brainbase query, health, page, graph, pagerank)
 └── SDK (TypeScript, npm)
 
 API Layer (Next.js)
-├── GET  /api/brain/health      → Brain stats
-├── GET  /api/brain/search?q=   → Hybrid search (FTS + vector + RRF)
-├── GET  /api/brain/graph       → Graph data (nodes + edges)
-├── GET  /api/brain/page/:slug  → Page content + links + timeline
-├── POST /api/mcp               → MCP JSON-RPC (12 tools)
-├── POST /api/brain/dream       → Manual dream cycle trigger
-└── GET  /api/cron/dream        → Scheduled dream cycle (Vercel cron)
+├── GET  /api/brain/health           → Brain stats
+├── GET  /api/brain/search?q=        → Hybrid search (FTS + vector + RRF)
+├── GET  /api/brain/graph            → Graph data (nodes + edges, via router)
+├── GET  /api/brain/traverse         → Graph traversal (via router)
+├── GET  /api/brain/page/:slug       → Page content + links + timeline
+├── GET  /api/brain/graph-sync       → Trigger Postgres → Neo4j sync
+├── GET  /api/brain/intel/*          → Graph intelligence endpoints
+│   ├── pagerank                     → PageRank centrality
+│   ├── communities                  → Louvain communities
+│   ├── shortest-path                → Shortest path between nodes
+│   └── similar                      → Node similarity
+├── POST /api/provision              → Self-service brain creation
+├── POST /api/mcp                    → MCP JSON-RPC (23 tools)
+├── POST /api/brain/dream            → Manual dream cycle trigger
+└── GET  /api/cron/dream             → Scheduled dream cycle (Vercel cron)
 
-Data Layer
-└── Supabase Postgres
-    ├── pages
-    ├── links (typed edges, from_page_id/to_page_id)
-    ├── content_chunks (pgvector embeddings)
-    ├── timeline_entries
-    └── minion_jobs (background job queue)
+Graph Router (src/lib/graph-router.ts)
+├── Selects backend per request: Postgres or Neo4j
+├── Config: BRAINBASE_GRAPH_BACKEND (auto|postgres|neo4j)
+└── Auto: Try Neo4j, fall back to Postgres on any error
+
+Data Layer (Polyglot)
+├── Postgres (Supabase) — System of Record
+│   ├── pages
+│   ├── links (typed edges, from_page_id/to_page_id)
+│   ├── content_chunks (pgvector embeddings)
+│   ├── timeline_entries
+│   ├── neo4j_sync_state (watermark for graph projection)
+│   └── minion_jobs (background job queue)
+└── Neo4j — Derived Graph Projection
+    ├── Nodes (pages)
+    ├── Relationships (links as edges)
+    └── GDS Plugins (PageRank, Louvain, similarity)
 
 Background Processing
 ├── Dream Cycle (daily Vercel cron + external triggers)
@@ -50,7 +72,8 @@ Background Processing
 │   ├── Embed: OpenAI embeddings for stale chunks
 │   ├── Orphans: detect + auto-link via semantic similarity
 │   ├── Patterns: cross-page co-occurrence detection
-│   └── Entity Tiers: auto-escalation based on link count
+│   ├── Entity Tiers: auto-escalation based on link count
+│   └── Graph Sync: Postgres → Neo4j projection (idempotent, watermark-based)
 └── Minions Queue (cron-driven batch ticks)
     ├── embed — OpenAI embedding generation
     ├── extract — wikilink + timeline parsing

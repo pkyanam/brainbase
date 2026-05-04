@@ -2,6 +2,8 @@
 
 Official JavaScript/TypeScript SDK for [Brainbase](https://brainbase.belweave.ai) — the knowledge graph API for AI agents.
 
+**Note:** Brainbase uses a polyglot storage architecture: Supabase Postgres + pgvector (system of record) with an optional Neo4j graph projection. The SDK talks to the Brainbase API, which handles backend routing automatically.
+
 ## Install
 
 ```bash
@@ -91,6 +93,16 @@ const rich = await brain.enrich({
 | `getRawData(slug, source?)` | Stored provenance data |
 | `getTags(slug)` | Tags on a page |
 
+### Graph Intelligence (Neo4j)
+
+| Method | Description |
+|--------|-------------|
+| `pageRank(limit?)` | Top pages by centrality (GDS or degree fallback) |
+| `communities(limit?)` | Louvain community detection (requires GDS) |
+| `shortestPath(from, to, maxDepth?)` | Shortest path between two pages |
+| `similarPages(slug, limit?)` | Similar pages by link structure (GDS or Jaccard) |
+| `graphSync()` | Trigger Postgres → Neo4j sync |
+
 ### Write Operations
 
 | Method | Description |
@@ -145,6 +157,8 @@ import type {
   SearchResult, PageDetail, BrainHealth, GraphData,
   EnrichInput, EnrichResult, EnrichQueued,
   PutPageInput, AskResult, JobStatus,
+  PageRankResponse, CommunitiesResponse, ShortestPathResponse,
+  SimilarityResponse, GraphSyncResponse,
 } from "brainbase-sdk";
 ```
 

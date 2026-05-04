@@ -1,7 +1,7 @@
 {
   "name": "brainbase-sdk",
-  "version": "0.2.0",
-  "description": "SDK for Brainbase — the knowledge graph API for AI agents",
+  "version": "0.3.0",
+  "description": "SDK for Brainbase — the knowledge graph API for AI agents with Neo4j graph intelligence",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": ["dist"],

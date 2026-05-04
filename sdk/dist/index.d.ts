@@ -235,6 +235,64 @@ export interface AskResult {
     }[];
     confidence: number;
 }
+export interface PageRankResult {
+    slug: string;
+    title: string;
+    type: string;
+    score: number;
+}
+export interface PageRankResponse {
+    available: boolean;
+    algorithm: "pagerank-gds" | "degree-fallback";
+    reason?: string;
+    results: PageRankResult[];
+}
+export interface CommunityNode {
+    slug: string;
+    title: string;
+    type: string;
+    community_id: number;
+}
+export interface CommunitiesResponse {
+    available: boolean;
+    algorithm: "louvain-gds";
+    reason?: string;
+    community_count: number;
+    results: CommunityNode[];
+}
+export interface ShortestPathHop {
+    slug: string;
+    title: string;
+    type: string;
+    link_type?: string | null;
+}
+export interface ShortestPathResponse {
+    available: boolean;
+    found: boolean;
+    length: number;
+    hops: ShortestPathHop[];
+    reason?: string;
+}
+export interface SimilarityHit {
+    slug: string;
+    title: string;
+    type: string;
+    similarity: number;
+}
+export interface SimilarityResponse {
+    available: boolean;
+    algorithm: "node-similarity-gds" | "jaccard-fallback";
+    reason?: string;
+    results: SimilarityHit[];
+}
+export interface GraphSyncResponse {
+    synced: boolean;
+    backend: "postgres" | "neo4j";
+    pages_synced: number;
+    edges_synced: number;
+    duration_ms: number;
+    reason?: string;
+}
 export declare class Brainbase {
     private apiKey;
     private baseUrl;
@@ -370,6 +428,31 @@ export declare class Brainbase {
     revokeApiKey(keyId: string): Promise<{
         success: boolean;
     }>;
+    /**
+     * Get PageRank centrality scores for the top pages in your brain.
+     * Uses Neo4j GDS when available, falls back to degree centrality.
+     */
+    pageRank(limit?: number): Promise<PageRankResponse>;
+    /**
+     * Detect communities in your brain using Louvain algorithm.
+     * Requires Neo4j GDS plugin.
+     */
+    communities(limit?: number): Promise<CommunitiesResponse>;
+    /**
+     * Find the shortest path between two pages.
+     * Always available (pure Cypher, no plugin required).
+     */
+    shortestPath(fromSlug: string, toSlug: string, maxDepth?: number): Promise<ShortestPathResponse>;
+    /**
+     * Find pages similar to a given page based on link structure.
+     * Uses Neo4j GDS when available, falls back to Jaccard similarity.
+     */
+    similarPages(slug: string, limit?: number): Promise<SimilarityResponse>;
+    /**
+     * Trigger Postgres → Neo4j graph synchronization.
+     * Ensures the Neo4j projection is up-to-date with Postgres data.
+     */
+    graphSync(): Promise<GraphSyncResponse>;
 }
 export declare class BrainbaseError extends Error {
     code: number;

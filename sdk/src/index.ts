@@ -243,6 +243,75 @@ export interface AskResult {
   confidence: number;
 }
 
+// ── Graph Intelligence types ─────────────────────────────────────────────
+
+export interface PageRankResult {
+  slug: string;
+  title: string;
+  type: string;
+  score: number;
+}
+
+export interface PageRankResponse {
+  available: boolean;
+  algorithm: "pagerank-gds" | "degree-fallback";
+  reason?: string;
+  results: PageRankResult[];
+}
+
+export interface CommunityNode {
+  slug: string;
+  title: string;
+  type: string;
+  community_id: number;
+}
+
+export interface CommunitiesResponse {
+  available: boolean;
+  algorithm: "louvain-gds";
+  reason?: string;
+  community_count: number;
+  results: CommunityNode[];
+}
+
+export interface ShortestPathHop {
+  slug: string;
+  title: string;
+  type: string;
+  link_type?: string | null;
+}
+
+export interface ShortestPathResponse {
+  available: boolean;
+  found: boolean;
+  length: number;
+  hops: ShortestPathHop[];
+  reason?: string;
+}
+
+export interface SimilarityHit {
+  slug: string;
+  title: string;
+  type: string;
+  similarity: number;
+}
+
+export interface SimilarityResponse {
+  available: boolean;
+  algorithm: "node-similarity-gds" | "jaccard-fallback";
+  reason?: string;
+  results: SimilarityHit[];
+}
+
+export interface GraphSyncResponse {
+  synced: boolean;
+  backend: "postgres" | "neo4j";
+  pages_synced: number;
+  edges_synced: number;
+  duration_ms: number;
+  reason?: string;
+}
+
 // ── Main client ─────────────────────────────────────────────────────────
 
 export class Brainbase {
@@ -581,6 +650,59 @@ export class Brainbase {
   /** Revoke an API key by ID. */
   async revokeApiKey(keyId: string): Promise<{ success: boolean }> {
     return this.rest<{ success: boolean }>("DELETE", `/api/keys?id=${encodeURIComponent(keyId)}`);
+  }
+
+  // ── Graph Intelligence ─────────────────────────────────────────────
+
+  /**
+   * Get PageRank centrality scores for the top pages in your brain.
+   * Uses Neo4j GDS when available, falls back to degree centrality.
+   */
+  async pageRank(limit = 25): Promise<PageRankResponse> {
+    const params = new URLSearchParams();
+    params.set("limit", String(limit));
+    return this.rest<PageRankResponse>("GET", `/api/brain/intel/pagerank?${params}`);
+  }
+
+  /**
+   * Detect communities in your brain using Louvain algorithm.
+   * Requires Neo4j GDS plugin.
+   */
+  async communities(limit = 500): Promise<CommunitiesResponse> {
+    const params = new URLSearchParams();
+    params.set("limit", String(limit));
+    return this.rest<CommunitiesResponse>("GET", `/api/brain/intel/communities?${params}`);
+  }
+
+  /**
+   * Find the shortest path between two pages.
+   * Always available (pure Cypher, no plugin required).
+   */
+  async shortestPath(fromSlug: string, toSlug: string, maxDepth = 6): Promise<ShortestPathResponse> {
+    const params = new URLSearchParams();
+    params.set("from", fromSlug);
+    params.set("to", toSlug);
+    params.set("maxDepth", String(maxDepth));
+    return this.rest<ShortestPathResponse>("GET", `/api/brain/intel/shortest-path?${params}`);
+  }
+
+  /**
+   * Find pages similar to a given page based on link structure.
+   * Uses Neo4j GDS when available, falls back to Jaccard similarity.
+   */
+  async similarPages(slug: string, limit = 10): Promise<SimilarityResponse> {
+    const params = new URLSearchParams();
+    params.set("slug", slug);
+    params.set("limit", String(limit));
+    return this.rest<SimilarityResponse>("GET", `/api/brain/intel/similar?${params}`);
+  }
+
+  /**
+   * Trigger Postgres → Neo4j graph synchronization.
+   * Ensures the Neo4j projection is up-to-date with Postgres data.
+   */
+  async graphSync(): Promise<GraphSyncResponse> {
+    return this.rest<GraphSyncResponse>("POST", "/api/brain/graph-sync");
   }
 }
 
