@@ -13,7 +13,7 @@
  * so the caller can decide how to render. We never throw on "GDS missing".
  */
 
-import { runQuery, isSingleDbMode } from "./driver";
+import { runQuery, runWrite, isSingleDbMode } from "./driver";
 
 let _gdsAvailable: boolean | null = null;
 
@@ -63,30 +63,48 @@ export async function pageRank(brainId: string, limit = 25): Promise<PageRankRes
   const gds = await isGdsAvailable();
 
   if (gds) {
-    const rows = await runQuery(
-      brainId,
-      `CALL gds.pageRank.stream({
-         nodeQuery: $nodeQuery,
-         relationshipQuery: $relQuery,
-         relationshipWeightProperty: 'weight',
-         parameters: { brainId: $brainId }
-       })
-       YIELD nodeId, score
-       WITH gds.util.asNode(nodeId) AS n, score
-       WHERE n:Page${single ? " AND n.brain_id = $brainId" : ""}
-       RETURN n.slug AS slug, n.title AS title, n.type AS type, score
-       ORDER BY score DESC LIMIT toInteger($limit)`,
-      {
-        nodeQuery: NODE_QUERY_FRAGMENT(single),
-        relQuery: REL_QUERY_FRAGMENT(single),
-        limit,
-      }
-    );
-    return {
-      available: true,
-      algorithm: "pagerank-gds",
-      results: rows as PageRankResult[],
-    };
+    const graphName = single ? `brain_${brainId.replace(/-/g, '_')}` : 'brain_graph';
+
+    try {
+      // Step 1: Create named graph projection (idempotent)
+      const nodeCypher = single
+        ? `MATCH (p:Page {brain_id: $brainId}) RETURN id(p) AS id`
+        : `MATCH (p:Page) RETURN id(p) AS id`;
+      const relCypher = single
+        ? `MATCH (p:Page {brain_id: $brainId})-[r:LINKS_TO]->(q:Page {brain_id: $brainId}) RETURN id(p) AS source, id(q) AS target, 1.0 AS weight`
+        : `MATCH (p:Page)-[r:LINKS_TO]->(q:Page) RETURN id(p) AS source, id(q) AS target, 1.0 AS weight`;
+
+      await runWrite(
+        brainId,
+        `CALL gds.graph.project.cypher(
+          $graphName,
+          $nodeCypher,
+          $relCypher,
+          { parameters: { brainId: $brainId } }
+        )`,
+        { graphName, nodeCypher, relCypher }
+      );
+
+      // Step 2: Run PageRank on the named graph
+      const rows = await runQuery(
+        brainId,
+        `CALL gds.pageRank.stream($graphName, { relationshipWeightProperty: 'weight' })
+         YIELD nodeId, score
+         WITH gds.util.asNode(nodeId) AS n, score
+         RETURN n.slug AS slug, n.title AS title, n.type AS type, score
+         ORDER BY score DESC LIMIT toInteger($limit)`,
+        { graphName, limit }
+      );
+
+      return {
+        available: true,
+        algorithm: "pagerank-gds",
+        results: rows as PageRankResult[],
+      };
+    } catch (err: any) {
+      console.error("[brainbase/neo4j] PageRank GDS failed:", err?.message);
+      // Fall through to degree centrality
+    }
   }
 
   // Fallback: degree centrality (incoming + outgoing). Not PageRank, but the
@@ -138,33 +156,57 @@ export async function communities(brainId: string, limit = 500): Promise<Communi
     };
   }
 
-  const rows = await runQuery(
-    brainId,
-    `CALL gds.louvain.stream({
-       nodeQuery: $nodeQuery,
-       relationshipQuery: $relQuery,
-       parameters: { brainId: $brainId }
-     })
-     YIELD nodeId, communityId
-     WITH gds.util.asNode(nodeId) AS n, communityId
-     WHERE n:Page${single ? " AND n.brain_id = $brainId" : ""}
-     RETURN n.slug AS slug, n.title AS title, n.type AS type, communityId AS community_id
-     ORDER BY communityId, slug
-     LIMIT toInteger($limit)`,
-    {
-      nodeQuery: NODE_QUERY_FRAGMENT(single),
-      relQuery: REL_QUERY_FRAGMENT(single),
-      limit,
-    }
-  );
-  const ids = new Set<number>();
-  for (const r of rows) ids.add(Number(r.community_id));
-  return {
-    available: true,
-    algorithm: "louvain-gds",
-    community_count: ids.size,
-    results: rows as CommunityNode[],
-  };
+  const graphName = single ? `brain_${brainId.replace(/-/g, '_')}` : 'brain_graph';
+
+  try {
+    // Create named graph projection (idempotent)
+    const nodeCypher = single
+      ? `MATCH (p:Page {brain_id: $brainId}) RETURN id(p) AS id`
+      : `MATCH (p:Page) RETURN id(p) AS id`;
+    const relCypher = single
+      ? `MATCH (p:Page {brain_id: $brainId})-[r:LINKS_TO]->(q:Page {brain_id: $brainId}) RETURN id(p) AS source, id(q) AS target, 1.0 AS weight`
+      : `MATCH (p:Page)-[r:LINKS_TO]->(q:Page) RETURN id(p) AS source, id(q) AS target, 1.0 AS weight`;
+
+    await runWrite(
+      brainId,
+      `CALL gds.graph.project.cypher(
+        $graphName,
+        $nodeCypher,
+        $relCypher,
+        { parameters: { brainId: $brainId } }
+      )`,
+      { graphName, nodeCypher, relCypher }
+    );
+
+    const rows = await runQuery(
+      brainId,
+      `CALL gds.louvain.stream($graphName)
+       YIELD nodeId, communityId
+       WITH gds.util.asNode(nodeId) AS n, communityId
+       RETURN n.slug AS slug, n.title AS title, n.type AS type, communityId AS community_id
+       ORDER BY communityId, slug
+       LIMIT toInteger($limit)`,
+      { graphName, limit }
+    );
+
+    const ids = new Set<number>();
+    for (const r of rows) ids.add(Number(r.community_id));
+    return {
+      available: true,
+      algorithm: "louvain-gds",
+      community_count: ids.size,
+      results: rows as CommunityNode[],
+    };
+  } catch (err: any) {
+    console.error("[brainbase/neo4j] Louvain failed:", err?.message);
+    return {
+      available: false,
+      algorithm: "louvain-gds",
+      reason: err?.message || "Unknown error",
+      community_count: 0,
+      results: [],
+    };
+  }
 }
 
 // ── Shortest path ─────────────────────────────────────────────
@@ -246,30 +288,48 @@ export async function similarPages(
   const gds = await isGdsAvailable();
 
   if (gds) {
-    const rows = await runQuery(
-      brainId,
-      `CALL gds.nodeSimilarity.stream({
-         nodeQuery: $nodeQuery,
-         relationshipQuery: $relQuery,
-         parameters: { brainId: $brainId }
-       })
-       YIELD node1, node2, similarity
-       WITH gds.util.asNode(node1) AS a, gds.util.asNode(node2) AS b, similarity
-       WHERE a.slug = $slug${single ? " AND a.brain_id = $brainId" : ""}
-       RETURN b.slug AS slug, b.title AS title, b.type AS type, similarity
-       ORDER BY similarity DESC LIMIT toInteger($limit)`,
-      {
-        slug,
-        nodeQuery: NODE_QUERY_FRAGMENT(single),
-        relQuery: REL_QUERY_FRAGMENT(single),
-        limit,
-      }
-    );
-    return {
-      available: true,
-      algorithm: "node-similarity-gds",
-      results: rows as SimilarityHit[],
-    };
+    const graphName = single ? `brain_${brainId.replace(/-/g, '_')}` : 'brain_graph';
+
+    try {
+      // Create named graph projection (idempotent)
+      const nodeCypher = single
+        ? `MATCH (p:Page {brain_id: $brainId}) RETURN id(p) AS id`
+        : `MATCH (p:Page) RETURN id(p) AS id`;
+      const relCypher = single
+        ? `MATCH (p:Page {brain_id: $brainId})-[r:LINKS_TO]->(q:Page {brain_id: $brainId}) RETURN id(p) AS source, id(q) AS target, 1.0 AS weight`
+        : `MATCH (p:Page)-[r:LINKS_TO]->(q:Page) RETURN id(p) AS source, id(q) AS target, 1.0 AS weight`;
+
+      await runWrite(
+        brainId,
+        `CALL gds.graph.project.cypher(
+          $graphName,
+          $nodeCypher,
+          $relCypher,
+          { parameters: { brainId: $brainId } }
+        )`,
+        { graphName, nodeCypher, relCypher }
+      );
+
+      const rows = await runQuery(
+        brainId,
+        `CALL gds.nodeSimilarity.stream($graphName)
+         YIELD node1, node2, similarity
+         WITH gds.util.asNode(node1) AS a, gds.util.asNode(node2) AS b, similarity
+         WHERE a.slug = $slug
+         RETURN b.slug AS slug, b.title AS title, b.type AS type, similarity
+         ORDER BY similarity DESC LIMIT toInteger($limit)`,
+        { graphName, slug, limit }
+      );
+
+      return {
+        available: true,
+        algorithm: "node-similarity-gds",
+        results: rows as SimilarityHit[],
+      };
+    } catch (err: any) {
+      console.error("[brainbase/neo4j] nodeSimilarity failed:", err?.message);
+      // Fall through to Jaccard
+    }
   }
 
   // Fallback: Jaccard on the neighbor sets — pure Cypher.
