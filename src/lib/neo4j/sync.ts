@@ -202,7 +202,7 @@ async function rebuildOutgoingEdgesInNeo4j(
   const result = await runWrite(
     brainId,
     `UNWIND $edges AS e
-     MATCH (from:Page${single ? " {brain_id: $brainId}" : ""} {slug: e.from_slug})
+     MATCH (from:Page${single ? " {brain_id: $brainId, slug: e.from_slug}" : " {slug: e.from_slug}"})
      MERGE (to:Page {slug: e.to_slug${single ? ", brain_id: $brainId" : ""}})
        ON CREATE SET to.title = e.to_slug, to.type = 'unknown'${single ? ", to.brain_id = $brainId" : ""}
      MERGE (from)-[r:LINKS_TO {type: e.link_type}]->(to)

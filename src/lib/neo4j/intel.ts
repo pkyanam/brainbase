@@ -194,9 +194,9 @@ export async function shortestPath(
   // Always available — pure Cypher, no plugin needed.
   const rows = await runQuery(
     brainId,
-    `MATCH (a:Page${single ? " {brain_id: $brainId}" : ""} {slug: $fromSlug}),
-           (b:Page${single ? " {brain_id: $brainId}" : ""} {slug: $toSlug}),
-           p = shortestPath((a)-[:LINKS_TO*1..${cap}]-(b))
+    `MATCH (a:Page${single ? " {brain_id: $brainId, slug: $fromSlug}" : " {slug: $fromSlug}"})
+     MATCH (b:Page${single ? " {brain_id: $brainId, slug: $toSlug}" : " {slug: $toSlug}"})
+     MATCH p = shortestPath((a)-[:LINKS_TO*1..${cap}]-(b))
      WITH p,
           [n IN nodes(p) | { slug: n.slug, title: n.title, type: n.type }] AS hops,
           [r IN relationships(p) | r.type] AS link_types
@@ -273,7 +273,7 @@ export async function similarPages(
   // Fallback: Jaccard on the neighbor sets — pure Cypher.
   const rows = await runQuery(
     brainId,
-    `MATCH (a:Page${single ? " {brain_id: $brainId}" : ""} {slug: $slug})-[:LINKS_TO]-(neighbor)
+    `MATCH (a:Page${single ? " {brain_id: $brainId, slug: $slug}" : " {slug: $slug}"})-[:LINKS_TO]-(neighbor)
      WITH a, collect(DISTINCT neighbor) AS aNeighbors
      UNWIND aNeighbors AS n
      MATCH (n)-[:LINKS_TO]-(b:Page${single ? " {brain_id: $brainId}" : ""})
