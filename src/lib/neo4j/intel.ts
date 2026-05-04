@@ -66,7 +66,14 @@ export async function pageRank(brainId: string, limit = 25): Promise<PageRankRes
     const graphName = single ? `brain_${brainId.replace(/-/g, '_')}` : 'brain_graph';
 
     try {
-      // Step 1: Create named graph projection (idempotent)
+      // Drop graph if it exists
+      await runWrite(
+        brainId,
+        `CALL gds.graph.drop($graphName, false)`,
+        { graphName }
+      ).catch(() => {});
+
+      // Create named graph projection
       const nodeCypher = single
         ? `MATCH (p:Page {brain_id: $brainId}) RETURN id(p) AS id`
         : `MATCH (p:Page) RETURN id(p) AS id`;
@@ -159,7 +166,16 @@ export async function communities(brainId: string, limit = 500): Promise<Communi
   const graphName = single ? `brain_${brainId.replace(/-/g, '_')}` : 'brain_graph';
 
   try {
-    // Create named graph projection (idempotent)
+    // Drop graph if it exists (make this idempotent)
+    await runWrite(
+      brainId,
+      `CALL gds.graph.drop($graphName, false)`,
+      { graphName }
+    ).catch(() => {
+      // Ignore errors if graph doesn't exist
+    });
+
+    // Create named graph projection
     const nodeCypher = single
       ? `MATCH (p:Page {brain_id: $brainId}) RETURN id(p) AS id`
       : `MATCH (p:Page) RETURN id(p) AS id`;
@@ -299,7 +315,14 @@ export async function similarPages(
     const graphName = single ? `brain_${brainId.replace(/-/g, '_')}` : 'brain_graph';
 
     try {
-      // Create named graph projection (idempotent)
+      // Drop graph if it exists
+      await runWrite(
+        brainId,
+        `CALL gds.graph.drop($graphName, false)`,
+        { graphName }
+      ).catch(() => {});
+
+      // Create named graph projection
       const nodeCypher = single
         ? `MATCH (p:Page {brain_id: $brainId}) RETURN id(p) AS id`
         : `MATCH (p:Page) RETURN id(p) AS id`;
