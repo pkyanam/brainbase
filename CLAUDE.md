@@ -2,6 +2,29 @@
 
 See [AGENTS.md](./AGENTS.md) for full project documentation and agent instructions.
 
+## MCP Connection (Claude Code)
+
+```bash
+claude mcp add --transport http brainbase https://brainbase.belweave.ai/api/mcp \
+  --header "Authorization: Bearer bb_live_YOUR_KEY"
+```
+
+Or drop into `.claude.json`:
+
+```json
+{
+  "mcpServers": {
+    "brainbase": {
+      "type": "http",
+      "url": "https://brainbase.belweave.ai/api/mcp",
+      "headers": {
+        "Authorization": "Bearer bb_live_YOUR_KEY"
+      }
+    }
+  }
+}
+```
+
 ## Claude-Specific
 
 - Use `search_files` not `grep` for code search

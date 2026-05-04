@@ -395,6 +395,7 @@ await brain.addLink("people/garry-tan", "companies/y-combinator", "works_at");
 const MCP_CONFIG = (baseUrl: string) => `{
   "mcpServers": {
     "brainbase": {
+      "type": "http",
       "url": "${baseUrl}/api/mcp",
       "headers": {
         "Authorization": "Bearer <YOUR_API_KEY>"
@@ -712,7 +713,7 @@ const created = await brain.createApiKey("my-new-key");`}</code>
             { method: "GET", color: "bg-bb-accent/10 text-bb-accent", path: "/api/brain/raw-data?slug=&source=", desc: "Stored provenance data for a page." },
             { method: "GET", color: "bg-bb-accent/10 text-bb-accent", path: "/api/brain/graph", desc: "Full knowledge graph (nodes + edges)." },
             { method: "GET", color: "bg-bb-accent/10 text-bb-accent", path: "/api/brain/traverse?slug=&depth=&direction=&link_type=", desc: "Graph traversal from a page (out/in/both, max depth 5)." },
-            { method: "GET", color: "bg-bb-accent/10 text-bb-accent", path: "/api/ask", desc: "LLM-generated answer with cited sources. POST body: {question}" },
+            { method: "POST", color: "bg-bb-accent/10 text-bb-accent", path: "/api/ask", desc: "LLM-generated answer with cited sources. POST body: {question}" },
           ].map((ep) => (
             <div key={ep.path} className="border border-bb-border rounded-xl p-4">
               <div className="flex items-center gap-3 mb-2">
