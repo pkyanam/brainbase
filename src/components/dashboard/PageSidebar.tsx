@@ -1,8 +1,13 @@
+"use client";
+
+import { useState } from "react";
+
 interface PageDetail {
   slug: string;
   title: string;
   type: string;
   content: string;
+  public?: boolean;
   links?: {
     outgoing: { slug: string; title: string; link_type: string }[];
     incoming: { slug: string; title: string; link_type: string }[];
@@ -21,6 +26,41 @@ export default function PageSidebar({
   onClose: () => void;
   onSelect: (slug: string) => void;
 }) {
+  const [publicFlag, setPublicFlag] = useState(page?.public ?? false);
+  const [savingPublic, setSavingPublic] = useState(false);
+  const [publicError, setPublicError] = useState<string | null>(null);
+
+  // Sync local state when page changes
+  if (page && publicFlag !== (page.public ?? false) && !savingPublic) {
+    setPublicFlag(page.public ?? false);
+  }
+
+  async function togglePublic(newValue: boolean) {
+    if (!page) return;
+    setSavingPublic(true);
+    setPublicError(null);
+    try {
+      const res = await fetch("/api/brain/wiki/page", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug: page.slug, public: newValue }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || `Error ${res.status}`);
+      }
+      setPublicFlag(newValue);
+      // Update the page object too
+      if (page) page.public = newValue;
+    } catch (err: unknown) {
+      setPublicError(err instanceof Error ? err.message : "Failed to update");
+      // Revert on error
+      setPublicFlag(!newValue);
+    } finally {
+      setSavingPublic(false);
+    }
+  }
+
   if (!open || !page) return null;
 
   return (
@@ -35,13 +75,30 @@ export default function PageSidebar({
         className="fixed md:static inset-y-0 right-0 z-50 w-full md:w-96 shrink-0 border-l border-bb-border bg-bb-bg-secondary flex flex-col animate-slide-in-right"
       >
         <header className="shrink-0 px-5 py-4 flex items-start justify-between border-b border-bb-border">
-          <div className="min-w-0">
-            <span className="text-[10px] font-mono uppercase tracking-wider text-bb-accent">
-              {page.type}
-            </span>
-            <h2 className="text-base font-semibold text-bb-text-primary mt-1 break-words">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-bb-accent">
+                {page.type}
+              </span>
+              <label className="inline-flex items-center gap-1.5 cursor-pointer group/toggle" title={publicFlag ? "Visible in public wiki" : "Hidden from public wiki"}>
+                <input
+                  type="checkbox"
+                  checked={publicFlag}
+                  disabled={savingPublic}
+                  onChange={(e) => togglePublic(e.target.checked)}
+                  className="w-3 h-3 accent-bb-accent"
+                />
+                <span className="text-[10px] text-bb-text-muted group-hover/toggle:text-bb-text-secondary transition-colors">
+                  {savingPublic ? "..." : publicFlag ? "Public" : "Private"}
+                </span>
+              </label>
+            </div>
+            <h2 className="text-base font-semibold text-bb-text-primary break-words">
               {page.title}
             </h2>
+            {publicError && (
+              <p className="text-[10px] text-bb-danger mt-1">{publicError}</p>
+            )}
           </div>
           <button
             onClick={onClose}

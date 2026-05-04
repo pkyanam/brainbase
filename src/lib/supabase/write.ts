@@ -13,6 +13,7 @@ export interface PutPageInput {
   content?: string;
   frontmatter?: Record<string, unknown>;
   written_by?: string;
+  public?: boolean;
 }
 
 export interface PutPageResult {
@@ -73,6 +74,10 @@ async function reconcileStaleLinks(brainId: string, slug: string, content: strin
 }
 
 export async function putPage(brainId: string, input: PutPageInput): Promise<PutPageResult> {
+  // Build query dynamically based on whether public is provided
+  const includePublic = input.public !== undefined;
+  const publicParam = includePublic ? (input.public ? 'TRUE' : 'FALSE') : 'FALSE';
+
   const row = await queryOne<{
     slug: string;
     title: string;
@@ -83,8 +88,8 @@ export async function putPage(brainId: string, input: PutPageInput): Promise<Put
     created_at: string;
     updated_at: string;
   }>(
-    `INSERT INTO pages (brain_id, slug, title, type, compiled_truth, frontmatter, search_vector, written_by)
-     VALUES ($1, $2, $3, COALESCE($4, 'unknown'), COALESCE($5, ''), COALESCE($6, '{}'::jsonb), to_tsvector('english', COALESCE($5, '')), $7)
+    `INSERT INTO pages (brain_id, slug, title, type, compiled_truth, frontmatter, search_vector, written_by, public)
+     VALUES ($1, $2, $3, COALESCE($4, 'unknown'), COALESCE($5, ''), COALESCE($6, '{}'::jsonb), to_tsvector('english', COALESCE($5, '')), $7, ${includePublic ? (input.public ? 'TRUE' : 'FALSE') : 'FALSE'})
      ON CONFLICT (brain_id, slug) DO UPDATE SET
        title = EXCLUDED.title,
        type = EXCLUDED.type,
@@ -92,7 +97,7 @@ export async function putPage(brainId: string, input: PutPageInput): Promise<Put
        frontmatter = EXCLUDED.frontmatter,
        search_vector = to_tsvector('english', COALESCE(EXCLUDED.compiled_truth, '')),
        written_by = COALESCE(EXCLUDED.written_by, pages.written_by),
-       updated_at = NOW()
+       updated_at = NOW()${includePublic ? ', public = EXCLUDED.public' : ''}
      RETURNING slug, title, type, compiled_truth, frontmatter, written_by, created_at::text, updated_at::text, (xmax = 0) AS created`,
     [brainId, input.slug, input.title, input.type || null, input.content || null, JSON.stringify(input.frontmatter || {}), input.written_by || null]
   );

@@ -84,7 +84,7 @@ export async function PUT(
     return NextResponse.json({ error: "Missing page slug" }, { status: 400 });
   }
 
-  let body: { title?: string; type?: string; content?: string; frontmatter?: Record<string, unknown> };
+  let body: { title?: string; type?: string; content?: string; frontmatter?: Record<string, unknown>; public?: boolean };
   try {
     body = await request.json();
   } catch {
@@ -109,6 +109,7 @@ export async function PUT(
       type: body.type,
       content: body.content,
       frontmatter: body.frontmatter,
+      public: body.public,
     });
 
     await logActivity({

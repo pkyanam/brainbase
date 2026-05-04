@@ -35,6 +35,7 @@ interface PageDetail {
   title: string;
   type: string;
   content: string;
+  public?: boolean;
   links?: { outgoing: { slug: string; title: string; link_type: string }[]; incoming: { slug: string; title: string; link_type: string }[] };
   timeline?: { date: string; summary: string }[];
 }

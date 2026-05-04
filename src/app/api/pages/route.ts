@@ -54,6 +54,7 @@ export async function POST(req: NextRequest) {
     type?: string;
     content?: string;
     frontmatter?: Record<string, unknown>;
+    public?: boolean;
   };
 
   try {
@@ -77,6 +78,7 @@ export async function POST(req: NextRequest) {
       type: body.type,
       content: body.content,
       frontmatter: body.frontmatter,
+      public: body.public,
     });
 
     return NextResponse.json(page);

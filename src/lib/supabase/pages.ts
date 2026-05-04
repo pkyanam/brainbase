@@ -7,6 +7,7 @@ export interface BrainPage {
   content: string;
   frontmatter: Record<string, unknown>;
   written_by?: string;
+  public: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -31,9 +32,10 @@ export async function getPage(brainId: string, slug: string): Promise<BrainPage 
     slug: string; title: string; type: string;
     compiled_truth: string; frontmatter: Record<string, unknown>;
     written_by: string | null;
+    public: boolean;
     created_at: string; updated_at: string;
   }>(
-    `SELECT slug, title, type, compiled_truth, frontmatter, written_by, created_at::text, updated_at::text
+    `SELECT slug, title, type, compiled_truth, frontmatter, written_by, public, created_at::text, updated_at::text
      FROM pages WHERE brain_id = $1 AND slug = $2`,
     [brainId, slug]
   );
@@ -47,6 +49,7 @@ export async function getPage(brainId: string, slug: string): Promise<BrainPage 
     content: row.compiled_truth || "",
     frontmatter: row.frontmatter || {},
     written_by: row.written_by || undefined,
+    public: row.public,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
