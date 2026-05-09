@@ -7,9 +7,12 @@ import { useTheme } from "@/components/ThemeProvider";
 import { Sun, Moon, X, List } from "@phosphor-icons/react";
 
 const links = [
-  { href: "/demo", label: "Demo" },
   { href: "/docs", label: "Docs" },
   { href: "/pricing", label: "Pricing" },
+  { href: "/demo", label: "Demo" },
+];
+
+const authLinks = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/graph", label: "Graph" },
 ];
@@ -18,13 +21,8 @@ export default function Nav() {
   const [open, setOpen] = useState(false);
   const { resolved, toggle } = useTheme();
 
-  // Lock body scroll when mobile menu is open
   useEffect(() => {
-    if (open) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
+    document.body.style.overflow = open ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
   }, [open]);
 
@@ -32,110 +30,112 @@ export default function Nav() {
 
   return (
     <>
-      <nav className="sticky top-0 z-40 bg-bb-bg-primary/85 backdrop-blur-sm border-b border-bb-border">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
-          {/* Logo + wordmark */}
-          <a href="/" className="flex items-center gap-2 shrink-0 group">
+      <nav className="sticky top-0 z-40 bg-bb-bg-primary/80 backdrop-blur-md border-b border-bb-border">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+          {/* Logo */}
+          <a href="/" className="flex items-center gap-2.5 group">
             <Image
               src="/brainbaseLogo.png"
               alt=""
-              width={22}
-              height={22}
-              className="rounded"
+              width={24}
+              height={24}
+              className="rounded w-6 h-6"
               priority
             />
-            <span className="text-[15px] font-semibold tracking-tight text-bb-text-primary group-hover:text-bb-accent transition-colors">
+            <span className="text-base font-semibold tracking-tight text-bb-text-primary">
               brainbase
             </span>
           </a>
 
-          {/* Desktop links */}
-          <div className="hidden md:flex items-center gap-1 text-sm">
-            {links.map((l) => (
-              <a
-                key={l.href}
-                href={l.href}
-                className="px-3 py-2 rounded-md text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface transition-colors"
+          {/* Desktop nav */}
+          <div className="hidden md:flex items-center gap-8">
+            <div className="flex items-center gap-1">
+              {links.map((l) => (
+                <a
+                  key={l.href}
+                  href={l.href}
+                  className="px-3 py-2 text-sm text-bb-text-secondary hover:text-bb-text-primary transition-colors"
+                >
+                  {l.label}
+                </a>
+              ))}
+              <SignedIn>
+                {authLinks.map((l) => (
+                  <a
+                    key={l.href}
+                    href={l.href}
+                    className="px-3 py-2 text-sm text-bb-text-secondary hover:text-bb-text-primary transition-colors"
+                  >
+                    {l.label}
+                  </a>
+                ))}
+              </SignedIn>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={toggle}
+                className="w-9 h-9 flex items-center justify-center rounded-md text-bb-text-muted hover:text-bb-text-primary hover:bg-bb-surface transition-colors"
+                aria-label="Toggle theme"
               >
-                {l.label}
-              </a>
-            ))}
-            <SignedIn>
-              <a
-                href="/settings"
-                className="px-3 py-2 rounded-md text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface transition-colors"
-              >
-                Settings
-              </a>
-            </SignedIn>
+                {resolved === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              </button>
+              
+              <SignedIn>
+                <UserButton />
+              </SignedIn>
+              
+              <SignedOut>
+                <a
+                  href="/sign-in"
+                  className="text-sm text-bb-text-secondary hover:text-bb-text-primary transition-colors"
+                >
+                  Sign in
+                </a>
+                <a
+                  href="/sign-up"
+                  className="h-9 px-4 inline-flex items-center justify-center text-sm font-medium bg-bb-text-primary text-bb-bg-primary rounded-md hover:opacity-90 transition-opacity"
+                >
+                  Get started
+                </a>
+              </SignedOut>
+            </div>
           </div>
 
-          {/* Right cluster */}
-          <div className="flex items-center gap-2 shrink-0">
+          {/* Mobile controls */}
+          <div className="flex md:hidden items-center gap-2">
             <button
               onClick={toggle}
-              className="inline-flex items-center justify-center w-9 h-9 rounded-md text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface transition-colors"
+              className="w-10 h-10 flex items-center justify-center rounded-md text-bb-text-muted hover:text-bb-text-primary transition-colors"
               aria-label="Toggle theme"
-              title="Toggle theme"
             >
-              {resolved === "dark" ? (
-                <Sun className="w-4 h-4" />
-              ) : (
-                <Moon className="w-4 h-4" />
-              )}
+              {resolved === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
-            <SignedIn>
-              <div className="hidden md:block">
-                <UserButton />
-              </div>
-            </SignedIn>
-            <SignedOut>
-              <a
-                href="/sign-in"
-                className="hidden sm:inline-flex items-center h-9 px-3 text-sm text-bb-text-secondary hover:text-bb-text-primary transition-colors"
-              >
-                Sign in
-              </a>
-              <a
-                href="/sign-up"
-                className={`inline-flex items-center h-9 px-3.5 bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary text-sm font-medium rounded-md transition-colors ${open ? "hidden" : ""}`}
-              >
-                Get started
-              </a>
-            </SignedOut>
-
-            {/* Hamburger */}
             <button
               onClick={() => setOpen(!open)}
-              className="md:hidden inline-flex items-center justify-center w-11 h-11 rounded-md text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface transition-colors cursor-pointer"
+              className="w-10 h-10 flex items-center justify-center rounded-md text-bb-text-secondary hover:text-bb-text-primary transition-colors"
               aria-label={open ? "Close menu" : "Open menu"}
             >
-              {open ? (
-                <X className="w-5 h-5" />
-              ) : (
-                <List className="w-5 h-5" />
-              )}
+              {open ? <X className="w-5 h-5" /> : <List className="w-5 h-5" />}
             </button>
           </div>
         </div>
       </nav>
 
-      {/* Mobile menu drawer — proper React-driven, conditionally rendered */}
+      {/* Mobile drawer */}
       {open && (
-        <div className="md:hidden fixed inset-0 z-50 flex flex-col">
-          {/* Backdrop */}
+        <div className="md:hidden fixed inset-0 z-50 flex">
           <button
             aria-label="Close menu"
             onClick={close}
-            className="absolute inset-0 bg-black/60"
+            className="absolute inset-0 bg-black/70"
           />
-          {/* Drawer */}
-          <div className="relative ml-auto w-[85vw] max-w-sm h-full bg-bb-bg-primary border-l border-bb-border flex flex-col animate-slide-in-right">
-            <div className="flex items-center justify-between h-14 px-4 border-b border-bb-border shrink-0">
-              <span className="text-[15px] font-semibold text-bb-text-primary">Menu</span>
+          <div className="relative ml-auto w-[80vw] max-w-sm h-full bg-bb-bg-primary border-l border-bb-border flex flex-col animate-slide-in-right">
+            <div className="flex items-center justify-between h-16 px-6 border-b border-bb-border">
+              <span className="font-semibold text-bb-text-primary">Menu</span>
               <button
                 onClick={close}
-                className="inline-flex items-center justify-center w-10 h-10 rounded-md text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface transition-colors"
+                className="w-10 h-10 flex items-center justify-center rounded-md text-bb-text-secondary hover:text-bb-text-primary transition-colors"
                 aria-label="Close menu"
               >
                 <X className="w-5 h-5" />
@@ -147,31 +147,50 @@ export default function Nav() {
                   key={l.href}
                   href={l.href}
                   onClick={close}
-                  className="h-12 flex items-center px-3 text-base text-bb-text-primary rounded-md hover:bg-bb-surface transition-colors border-b border-bb-border last:border-0"
+                  className="h-12 flex items-center px-4 text-bb-text-primary rounded-md hover:bg-bb-surface transition-colors"
                 >
                   {l.label}
                 </a>
               ))}
               <SignedIn>
+                {authLinks.map((l) => (
+                  <a
+                    key={l.href}
+                    href={l.href}
+                    onClick={close}
+                    className="h-12 flex items-center px-4 text-bb-text-primary rounded-md hover:bg-bb-surface transition-colors"
+                  >
+                    {l.label}
+                  </a>
+                ))}
                 <a
                   href="/settings"
                   onClick={close}
-                  className="h-12 flex items-center px-3 text-base text-bb-text-primary rounded-md hover:bg-bb-surface transition-colors border-b border-bb-border"
+                  className="h-12 flex items-center px-4 text-bb-text-primary rounded-md hover:bg-bb-surface transition-colors"
                 >
                   Settings
                 </a>
-                <div className="px-3 pt-4">
+                <div className="px-4 pt-4">
                   <UserButton />
                 </div>
               </SignedIn>
               <SignedOut>
-                <a
-                  href="/sign-in"
-                  onClick={close}
-                  className="h-12 flex items-center px-3 text-base text-bb-text-primary rounded-md hover:bg-bb-surface transition-colors"
-                >
-                  Sign in
-                </a>
+                <div className="pt-4 px-4 space-y-3">
+                  <a
+                    href="/sign-in"
+                    onClick={close}
+                    className="block w-full h-11 flex items-center justify-center text-bb-text-primary border border-bb-border rounded-md hover:bg-bb-surface transition-colors"
+                  >
+                    Sign in
+                  </a>
+                  <a
+                    href="/sign-up"
+                    onClick={close}
+                    className="block w-full h-11 flex items-center justify-center font-medium bg-bb-text-primary text-bb-bg-primary rounded-md"
+                  >
+                    Get started
+                  </a>
+                </div>
               </SignedOut>
             </div>
           </div>
