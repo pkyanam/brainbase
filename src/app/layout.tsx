@@ -30,11 +30,11 @@ const themeScript = `
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className="bg-bb-bg-primary" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="min-h-screen bg-bb-bg-primary text-bb-text-primary antialiased">
+      <body className="min-h-screen bg-bb-bg-primary text-bb-text-primary antialiased font-sans">
         <AuthProvider>
           <ConvexClientProvider>
             <ThemeProvider>{children}</ThemeProvider>
