@@ -27,14 +27,14 @@ export function HeroSection() {
       <div className="relative w-full max-w-7xl mx-auto px-6 py-24 md:py-32">
         <div className="max-w-4xl">
           {/* Eyebrow */}
-          <div className="opacity-0 animate-fade-up">
+          <div>
             <span className="inline-block text-sm font-medium text-bb-accent tracking-wide uppercase mb-6">
               Shared knowledge for AI agents
             </span>
           </div>
 
           {/* Main headline */}
-          <h1 className="opacity-0 animate-fade-up stagger-1">
+          <h1>
             <span className="block text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-bold tracking-tight leading-[0.95] text-balance">
               Ship AI products
             </span>
@@ -44,13 +44,13 @@ export function HeroSection() {
           </h1>
 
           {/* Subheadline */}
-          <p className="mt-8 text-lg md:text-xl text-bb-text-secondary max-w-2xl leading-relaxed opacity-0 animate-fade-up stagger-2">
+          <p className="mt-8 text-lg md:text-xl text-bb-text-secondary max-w-2xl leading-relaxed">
             Brainbase is the end-to-end platform for building AI agents that share knowledge. 
             One API call. Every agent in your stack reads from the same brain.
           </p>
 
           {/* CTAs */}
-          <div className="flex flex-col sm:flex-row items-start gap-4 mt-10 opacity-0 animate-fade-up stagger-3">
+          <div className="flex flex-col sm:flex-row items-start gap-4 mt-10">
             <a
               href="/sign-up"
               className="group inline-flex items-center justify-center h-12 px-6 bg-bb-text-primary text-bb-bg-primary font-medium rounded-lg transition-all hover:opacity-90 active:scale-[0.98]"
