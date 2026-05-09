@@ -1,7 +1,7 @@
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 import { HeroSection } from "@/components/landing/HeroSection";
-import { LogoCloud } from "@/components/landing/LogoCloud";
+
 import { ProblemSection } from "@/components/landing/ProblemSection";
 import { ProductShowcase } from "@/components/landing/ProductShowcase";
 import { FeaturesSection } from "@/components/landing/FeaturesSection";
@@ -13,7 +13,6 @@ export default function Home() {
       <Nav />
       <main>
         <HeroSection />
-        <LogoCloud />
         <ProblemSection />
         <ProductShowcase />
         <FeaturesSection />

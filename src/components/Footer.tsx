@@ -117,7 +117,7 @@ export default function Footer() {
             &copy; {new Date().getFullYear()} Brainbase. All rights reserved.
           </p>
           <p className="text-sm text-bb-text-muted">
-            Built with care in San Francisco.
+            Built with care in Belmont, Virginia.
           </p>
         </div>
       </div>
