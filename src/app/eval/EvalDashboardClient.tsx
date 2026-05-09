@@ -228,7 +228,7 @@ export default function EvalDashboard() {
         <div className="flex items-center gap-2 md:gap-3 min-w-0">
           <a href="/" className="flex items-center gap-2 shrink-0">
             <Image
-              src="/brainbase-logo.svg"
+              src="/brainbaseLogo.png"
               alt="Brainbase"
               width={22}
               height={22}

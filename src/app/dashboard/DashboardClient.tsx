@@ -456,7 +456,7 @@ export default function Dashboard() {
       <header className="shrink-0 h-12 md:h-14 flex items-center justify-between px-3 md:px-5 border-b border-bb-border bg-bb-bg-primary">
         <div className="flex items-center gap-2 md:gap-3 min-w-0">
           <a href="/" className="flex items-center gap-2 shrink-0">
-            <Image src="/brainbase-logo.svg" alt="Brainbase" width={22} height={22} className="rounded" priority />
+            <Image src="/brainbaseLogo.png" alt="Brainbase" width={22} height={22} className="rounded" priority />
             <span className="text-sm font-semibold tracking-tight text-bb-text-primary">brainbase</span>
           </a>
           <span className="hidden md:inline text-bb-border-strong">/</span>

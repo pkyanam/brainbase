@@ -37,8 +37,8 @@ export default function Nav() {
           {/* Logo + wordmark */}
           <a href="/" className="flex items-center gap-2 shrink-0 group">
             <Image
-              src="/brainbase-logo.svg"
-              alt="Brainbase"
+              src="/brainbaseLogo.png"
+              alt=""
               width={22}
               height={22}
               className="rounded"

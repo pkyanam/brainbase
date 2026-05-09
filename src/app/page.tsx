@@ -26,7 +26,7 @@ export default function Home() {
             <div className="space-y-6 md:-translate-y-4">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-bb-surface border border-bb-border text-xs text-bb-text-muted select-none">
                 <span className="w-1.5 h-1.5 rounded-full bg-bb-accent animate-pulse" />
-                Shared context for AI agents
+                Shared knowledge for AI agents
               </div>
 
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.0]">
@@ -37,14 +37,14 @@ export default function Home() {
                   Every agent in your stack
                 </span>
                 <span className="block bg-gradient-to-r from-bb-accent via-bb-accent-strong to-bb-accent bg-clip-text text-transparent">
-                  remembers everything.
+                  shares the same knowledge.
                 </span>
               </h1>
 
               <p className="text-base md:text-lg text-bb-text-secondary max-w-lg leading-relaxed">
-                A shared knowledge graph that lets your AI agents — Claude Code,
-                OpenCode, Cursor, Hermes — read from and write to the same brain.
-                Typed links, graph intelligence, and autonomous enrichment.
+                A database your agents share. Claude Code writes a doc, OpenCode
+                reads it, Hermes connects it to everything else. No more briefing
+                every agent from scratch — they all pull from the same brain.
               </p>
 
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 pt-2">
@@ -265,12 +265,12 @@ export default function Home() {
                     </span>
                     <div>
                       <div className="text-sm font-medium text-bb-warning mb-0.5">
-                        Vector DB "memory"
+                        Basic vector storage
                       </div>
                       <div className="text-xs text-bb-text-muted">
                         Dumping embeddings into a vector store gives you
                         retrieval — not understanding. No typed relationships.
-                        No graph structure.
+                        Nothing agents can reason over.
                       </div>
                     </div>
                   </div>

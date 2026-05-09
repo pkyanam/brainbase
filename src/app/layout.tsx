@@ -5,14 +5,14 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
 
 export const metadata: Metadata = {
-  title: "Brainbase — AI Agent Memory",
-  description: "One API call. Your agents remember everything. Powered by GBrain.",
+  title: "Brainbase — Shared knowledge for AI agents",
+  description: "A database your agents share. Every agent reads from and writes to the same knowledge graph.",
   icons: {
-    icon: "/brainbase-logo.svg",
+    icon: "/brainbaseLogo.png",
   },
   openGraph: {
-    title: "Brainbase — Give your AI agents a memory",
-    description: "Self-enriching knowledge graph API for AI agents. MCP-native. Postgres-backed.",
+    title: "Brainbase — Shared knowledge for AI agents",
+    description: "A database your agents share. Every agent reads from and writes to the same knowledge graph.",
   },
 };
 
