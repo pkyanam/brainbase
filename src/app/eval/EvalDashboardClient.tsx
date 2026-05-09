@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 import { useUser, SignOutButton } from "@clerk/nextjs";
 import { useTheme } from "@/components/ThemeProvider";
+import { DotsThreeVertical, Sun, Moon, PlayCircle, Trash } from "@phosphor-icons/react";
 import EvalResultsTable from "@/components/eval/EvalResultsTable";
 import EvalCapturePanel from "@/components/eval/EvalCapturePanel";
 import EvalExportPanel from "@/components/eval/EvalExportPanel";
@@ -227,7 +228,7 @@ export default function EvalDashboard() {
         <div className="flex items-center gap-2 md:gap-3 min-w-0">
           <a href="/" className="flex items-center gap-2 shrink-0">
             <Image
-              src="/brainbaseLogo.png"
+              src="/brainbase-logo.svg"
               alt="Brainbase"
               width={22}
               height={22}
@@ -253,19 +254,7 @@ export default function EvalDashboard() {
               className="inline-flex h-8 w-8 items-center justify-center text-bb-text-muted hover:text-bb-text-primary hover:bg-bb-surface rounded transition-colors"
               title="More"
             >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
-                />
-              </svg>
+              <DotsThreeVertical className="w-4 h-4" />
             </button>
             {headerMenuOpen && (
               <div className="absolute right-0 top-full mt-1 w-44 bg-bb-surface border border-bb-border rounded-lg shadow-lg py-1 z-50 animate-fade-in">
@@ -313,33 +302,9 @@ export default function EvalDashboard() {
             title="Toggle theme"
           >
             {themeResolved === "dark" ? (
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
-                />
-              </svg>
+              <Sun className="w-4 h-4" />
             ) : (
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
-                />
-              </svg>
+              <Moon className="w-4 h-4" />
             )}
           </button>
 
@@ -425,10 +390,7 @@ export default function EvalDashboard() {
                     </>
                   ) : (
                     <>
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
+                      <PlayCircle className="w-4 h-4" weight="fill" />
                       Run Lara Eval
                     </>
                   )}
@@ -438,9 +400,7 @@ export default function EvalDashboard() {
                   className="inline-flex items-center gap-2 h-11 px-4 bg-bb-surface hover:bg-bb-danger/10 text-bb-danger text-sm font-medium rounded-lg border border-bb-border transition-colors"
                   title="Clear all Lara eval candidates and runs"
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
+                  <Trash className="w-4 h-4" />
                   Clear
                 </button>
               </>

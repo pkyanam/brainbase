@@ -42,10 +42,9 @@ export default function Home() {
               </h1>
 
               <p className="text-base md:text-lg text-bb-text-secondary max-w-lg leading-relaxed">
-                A self-enriching knowledge graph that lets Claude Code, OpenCode,
-                Cursor, and Hermes share context — typed links, graph intelligence,
-                and autonomous enrichment. Polyglot storage: Postgres + Neo4j.
-                MCP-native. 23 tools.
+                A shared knowledge graph that lets your AI agents — Claude Code,
+                OpenCode, Cursor, Hermes — read from and write to the same brain.
+                Typed links, graph intelligence, and autonomous enrichment.
               </p>
 
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 pt-2">

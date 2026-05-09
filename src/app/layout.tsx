@@ -8,18 +8,11 @@ export const metadata: Metadata = {
   title: "Brainbase — AI Agent Memory",
   description: "One API call. Your agents remember everything. Powered by GBrain.",
   icons: {
-    icon: [
-      { url: "/brainbaseLogo.png", type: "image/png", sizes: "1160x1127" },
-    ],
-    apple: [
-      { url: "/brainbaseLogo.png", type: "image/png", sizes: "1160x1127" },
-    ],
-    shortcut: "/brainbaseLogo.png",
+    icon: "/brainbase-logo.svg",
   },
   openGraph: {
     title: "Brainbase — Give your AI agents a memory",
     description: "Self-enriching knowledge graph API for AI agents. MCP-native. Postgres-backed.",
-    images: [{ url: "/brainbaseLogo.png", width: 1160, height: 1127 }],
   },
 };
 

@@ -1,10 +1,44 @@
 @import "tailwindcss";
+@plugin "tailwindcss-animate";
 
 /* Brainbase Design System
    Supabase-inspired. CSS-variable driven for light/dark/system theming.
    Elevation via surface layers, crisp 1px borders. Green accent for CTAs. */
 
 :root {
+  --radius: 0.625rem;
+  --background: var(--bb-bg-primary);
+  --foreground: var(--bb-text-primary);
+  --card: var(--bb-bg-secondary);
+  --card-foreground: var(--bb-text-primary);
+  --popover: var(--bb-bg-secondary);
+  --popover-foreground: var(--bb-text-primary);
+  --primary: var(--bb-accent);
+  --primary-foreground: var(--bb-bg-primary);
+  --secondary: var(--bb-surface);
+  --secondary-foreground: var(--bb-text-secondary);
+  --muted: var(--bb-surface);
+  --muted-foreground: var(--bb-text-muted);
+  --accent: var(--bb-surface-hover);
+  --accent-foreground: var(--bb-text-primary);
+  --destructive: var(--bb-danger);
+  --border: var(--bb-border);
+  --input: var(--bb-border);
+  --ring: var(--bb-accent);
+  --chart-1: var(--bb-accent);
+  --chart-2: var(--bb-info);
+  --chart-3: var(--bb-warning);
+  --chart-4: var(--bb-cat-person);
+  --chart-5: var(--bb-cat-company);
+  --sidebar-background: var(--bb-bg-primary);
+  --sidebar-foreground: var(--bb-text-primary);
+  --sidebar-primary: var(--bb-accent);
+  --sidebar-primary-foreground: var(--bb-bg-primary);
+  --sidebar-accent: var(--bb-surface);
+  --sidebar-accent-foreground: var(--bb-text-primary);
+  --sidebar-border: var(--bb-border);
+  --sidebar-ring: var(--bb-accent);
+
   /* Dark mode (default) */
   --bb-bg-primary: #0A0A0A;
   --bb-bg-secondary: #121212;
@@ -59,9 +93,72 @@
   --bb-cat-person: #DC2626;
   --bb-cat-company: #2563EB;
   --bb-cat-project: #D97706;
+  --background: var(--bb-bg-primary);
+  --foreground: var(--bb-text-primary);
+  --card: var(--bb-bg-secondary);
+  --card-foreground: var(--bb-text-primary);
+  --popover: var(--bb-bg-secondary);
+  --popover-foreground: var(--bb-text-primary);
+  --primary: var(--bb-accent);
+  --primary-foreground: var(--bb-bg-primary);
+  --secondary: var(--bb-surface);
+  --secondary-foreground: var(--bb-text-secondary);
+  --muted: var(--bb-surface);
+  --muted-foreground: var(--bb-text-muted);
+  --accent: var(--bb-surface-hover);
+  --accent-foreground: var(--bb-text-primary);
+  --destructive: var(--bb-danger);
+  --border: var(--bb-border);
+  --input: var(--bb-border);
+  --ring: var(--bb-accent);
+  --chart-1: var(--bb-accent);
+  --chart-2: var(--bb-info);
+  --chart-3: var(--bb-warning);
+  --chart-4: var(--bb-cat-person);
+  --chart-5: var(--bb-cat-company);
+  --sidebar-background: var(--bb-bg-primary);
+  --sidebar-foreground: var(--bb-text-primary);
+  --sidebar-primary: var(--bb-accent);
+  --sidebar-primary-foreground: var(--bb-bg-primary);
+  --sidebar-accent: var(--bb-surface);
+  --sidebar-accent-foreground: var(--bb-text-primary);
+  --sidebar-border: var(--bb-border);
+  --sidebar-ring: var(--bb-accent);
 }
 
 @theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar-background: var(--sidebar-background);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
   --color-bb-bg-primary: var(--bb-bg-primary);
   --color-bb-bg-secondary: var(--bb-bg-secondary);
   --color-bb-bg-tertiary: var(--bb-bg-tertiary);

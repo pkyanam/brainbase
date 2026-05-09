@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import { useUser, SignOutButton } from "@clerk/nextjs";
 import { useTheme } from "@/components/ThemeProvider";
+import { DotsThreeVertical, Question, Sun, Moon, Plus, Copy, List, Sparkle, MagnifyingGlass, Graph, ArrowRight, CaretLeft, CaretRight, CaretDown, X } from "@phosphor-icons/react";
 import DreamStatusCard from "@/components/DreamStatusCard";
 import StatsBar from "@/components/dashboard/StatsBar";
 import PageList from "@/components/dashboard/PageList";
@@ -455,7 +456,7 @@ export default function Dashboard() {
       <header className="shrink-0 h-12 md:h-14 flex items-center justify-between px-3 md:px-5 border-b border-bb-border bg-bb-bg-primary">
         <div className="flex items-center gap-2 md:gap-3 min-w-0">
           <a href="/" className="flex items-center gap-2 shrink-0">
-            <Image src="/brainbaseLogo.png" alt="Brainbase" width={22} height={22} className="rounded" priority />
+            <Image src="/brainbase-logo.svg" alt="Brainbase" width={22} height={22} className="rounded" priority />
             <span className="text-sm font-semibold tracking-tight text-bb-text-primary">brainbase</span>
           </a>
           <span className="hidden md:inline text-bb-border-strong">/</span>
@@ -471,9 +472,7 @@ export default function Dashboard() {
                   className="inline-flex h-8 w-8 items-center justify-center text-bb-text-muted hover:text-bb-text-primary hover:bg-bb-surface rounded transition-colors"
                   title="More"
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-                  </svg>
+                  <DotsThreeVertical className="w-4 h-4" />
                 </button>
                 {headerMenuOpen && (
                   <div className="absolute right-0 top-full mt-1 w-44 bg-bb-surface border border-bb-border rounded-lg shadow-lg py-1 z-50 animate-fade-in">
@@ -492,9 +491,7 @@ export default function Dashboard() {
                 className="hidden md:inline-flex h-8 w-8 items-center justify-center text-bb-text-muted hover:text-bb-text-primary hover:bg-bb-surface rounded transition-colors"
                 title="Keyboard shortcuts (?"
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+                <Question className="w-4 h-4" />
               </button>
               <button
                 onClick={toggleTheme}
@@ -503,13 +500,9 @@ export default function Dashboard() {
                 title="Toggle theme"
               >
                 {themeResolved === "dark" ? (
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                  </svg>
+                  <Sun className="w-4 h-4" />
                 ) : (
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                  </svg>
+                  <Moon className="w-4 h-4" />
                 )}
               </button>
 
@@ -536,9 +529,7 @@ export default function Dashboard() {
                 className="hidden md:inline-flex h-8 w-8 items-center justify-center bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary rounded transition-colors"
                 title="New page"
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                </svg>
+                <Plus className="w-4 h-4" />
               </button>
 
               {/* Live indicator */}
@@ -558,9 +549,7 @@ export default function Dashboard() {
                   className="hidden md:inline-flex items-center gap-1.5 h-8 px-2.5 rounded border border-bb-border bg-bb-surface text-bb-text-muted hover:text-bb-text-primary hover:border-bb-border-hover transition-colors"
                   title="Copy API key prefix"
                 >
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
+                  <Copy className="w-3 h-3" />
                   <span className="font-mono text-[10px]">{apiKey}</span>
                   {showKey && <span className="text-bb-accent text-[10px]">Copied</span>}
                 </button>
@@ -589,9 +578,7 @@ export default function Dashboard() {
                 className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded-md text-bb-text-secondary hover:text-bb-text-primary hover:bg-bb-surface transition-colors"
                 aria-label="Open panel"
               >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
+                <List className="w-5 h-5" />
               </button>
             </>
           ) : (
@@ -624,9 +611,7 @@ export default function Dashboard() {
             <div className="shrink-0 px-4 md:px-6 py-8">
               <div className="max-w-md mx-auto text-center">
                 <div className="w-16 h-16 rounded-2xl bg-bb-accent/10 border border-bb-accent/20 flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-bb-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
-                  </svg>
+                  <Sparkle className="w-8 h-8 text-bb-accent" />
                 </div>
                 <h3 className="text-lg font-semibold text-bb-text-primary mb-2">Your brain is empty</h3>
                 <p className="text-sm text-bb-text-secondary mb-6 leading-relaxed">
@@ -653,9 +638,7 @@ export default function Dashboard() {
           {/* Search */}
           <div className="shrink-0 px-4 md:px-6 pt-3">
             <div className="relative w-full md:max-w-xl">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-bb-text-muted pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
+              <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-bb-text-muted pointer-events-none" />
               <input
                 ref={searchInputRef}
                 type="text"
@@ -885,9 +868,7 @@ export default function Dashboard() {
             >
               <div className="flex items-center gap-4 p-4">
                 <div className="shrink-0 w-12 h-12 rounded-lg bg-bb-accent/10 border border-bb-accent/20 flex items-center justify-center group-hover/graph-card:bg-bb-accent/20 transition-colors">
-                  <svg className="w-6 h-6 text-bb-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M7 3v4a1 1 0 001 1h4m6 4h2a2 2 0 012 2v6a2 2 0 01-2 2h-4a2 2 0 01-2-2v-2M5 21a2 2 0 01-2-2v-4a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2H5zM11 7a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2h-4a2 2 0 01-2-2V7z" />
-                  </svg>
+                  <Graph className="w-6 h-6 text-bb-accent" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-sm font-semibold text-bb-text-primary group-hover/graph-card:text-bb-accent transition-colors">
@@ -898,9 +879,7 @@ export default function Dashboard() {
                   </p>
                 </div>
                 <div className="shrink-0 text-bb-accent">
-                  <svg className="w-5 h-5 group-hover/graph-card:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                  </svg>
+                  <ArrowRight className="w-5 h-5 group-hover/graph-card:translate-x-0.5 transition-transform" />
                 </div>
               </div>
             </a>
@@ -919,15 +898,11 @@ export default function Dashboard() {
             aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
-            <svg
-              className={`w-4 h-4 transition-transform duration-200 ${sidebarCollapsed ? "rotate-180" : ""}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M11 17l-5-5 5-5m7 5h-12" />
-            </svg>
+            {sidebarCollapsed ? (
+              <CaretRight className="w-4 h-4" />
+            ) : (
+              <CaretLeft className="w-4 h-4" />
+            )}
           </button>
           {!sidebarCollapsed && (
             <>
@@ -950,9 +925,7 @@ export default function Dashboard() {
                       </span>
                     )}
                   </span>
-                  <svg className={`w-4 h-4 transition-transform ${implicitRulesOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
+                  <CaretDown className={`w-4 h-4 transition-transform ${implicitRulesOpen ? "rotate-180" : ""}`} />
                 </button>
                 {implicitRulesOpen && (
                   <div className="px-4 pb-4 max-h-56 overflow-y-auto space-y-px">
@@ -1008,9 +981,7 @@ export default function Dashboard() {
                   aria-label="Close"
                   className="w-9 h-9 inline-flex items-center justify-center rounded-md text-bb-text-muted hover:text-bb-text-primary hover:bg-bb-surface transition-colors"
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                  <X className="w-4 h-4" />
                 </button>
               </header>
               <div className="flex-1 overflow-y-auto flex flex-col">

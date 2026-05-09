@@ -42,7 +42,6 @@ function resolveTheme(theme: Theme): "light" | "dark" {
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("system");
   const [resolved, setResolved] = useState<"light" | "dark">("dark");
-  const [mounted, setMounted] = useState(false);
 
   const apply = useCallback((t: Theme) => {
     const r = resolveTheme(t);
@@ -72,7 +71,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const stored = getStoredTheme();
     setThemeState(stored);
     apply(stored);
-    setMounted(true);
 
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const handler = () => {
@@ -83,15 +81,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
   }, [apply]);
-
-  // Prevent flash: don't render children until theme is resolved
-  if (!mounted) {
-    return (
-      <div style={{ visibility: "hidden" }}>
-        {children}
-      </div>
-    );
-  }
 
   return (
     <ThemeContext.Provider value={{ theme, resolved, setTheme, toggle }}>

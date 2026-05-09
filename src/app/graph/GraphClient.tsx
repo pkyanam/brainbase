@@ -6,6 +6,7 @@ import nextDynamic from "next/dynamic";
 import Link from "next/link";
 import type { GraphNode, GraphEdge } from "@/lib/supabase/graph";
 import IntelPanel from "@/components/dashboard/IntelPanel";
+import { ArrowLeft, Warning, X, ArrowSquareOut } from "@phosphor-icons/react";
 
 const BrainGalaxy = nextDynamic(() => import("@/components/BrainGalaxy"), {
   ssr: false,
@@ -86,9 +87,7 @@ export default function GraphClient() {
       <header className="shrink-0 h-12 md:h-14 flex items-center justify-between px-4 md:px-6 border-b border-bb-border bg-bb-bg-primary z-20">
         <div className="flex items-center gap-4 min-w-0">
           <Link href="/dashboard" className="flex items-center gap-2 shrink-0">
-            <svg className="w-4 h-4 text-bb-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
+            <ArrowLeft className="w-4 h-4 text-bb-text-secondary" />
             <span className="text-sm font-semibold tracking-tight text-bb-text-primary">brainbase</span>
           </Link>
           <span className="text-bb-border-strong hidden sm:inline">/</span>
@@ -140,9 +139,7 @@ export default function GraphClient() {
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center max-w-sm">
               <div className="mx-auto mb-4 w-12 h-12 rounded-xl bg-bb-surface border border-bb-border flex items-center justify-center">
-                <svg className="w-6 h-6 text-bb-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.965-.833-2.734 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                </svg>
+                <Warning className="w-6 h-6 text-bb-text-muted" weight="fill" />
               </div>
               <p className="text-bb-text-primary text-sm font-medium mb-1">Graph unavailable</p>
               <p className="text-bb-text-muted text-xs leading-relaxed">
@@ -183,9 +180,7 @@ export default function GraphClient() {
               aria-label="Close intel panel"
               className="absolute top-2 right-2 w-8 h-8 inline-flex items-center justify-center rounded-md text-bb-text-muted hover:text-bb-text-primary hover:bg-bb-surface transition-colors z-10"
             >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <X className="w-4 h-4" />
             </button>
             <IntelPanel
               onSelectNode={(slug) => {
@@ -238,9 +233,7 @@ export default function GraphClient() {
                     className="inline-flex items-center gap-2 h-10 px-4 bg-bb-accent hover:bg-bb-accent-strong text-bb-bg-primary text-sm font-medium rounded-lg transition-colors"
                   >
                     Open in dashboard
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
+                    <ArrowSquareOut className="w-4 h-4" />
                   </Link>
                 </div>
               </div>
